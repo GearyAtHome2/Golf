@@ -4,10 +4,12 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,6 +17,8 @@ public class Terrain {
 
     public enum TerrainType {TEE, FAIRWAY, ROUGH, BUNKER, GREEN}
 
+    private ModelInstance waterInstance;
+    java.util.Random rng = new java.util.Random(System.nanoTime());
     private final List<ModelInstance> chunks = new ArrayList<>();
     private final List<int[]> chunkOffsets = new ArrayList<>();
     private final int SIZE_X = 120;
@@ -26,15 +30,16 @@ public class Terrain {
     private TerrainType[][] terrainMap;
     private final List<Bunker> bunkers = new ArrayList<>();
     private float greenCenterX;
+    private float waterLevel;
 
     private float[][] heightMap;
 
     public Terrain() {
         terrainMap = new TerrainType[SIZE_X][SIZE_Z];
-        heightMap  = new float[SIZE_X][SIZE_Z];   // ← NEW
+        heightMap = new float[SIZE_X][SIZE_Z];   // ← NEW
         generateTerrainTypes();
         generateHeightMap();                      // ← NEW
-
+        createWaterPlane();
         int z = 0;
         while (z < SIZE_Z) {
             int zEnd = Math.min(z + CHUNK_Z, SIZE_Z);
@@ -70,7 +75,7 @@ public class Terrain {
         int greenStartZ = SIZE_Z - 20; // green closer to end
         int greenEndZ = SIZE_Z - 1;
         greenCenterX = MathUtils.clamp(
-                (int)(SIZE_X / 2f + offset),
+                (int) (SIZE_X / 2f + offset),
                 10,                     // keep away from extreme edge
                 SIZE_X - 10
         );
@@ -79,7 +84,7 @@ public class Terrain {
 
         // --- Fairway generation ---
         int fairwayStartZ = teeEndZ + MathUtils.random(10, 20);
-        int fairwayEndZ   = SIZE_Z; // extend fully to the end
+        int fairwayEndZ = SIZE_Z; // extend fully to the end
         float center = SIZE_X / 2f;
         float minWidth = 20f;
         float maxWidth = 75f;
@@ -92,7 +97,7 @@ public class Terrain {
             center = MathUtils.clamp(center, maxWidth / 2f + 5, SIZE_X - maxWidth / 2f - 5);
 
             // Width curve: narrower near tee, wider mid-hole, slightly narrower near green
-            float t = (float)(z - fairwayStartZ) / (fairwayEndZ - fairwayStartZ);
+            float t = (float) (z - fairwayStartZ) / (fairwayEndZ - fairwayStartZ);
             float pullStart = 0.75f; // start steering at 75% of hole length
             if (t > pullStart) {
                 float pullT = (t - pullStart) / (1f - pullStart);
@@ -104,8 +109,8 @@ public class Terrain {
             width += MathUtils.random(-2f, 2f);
             width = MathUtils.clamp(width, minWidth, maxWidth);
 
-            int left  = MathUtils.clamp((int)(center - width / 2), 0, SIZE_X - 1);
-            int right = MathUtils.clamp((int)(center + width / 2), 0, SIZE_X - 1);
+            int left = MathUtils.clamp((int) (center - width / 2), 0, SIZE_X - 1);
+            int right = MathUtils.clamp((int) (center + width / 2), 0, SIZE_X - 1);
             for (int x = left; x <= right; x++)
                 terrainMap[x][z] = TerrainType.FAIRWAY;
         }
@@ -114,11 +119,11 @@ public class Terrain {
             for (int z = greenStartZ; z <= greenEndZ; z++) {
                 float dx = (x - greenCenterX) / (float) greenRadiusX;
                 float dz = (z - (greenStartZ + greenRadiusZ)) / (float) greenRadiusZ;
-                if (dx*dx + dz*dz <= 1f){
+                if (dx * dx + dz * dz <= 1f) {
                     terrainMap[x][z] = TerrainType.GREEN; // fairway is still underneath
                     // Surround green with fairway
-                    for (int fx = Math.max(0, x - 4); fx <= Math.min(SIZE_X-1, x + 4); fx++)
-                        for (int fz = Math.max(0, z - 4); fz <= Math.min(SIZE_Z-1, z + 4); fz++)
+                    for (int fx = Math.max(0, x - 4); fx <= Math.min(SIZE_X - 1, x + 4); fx++)
+                        for (int fz = Math.max(0, z - 4); fz <= Math.min(SIZE_Z - 1, z + 4); fz++)
                             if (terrainMap[fx][fz] == TerrainType.ROUGH)
                                 terrainMap[fx][fz] = TerrainType.FAIRWAY;
                 }
@@ -151,7 +156,7 @@ public class Terrain {
                     if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) continue;
                     float dx = (x - centerX) / (float) radiusX;
                     float dz = (z - centerZ) / (float) radiusZ;
-                    if (dx*dx + dz*dz <= 1f)
+                    if (dx * dx + dz * dz <= 1f)
                         terrainMap[x][z] = TerrainType.BUNKER;
                 }
         }
@@ -197,8 +202,7 @@ public class Terrain {
         float height;
         if (type == TerrainType.TEE) {
             height = 0.2f;
-        }
-        else {
+        } else {
             height = baseHeightAt(x, z);
         }
 
@@ -223,7 +227,6 @@ public class Terrain {
 
     private void generateHeightMap() {
 
-        java.util.Random rng = new java.util.Random(System.nanoTime());
 
         // Random global phase offsets (critical so waves differ each run)
         float off1 = rng.nextFloat() * 1000f;
@@ -231,7 +234,7 @@ public class Terrain {
         float off3 = rng.nextFloat() * 1000f;
         float off4 = rng.nextFloat() * 1000f;
 
-        float undulationLevel = (rng.nextFloat() * 0.8f) + 0.2f ;
+        float undulationLevel = (rng.nextFloat() * 0.8f) + 0.2f;
 
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
@@ -240,7 +243,7 @@ public class Terrain {
 
                 float hills =
                         MathUtils.sin((worldX + off1) * 0.035f) * 2.0f +
-                                MathUtils.cos((worldZ + off2) * 0.02f)  * 1.7f +
+                                MathUtils.cos((worldZ + off2) * 0.02f) * 1.7f +
                                 MathUtils.sin((worldX + worldZ + off3) * 0.018f) * 1.2f +
                                 MathUtils.cos((worldX - worldZ + off4) * 0.015f) * 1.0f;
                 hills *= undulationLevel;
@@ -262,6 +265,7 @@ public class Terrain {
             }
         }
     }
+
     private void buildTriangle(MeshPartBuilder builder, Vector3 v1, Vector3 v2, Vector3 v3, int gridX, int gridZ) {
         Vector3 normal = new Vector3(v3).sub(v1).crs(new Vector3(v2).sub(v1)).nor();
         float slope = 1f - Math.abs(normal.y);
@@ -287,18 +291,22 @@ public class Terrain {
     }
 
     public TerrainType getTerrainTypeAt(float worldX, float worldZ) {
-        int ix = MathUtils.clamp((int)((worldX + SIZE_X * SCALE / 2f) / SCALE), 0, SIZE_X - 1);
-        int iz = MathUtils.clamp((int)((worldZ + SIZE_Z * SCALE / 2f) / SCALE), 0, SIZE_Z - 1);
+        int ix = MathUtils.clamp((int) ((worldX + SIZE_X * SCALE / 2f) / SCALE), 0, SIZE_X - 1);
+        int iz = MathUtils.clamp((int) ((worldZ + SIZE_Z * SCALE / 2f) / SCALE), 0, SIZE_Z - 1);
         return terrainMap[ix][iz];
     }
 
-    public Vector3 getTeePosition() { return teeCenter.cpy(); }
+    public Vector3 getTeePosition() {
+        return teeCenter.cpy();
+    }
+
+    public float getWaterLevel() {return waterLevel;}
 
     public float getHeightAt(float worldX, float worldZ) {
         float localX = worldX + SIZE_X * SCALE / 2f;
         float localZ = worldZ + SIZE_Z * SCALE / 2f;
-        int ix = MathUtils.clamp((int)(localX / SCALE), 0, SIZE_X - 2);
-        int iz = MathUtils.clamp((int)(localZ / SCALE), 0, SIZE_Z - 2);
+        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
+        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
 
         float fx = (localX / SCALE) - ix;
         float fz = (localZ / SCALE) - iz;
@@ -315,8 +323,8 @@ public class Terrain {
         float localX = worldX + SIZE_X * SCALE / 2f;
         float localZ = worldZ + SIZE_Z * SCALE / 2f;
 
-        int ix = MathUtils.clamp((int)(localX / SCALE), 0, SIZE_X - 2);
-        int iz = MathUtils.clamp((int)(localZ / SCALE), 0, SIZE_Z - 2);
+        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
+        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
 
         Vector3 v00 = vertex(ix, iz);
         Vector3 v10 = vertex(ix + 1, iz);
@@ -334,6 +342,7 @@ public class Terrain {
 
     public void render(ModelBatch batch, Environment env) {
         for (ModelInstance chunk : chunks) batch.render(chunk, env);
+        if (waterInstance != null) batch.render(waterInstance, env);
     }
 
     public void dispose() {
@@ -343,6 +352,45 @@ public class Terrain {
     private static class Bunker {
         int centerX, centerZ;
         int radiusX, radiusZ;
-        Bunker(int cx, int cz, int rx, int rz) { centerX = cx; centerZ = cz; radiusX = rx; radiusZ = rz; }
+
+        Bunker(int cx, int cz, int rx, int rz) {
+            centerX = cx;
+            centerZ = cz;
+            radiusX = rx;
+            radiusZ = rz;
+        }
+    }
+
+    private void createWaterPlane() {
+        ModelBuilder builder = new ModelBuilder();
+        builder.begin();
+
+        MeshPartBuilder meshBuilder = builder.part(
+                "water",
+                GL20.GL_TRIANGLES,
+                VertexAttributes.Usage.Position |
+                        VertexAttributes.Usage.Normal |
+                        VertexAttributes.Usage.ColorPacked,
+                new Material(ColorAttribute.createDiffuse(Color.BLUE))
+        );
+
+        float w = SIZE_X * SCALE;
+        float h = SIZE_Z * SCALE;
+
+
+        waterLevel = -(rng.nextFloat() * 4) - 2;// water elevation
+
+        Vector3 v00 = new Vector3(0, waterLevel, 0);
+        Vector3 v10 = new Vector3(w, waterLevel, 0);
+        Vector3 v01 = new Vector3(0, waterLevel, h);
+        Vector3 v11 = new Vector3(w, waterLevel, h);
+
+        meshBuilder.triangle(v00, v01, v11);
+        meshBuilder.triangle(v00, v11, v10);
+
+        Model model = builder.end();
+        waterInstance = new ModelInstance(model);
+        // Center over terrain
+        waterInstance.transform.setToTranslation(-w / 2f, 0, -h / 2f);
     }
 }

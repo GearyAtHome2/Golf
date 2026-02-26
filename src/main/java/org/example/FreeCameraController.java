@@ -11,7 +11,7 @@ public class FreeCameraController {
 
     private final PerspectiveCamera camera;
 
-    private float yaw = 0f;    // horizontal angle around target
+    private float yaw = 180f;    // horizontal angle around target
     private float pitch = 20f; // vertical angle
     private float distance = 10f; // distance from target
     private final float mouseSensitivity = 0.3f;
@@ -24,7 +24,6 @@ public class FreeCameraController {
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean scrolled(float amountX, float amountY) {
-                // Use the class field 'distance', not a local variable
                 FreeCameraController.this.distance += amountY * 2.5f; // zoom speed
                 FreeCameraController.this.distance = MathUtils.clamp(FreeCameraController.this.distance, 2f, 50f);
                 return true;

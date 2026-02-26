@@ -18,10 +18,14 @@ public class Ball {
     private static final float RADIUS = 0.2f;
     private static final float GRAVITY = -9.81f;
     private static final float BOUNCE_RESTITUTION = 0.3f;
-    private static final float FRICTION = 0.999f;
+    private static final float FRICTION = 0.98f;
+    private static final float AIR_FRICTION = 0.99f;
     private static final float FLAT_FRICTION = 0.35f;
     private static final float STOP_SPEED = 0.145f;
     private static final float MIN_BOUNCE_VY = 0.1f;
+
+    private boolean wet;
+    private float watercountdown = 5;
 
     private enum State {AIR, CONTACT, ROLLING, STATIONARY}
 
@@ -57,6 +61,14 @@ public class Ball {
     }
 
     public void update(float delta, Terrain terrain) {
+
+        if (wet) {
+            watercountdown -= delta;
+        }
+
+        if (watercountdown < 0){
+            System.out.println("ball in water, would reset the ball here");
+        }
         // Reduce cooldown
         if (hitCooldown > 0f) hitCooldown -= delta;
 
@@ -66,13 +78,24 @@ public class Ball {
             return;
         }
 
-        float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS/3;
+        float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
         Vector3 terrainNormal = terrain.getNormalAt(position.x, position.z).nor();
 
         // --- only apply terrain logic if cooldown expired ---
         boolean onTerrain = hitCooldown <= 0f && position.y <= terrainHeight;
 
-        if (onTerrain) {
+        if (position.y < terrain.getWaterLevel()) {
+            wet = true;
+            System.out.println("ball in water");
+            System.out.println("pos:" + position.y);
+            System.out.println("waterlevel: " + terrain.getWaterLevel());
+            // --- Massive friction damping ---
+            velocity.scl(0.9f);  // reduce velocity by 50% per frame; tweak if too strong/weak
+
+            // --- Buoyancy: gravity reversed with 50% power ---
+            velocity.y += -4f * GRAVITY * delta; // GRAVITY is negative, so -0.5*GRAVITY pushes upward
+        } else if (onTerrain) {
+            wet = false;
             if (position.y < terrainHeight) {
                 position.y = terrainHeight;
             }
@@ -117,9 +140,14 @@ public class Ball {
             ));
 
         } else {
-            // Airborne
-            velocity.y += GRAVITY * delta;
             state = State.AIR;
+            velocity.y += GRAVITY * delta;
+            float dragCoefficient = 0.003f; // tweak for strength of air resistance
+            float speed = velocity.len();
+            if (speed > 0f) {
+                Vector3 drag = velocity.cpy().nor().scl(-dragCoefficient * speed * speed);
+                velocity.add(drag.scl(delta));
+            }
         }
 
         // Move ball
@@ -150,9 +178,9 @@ public class Ball {
         ));
     }
 
-    public void hit(Vector3 shootDir) {
+    public void hit(Vector3 shootDir, float power) {
         if (state != State.STATIONARY) return;
-
+        System.out.println("hitting with power: " + power);
         // Rotate direction upward by 60 degrees
         Vector3 dir = shootDir.cpy().nor();
         float angleRad = 40 * MathUtils.degreesToRadians;
@@ -162,7 +190,7 @@ public class Ball {
         dir.z *= horizontalLen;
 
         // Apply initial speed
-        float initialSpeed = 41f; // tweak as needed
+        float initialSpeed = power * 25; // tweak as needed
         velocity.set(dir.scl(initialSpeed));
 
         // Set state back to airborne
