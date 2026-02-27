@@ -1,9 +1,10 @@
-package org.example;
+package org.example.terrain;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
@@ -12,13 +13,15 @@ import com.badlogic.gdx.math.Vector3;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Terrain_depr_sharp {
+public class Terrain {
 
     public enum TerrainType {TEE, FAIRWAY, ROUGH, BUNKER, GREEN}
 
+    private ModelInstance waterInstance;
+    java.util.Random rng = new java.util.Random(System.nanoTime());
     private final List<ModelInstance> chunks = new ArrayList<>();
     private final List<int[]> chunkOffsets = new ArrayList<>();
-    private final int SIZE_X = 120;
+    private final int SIZE_X = 160;
     public static final int SIZE_Z = 500;
     private final int CHUNK_Z = 64;
     private final float SCALE = 1f;
@@ -26,21 +29,45 @@ public class Terrain_depr_sharp {
     private Vector3 teeCenter;
     private TerrainType[][] terrainMap;
     private final List<Bunker> bunkers = new ArrayList<>();
-
+    private float greenCenterX;
+    private float waterLevel;
+    private final List<Tree> trees = new ArrayList<>();
     private float[][] heightMap;
 
-    public Terrain_depr_sharp() {
+    public Terrain() {
         terrainMap = new TerrainType[SIZE_X][SIZE_Z];
-        heightMap  = new float[SIZE_X][SIZE_Z];   // ← NEW
+        heightMap = new float[SIZE_X][SIZE_Z];   // ← NEW
         generateTerrainTypes();
         generateHeightMap();                      // ← NEW
-
+        createWaterPlane();
         int z = 0;
         while (z < SIZE_Z) {
             int zEnd = Math.min(z + CHUNK_Z, SIZE_Z);
             chunks.add(buildChunk(z, zEnd));
             chunkOffsets.add(new int[]{0, z});
             z = zEnd;
+        }
+        handleTrees(30);
+    }
+
+    private void handleTrees(int nTrees) {
+        for (int i = 0; i < nTrees; i++) {
+            int x = MathUtils.random(0, SIZE_X - 1);
+            int z = MathUtils.random(0, SIZE_Z - 1);
+
+            // Only in ROUGH
+            if (terrainMap[x][z] != TerrainType.ROUGH) continue;
+
+            float worldX = x * SCALE - SIZE_X * SCALE / 2f;
+            float worldZ = z * SCALE - SIZE_Z * SCALE / 2f;
+            float worldY = getHeightAt(worldX, worldZ);
+
+            // Randomize tree dimensions
+            float trunkHeight = MathUtils.random(6f, 12f);
+            float trunkRadius = MathUtils.random(0.25f, 0.5f);
+            float foliageRadius = MathUtils.random(1.5f, 3f);
+
+            trees.add(new Tree(worldX, worldY, worldZ, trunkHeight, trunkRadius, foliageRadius));
         }
     }
 
@@ -51,7 +78,7 @@ public class Terrain_depr_sharp {
         // --- Tee box ---
         int teeStartX = SIZE_X / 2 - teeWidth / 2;
         int teeEndX = teeStartX + teeWidth - 1;
-        int teeStartZ = 0;
+        int teeStartZ = teeLength * 4;
         int teeEndZ = teeStartZ + teeLength - 1;
 
         // Fill all with rough
@@ -64,9 +91,22 @@ public class Terrain_depr_sharp {
             for (int z = teeStartZ; z <= teeEndZ; z++)
                 terrainMap[x][z] = TerrainType.TEE;
 
+        float maxOffset = SIZE_X * 0.30f;
+        float offset = MathUtils.random(-maxOffset, maxOffset);
+        int greenLength = 10;
+        int greenStartZ = SIZE_Z - 20; // green closer to end
+        int greenEndZ = SIZE_Z - 1;
+        greenCenterX = MathUtils.clamp(
+                (int) (SIZE_X / 2f + offset),
+                10,                     // keep away from extreme edge
+                SIZE_X - 10
+        );
+        int greenRadiusX = 8;
+        int greenRadiusZ = greenLength / 2;
+
         // --- Fairway generation ---
         int fairwayStartZ = teeEndZ + MathUtils.random(10, 20);
-        int fairwayEndZ   = SIZE_Z; // extend fully to the end
+        int fairwayEndZ = SIZE_Z; // extend fully to the end
         float center = SIZE_X / 2f;
         float minWidth = 20f;
         float maxWidth = 75f;
@@ -79,34 +119,33 @@ public class Terrain_depr_sharp {
             center = MathUtils.clamp(center, maxWidth / 2f + 5, SIZE_X - maxWidth / 2f - 5);
 
             // Width curve: narrower near tee, wider mid-hole, slightly narrower near green
-            float t = (float)(z - fairwayStartZ) / (fairwayEndZ - fairwayStartZ);
+            float t = (float) (z - fairwayStartZ) / (fairwayEndZ - fairwayStartZ);
+            float pullStart = 0.75f; // start steering at 75% of hole length
+            if (t > pullStart) {
+                float pullT = (t - pullStart) / (1f - pullStart);
+                pullT = pullT * pullT * (3f - 2f * pullT); // smoothstep
+
+                center = MathUtils.lerp(center, greenCenterX, pullT);
+            }
             float width = minWidth + (maxWidth - minWidth) * MathUtils.sin(t * MathUtils.PI);
             width += MathUtils.random(-2f, 2f);
             width = MathUtils.clamp(width, minWidth, maxWidth);
 
-            int left  = MathUtils.clamp((int)(center - width / 2), 0, SIZE_X - 1);
-            int right = MathUtils.clamp((int)(center + width / 2), 0, SIZE_X - 1);
+            int left = MathUtils.clamp((int) (center - width / 2), 0, SIZE_X - 1);
+            int right = MathUtils.clamp((int) (center + width / 2), 0, SIZE_X - 1);
             for (int x = left; x <= right; x++)
                 terrainMap[x][z] = TerrainType.FAIRWAY;
         }
-
-        // --- Green ---
-        int greenLength = 10;
-        int greenStartZ = SIZE_Z - 20; // green closer to end
-        int greenEndZ = SIZE_Z - 1;
-        int greenCenterX = SIZE_X / 2;
-        int greenRadiusX = 8;
-        int greenRadiusZ = greenLength / 2;
 
         for (int x = 0; x < SIZE_X; x++)
             for (int z = greenStartZ; z <= greenEndZ; z++) {
                 float dx = (x - greenCenterX) / (float) greenRadiusX;
                 float dz = (z - (greenStartZ + greenRadiusZ)) / (float) greenRadiusZ;
-                if (dx*dx + dz*dz <= 1f){
+                if (dx * dx + dz * dz <= 1f) {
                     terrainMap[x][z] = TerrainType.GREEN; // fairway is still underneath
                     // Surround green with fairway
-                    for (int fx = Math.max(0, x - 4); fx <= Math.min(SIZE_X-1, x + 4); fx++)
-                        for (int fz = Math.max(0, z - 4); fz <= Math.min(SIZE_Z-1, z + 4); fz++)
+                    for (int fx = Math.max(0, x - 4); fx <= Math.min(SIZE_X - 1, x + 4); fx++)
+                        for (int fz = Math.max(0, z - 4); fz <= Math.min(SIZE_Z - 1, z + 4); fz++)
                             if (terrainMap[fx][fz] == TerrainType.ROUGH)
                                 terrainMap[fx][fz] = TerrainType.FAIRWAY;
                 }
@@ -139,13 +178,12 @@ public class Terrain_depr_sharp {
                     if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) continue;
                     float dx = (x - centerX) / (float) radiusX;
                     float dz = (z - centerZ) / (float) radiusZ;
-                    if (dx*dx + dz*dz <= 1f)
+                    if (dx * dx + dz * dz <= 1f)
                         terrainMap[x][z] = TerrainType.BUNKER;
                 }
         }
     }
 
-    /** Builds chunk mesh */
     private ModelInstance buildChunk(int zStart, int zEnd) {
         ModelBuilder builder = new ModelBuilder();
         builder.begin();
@@ -186,8 +224,7 @@ public class Terrain_depr_sharp {
         float height;
         if (type == TerrainType.TEE) {
             height = 0.2f;
-        }
-        else {
+        } else {
             height = baseHeightAt(x, z);
         }
 
@@ -212,29 +249,27 @@ public class Terrain_depr_sharp {
 
     private void generateHeightMap() {
 
-        java.util.Random rng = new java.util.Random(System.nanoTime());
-
         // Random global phase offsets (critical so waves differ each run)
         float off1 = rng.nextFloat() * 1000f;
         float off2 = rng.nextFloat() * 1000f;
         float off3 = rng.nextFloat() * 1000f;
         float off4 = rng.nextFloat() * 1000f;
 
+        float undulationLevel = (rng.nextFloat() * 0.8f) + 0.2f;
+
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
-
                 float worldX = x * SCALE;
                 float worldZ = z * SCALE;
 
-                // Large scale rolling hills
                 float hills =
                         MathUtils.sin((worldX + off1) * 0.035f) * 2.0f +
-                                MathUtils.cos((worldZ + off2) * 0.02f)  * 1.7f +
+                                MathUtils.cos((worldZ + off2) * 0.02f) * 1.7f +
                                 MathUtils.sin((worldX + worldZ + off3) * 0.018f) * 1.2f +
                                 MathUtils.cos((worldX - worldZ + off4) * 0.015f) * 1.0f;
+                hills *= undulationLevel;
 
-                // Small per-tile variation
-                hills += (rng.nextFloat() - 0.5f) * 0.5f;
+                hills += (rng.nextFloat() - 0.5f) * 0.01f;
 
                 // --- Envelope flattening near tee and green ---
                 float zNorm = z / (float) SIZE_Z;
@@ -251,6 +286,7 @@ public class Terrain_depr_sharp {
             }
         }
     }
+
     private void buildTriangle(MeshPartBuilder builder, Vector3 v1, Vector3 v2, Vector3 v3, int gridX, int gridZ) {
         Vector3 normal = new Vector3(v3).sub(v1).crs(new Vector3(v2).sub(v1)).nor();
         float slope = 1f - Math.abs(normal.y);
@@ -276,18 +312,24 @@ public class Terrain_depr_sharp {
     }
 
     public TerrainType getTerrainTypeAt(float worldX, float worldZ) {
-        int ix = MathUtils.clamp((int)((worldX + SIZE_X * SCALE / 2f) / SCALE), 0, SIZE_X - 1);
-        int iz = MathUtils.clamp((int)((worldZ + SIZE_Z * SCALE / 2f) / SCALE), 0, SIZE_Z - 1);
+        int ix = MathUtils.clamp((int) ((worldX + SIZE_X * SCALE / 2f) / SCALE), 0, SIZE_X - 1);
+        int iz = MathUtils.clamp((int) ((worldZ + SIZE_Z * SCALE / 2f) / SCALE), 0, SIZE_Z - 1);
         return terrainMap[ix][iz];
     }
 
-    public Vector3 getTeePosition() { return teeCenter.cpy(); }
+    public Vector3 getTeePosition() {
+        return teeCenter.cpy();
+    }
+
+    public float getWaterLevel() {
+        return waterLevel;
+    }
 
     public float getHeightAt(float worldX, float worldZ) {
         float localX = worldX + SIZE_X * SCALE / 2f;
         float localZ = worldZ + SIZE_Z * SCALE / 2f;
-        int ix = MathUtils.clamp((int)(localX / SCALE), 0, SIZE_X - 2);
-        int iz = MathUtils.clamp((int)(localZ / SCALE), 0, SIZE_Z - 2);
+        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
+        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
 
         float fx = (localX / SCALE) - ix;
         float fz = (localZ / SCALE) - iz;
@@ -304,8 +346,8 @@ public class Terrain_depr_sharp {
         float localX = worldX + SIZE_X * SCALE / 2f;
         float localZ = worldZ + SIZE_Z * SCALE / 2f;
 
-        int ix = MathUtils.clamp((int)(localX / SCALE), 0, SIZE_X - 2);
-        int iz = MathUtils.clamp((int)(localZ / SCALE), 0, SIZE_Z - 2);
+        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
+        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
 
         Vector3 v00 = vertex(ix, iz);
         Vector3 v10 = vertex(ix + 1, iz);
@@ -323,15 +365,141 @@ public class Terrain_depr_sharp {
 
     public void render(ModelBatch batch, Environment env) {
         for (ModelInstance chunk : chunks) batch.render(chunk, env);
+        if (waterInstance != null) batch.render(waterInstance, env);
+        for (Tree t : trees) t.render(batch, env);
     }
 
     public void dispose() {
         for (ModelInstance chunk : chunks) chunk.model.dispose();
+        for (Tree t : trees) t.dispose();
     }
 
     private static class Bunker {
         int centerX, centerZ;
         int radiusX, radiusZ;
-        Bunker(int cx, int cz, int rx, int rz) { centerX = cx; centerZ = cz; radiusX = rx; radiusZ = rz; }
+
+        Bunker(int cx, int cz, int rx, int rz) {
+            centerX = cx;
+            centerZ = cz;
+            radiusX = rx;
+            radiusZ = rz;
+        }
+    }
+
+    private void createWaterPlane() {
+        ModelBuilder builder = new ModelBuilder();
+        builder.begin();
+
+        MeshPartBuilder meshBuilder = builder.part(
+                "water",
+                GL20.GL_TRIANGLES,
+                VertexAttributes.Usage.Position |
+                        VertexAttributes.Usage.Normal |
+                        VertexAttributes.Usage.ColorPacked,
+                new Material(ColorAttribute.createDiffuse(Color.BLUE))
+        );
+
+        float w = SIZE_X * SCALE;
+        float h = SIZE_Z * SCALE;
+
+
+        waterLevel = -(rng.nextFloat() * 4) - 2;// water elevation
+
+        Vector3 v00 = new Vector3(0, waterLevel, 0);
+        Vector3 v10 = new Vector3(w, waterLevel, 0);
+        Vector3 v01 = new Vector3(0, waterLevel, h);
+        Vector3 v11 = new Vector3(w, waterLevel, h);
+
+        meshBuilder.triangle(v00, v01, v11);
+        meshBuilder.triangle(v00, v11, v10);
+
+        Model model = builder.end();
+        waterInstance = new ModelInstance(model);
+        // Center over terrain
+        waterInstance.transform.setToTranslation(-w / 2f, 0, -h / 2f);
+    }
+
+    public List<Tree> getTrees() {
+        return trees;
+    }
+
+    public static class Tree {
+        private final ModelInstance trunkInstance;
+        private final List<ModelInstance> foliageInstances = new ArrayList<>();
+        private final Vector3 position;      // bottom center of trunk
+        private final float trunkHeight;
+        private final float trunkRadius;
+        private final float foliageHeight;
+        private final float foliageRadius;
+
+        Tree(float x, float y, float z, float trunkHeight, float trunkRadius, float foliageRadius) {
+            this.position = new Vector3(x, y, z);
+            this.trunkHeight = trunkHeight;
+            this.trunkRadius = trunkRadius;
+
+            ModelBuilder builder = new ModelBuilder();
+
+            // --- Trunk ---
+            builder.begin();
+            MeshPartBuilder trunkBuilder = builder.part(
+                    "trunk",
+                    GL20.GL_TRIANGLES,
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.ColorPacked,
+                    new Material(ColorAttribute.createDiffuse(new Color(0.55f, 0.27f, 0.07f, 1f))) // brown
+            );
+            trunkBuilder.cylinder(trunkRadius * 2, trunkHeight, trunkRadius * 2, 16);
+            Model trunkModel = builder.end();
+            trunkInstance = new ModelInstance(trunkModel);
+            trunkInstance.transform.setToTranslation(x, y + trunkHeight / 2f, z);
+
+            // --- Foliage ---
+            builder = new ModelBuilder();
+            builder.begin();
+            MeshPartBuilder foliageBuilder = builder.part(
+                    "foliage",
+                    GL20.GL_TRIANGLES,
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.ColorPacked,
+                    new Material(ColorAttribute.createDiffuse(Color.GREEN))
+            );
+            foliageBuilder.sphere(foliageRadius * 2, foliageRadius * 2, foliageRadius * 2, 16, 16);
+            Model foliageModel = builder.end();
+            ModelInstance foliageInstance = new ModelInstance(foliageModel);
+            foliageInstance.transform.setToTranslation(x, y + trunkHeight + foliageRadius, z);
+            this.foliageHeight = trunkHeight;
+            this.foliageRadius = foliageRadius;
+            foliageInstances.add(foliageInstance);
+        }
+
+        // --- Render & Dispose ---
+        void render(ModelBatch batch, Environment env) {
+            batch.render(trunkInstance, env);
+            for (ModelInstance f : foliageInstances) batch.render(f, env);
+        }
+
+        void dispose() {
+            trunkInstance.model.dispose();
+            for (ModelInstance f : foliageInstances) f.model.dispose();
+        }
+
+        // --- Collision getters ---
+        public Vector3 getPosition() {
+            return position.cpy();
+        }
+
+        public float getTrunkHeight() {
+            return trunkHeight;
+        }
+
+        public float getTrunkRadius() {
+            return trunkRadius;
+        }
+
+        public float getFoliageHeight() {
+            return foliageHeight;
+        }
+
+        public float getFoliageRadius() {
+            return foliageRadius;
+        }
     }
 }

@@ -13,11 +13,9 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.Vector3;
-import org.example.Ball;
-import org.example.FreeCameraController;
-import org.example.Terrain;
+import org.example.terrain.Terrain;
 
-import static org.example.Terrain.SIZE_Z;
+import static org.example.terrain.Terrain.SIZE_Z;
 
 public class GolfGame extends ApplicationAdapter {
 

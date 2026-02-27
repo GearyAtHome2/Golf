@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import org.example.terrain.Terrain;
 
 public class Ball {
 
@@ -19,27 +20,23 @@ public class Ball {
     private static final float GRAVITY = -9.81f;
     private static final float BOUNCE_RESTITUTION = 0.3f;
     private static final float FRICTION = 0.98f;
-    private static final float AIR_FRICTION = 0.99f;
     private static final float FLAT_FRICTION = 0.35f;
     private static final float STOP_SPEED = 0.145f;
     private static final float MIN_BOUNCE_VY = 0.1f;
 
     private boolean wet;
-    private float watercountdown = 5;
+    private float waterCountdown = 5;
 
     private enum State {AIR, CONTACT, ROLLING, STATIONARY}
 
     private State state = State.AIR;
 
-    // --- NEW: cooldown timer to prevent instant terrain snap ---
     private float hitCooldown = 0f;
-    private static final float HIT_COOLDOWN_TIME = 0.1f; // 0.1s grace
+    private static final float HIT_COOLDOWN_TIME = 0.1f;
 
     public Ball(Vector3 startPosition) {
-
         ModelBuilder builder = new ModelBuilder();
         Material mat = new Material(ColorAttribute.createDiffuse(Color.WHITE));
-
         model = builder.createSphere(
                 RADIUS, RADIUS, RADIUS,
                 20, 20,
@@ -47,113 +44,142 @@ public class Ball {
                 com.badlogic.gdx.graphics.VertexAttributes.Usage.Position |
                         com.badlogic.gdx.graphics.VertexAttributes.Usage.Normal
         );
-
         instance = new ModelInstance(model);
 
-        // ✅ Set starting position from parameter
         this.position.set(startPosition);
-
-        // Ensure transform matches starting position
         instance.transform.setToTranslation(this.position);
-
-        // Start stationary if spawning on tee
         state = State.STATIONARY;
     }
 
     public void update(float delta, Terrain terrain) {
+        reduceCooldown(delta);
 
-        if (wet) {
-            watercountdown -= delta;
-        }
-
-        if (watercountdown < 0){
-            System.out.println("ball in water, would reset the ball here");
-        }
-        // Reduce cooldown
-        if (hitCooldown > 0f) hitCooldown -= delta;
-
-        // If already stationary, just update transform and return early
         if (state == State.STATIONARY) {
-            instance.transform.setToTranslation(position);
+            updateTransform();
             return;
         }
 
+        handleWater(delta, terrain);
+
+        boolean onTerrain = hitCooldown <= 0f && position.y <= terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
+
+        if (onTerrain) handleTerrainCollision(delta, terrain);
+        else applyAirPhysics(delta);
+
+        handleTreeCollisions(terrain);
+        moveBall(delta);
+        updateColor();
+        updateTransform();
+
+        debugLog();
+    }
+
+    // ===================== Helper Methods =====================
+
+    private void reduceCooldown(float delta) {
+        if (hitCooldown > 0f) hitCooldown -= delta;
+    }
+
+    private void handleWater(float delta, Terrain terrain) {
+        if (position.y < terrain.getWaterLevel()) {
+            wet = true;
+            waterCountdown -= delta;
+            velocity.scl(0.9f);
+            velocity.y += -4f * GRAVITY * delta;
+        } else {
+            wet = false;
+        }
+    }
+
+    private void handleTerrainCollision(float delta, Terrain terrain) {
         float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
         Vector3 terrainNormal = terrain.getNormalAt(position.x, position.z).nor();
 
-        // --- only apply terrain logic if cooldown expired ---
-        boolean onTerrain = hitCooldown <= 0f && position.y <= terrainHeight;
+        if (position.y < terrainHeight) position.y = terrainHeight;
 
-        if (position.y < terrain.getWaterLevel()) {
-            wet = true;
-            System.out.println("ball in water");
-            System.out.println("pos:" + position.y);
-            System.out.println("waterlevel: " + terrain.getWaterLevel());
-            // --- Massive friction damping ---
-            velocity.scl(0.9f);  // reduce velocity by 50% per frame; tweak if too strong/weak
+        Vector3 velPerp = terrainNormal.cpy().scl(velocity.dot(terrainNormal));
+        Vector3 velParallel = velocity.cpy().sub(velPerp);
 
-            // --- Buoyancy: gravity reversed with 50% power ---
-            velocity.y += -4f * GRAVITY * delta; // GRAVITY is negative, so -0.5*GRAVITY pushes upward
-        } else if (onTerrain) {
-            wet = false;
-            if (position.y < terrainHeight) {
-                position.y = terrainHeight;
-            }
+        if (velPerp.len() > MIN_BOUNCE_VY) velPerp.scl(-BOUNCE_RESTITUTION);
+        else velPerp.setZero();
 
-            // Split velocity into perpendicular and parallel components
-            Vector3 velPerp = terrainNormal.cpy().scl(velocity.dot(terrainNormal));
-            Vector3 velParallel = velocity.cpy().sub(velPerp);
+        Vector3 slopeAccel = new Vector3(0, GRAVITY, 0).sub(terrainNormal.cpy().scl(GRAVITY));
+        velParallel.add(slopeAccel.scl(delta));
 
-            // Bounce along normal
-            if (velPerp.len() > MIN_BOUNCE_VY) {
-                velPerp.scl(-BOUNCE_RESTITUTION);
-            } else {
-                velPerp.setZero();
-            }
+        velocity.set(velParallel).add(velPerp);
 
-            // Gravity projected along slope tangent
-            Vector3 slopeAccel = new Vector3(0, GRAVITY, 0).sub(terrainNormal.cpy().scl(GRAVITY));
-            velParallel.add(slopeAccel.scl(delta));
+        applyFriction();
+        updateState(velPerp);
+    }
 
-            // Add to existing velocity
-            velocity.set(velParallel).add(velPerp);
+    private void applyAirPhysics(float delta) {
+        state = State.AIR;
+        velocity.y += GRAVITY * delta;
 
-            // --- Apply friction & determine state ---
-            float speedBefore = velocity.len();
+        float dragCoefficient = 0.003f;
+        float speed = velocity.len();
+        if (speed > 0f) {
+            Vector3 drag = velocity.cpy().nor().scl(-dragCoefficient * speed * speed);
+            velocity.add(drag.scl(delta));
+        }
+    }
 
-            if (speedBefore > 0f) {
-                velocity.scl(Math.max((speedBefore - FLAT_FRICTION) / speedBefore, 0f));
-            }
+    private void applyFriction() {
+        float speedBefore = velocity.len();
+        if (speedBefore > 0f) velocity.scl(Math.max((speedBefore - FLAT_FRICTION) / speedBefore, 0f));
+        velocity.scl(FRICTION);
+    }
 
-            velocity.scl(FRICTION);
+    private void applyCustomFriction(float friction) {
+        float speedBefore = velocity.len();
+        if (speedBefore > 0f) velocity.scl(Math.max((speedBefore - FLAT_FRICTION) / speedBefore, 0f));
+        velocity.scl(friction);
+    }
 
-            if (velocity.len() < STOP_SPEED) {
-                velocity.setZero();
-                state = State.STATIONARY; // lock here
-            } else {
-                state = (velPerp.len() < MIN_BOUNCE_VY) ? State.ROLLING : State.CONTACT;
-            }
-
-            System.out.println(String.format(
-                    "FRICTION DEBUG | speedBefore=%.5f | velPerp=%.5f | finalVel=%.5f | state=%s",
-                    speedBefore, velPerp.len(), velocity.len(), state
-            ));
-
+    private void updateState(Vector3 velPerp) {
+        if (velocity.len() < STOP_SPEED) {
+            velocity.setZero();
+            state = State.STATIONARY;
         } else {
-            state = State.AIR;
-            velocity.y += GRAVITY * delta;
-            float dragCoefficient = 0.003f; // tweak for strength of air resistance
-            float speed = velocity.len();
-            if (speed > 0f) {
-                Vector3 drag = velocity.cpy().nor().scl(-dragCoefficient * speed * speed);
-                velocity.add(drag.scl(delta));
+            state = (velPerp.len() < MIN_BOUNCE_VY) ? State.ROLLING : State.CONTACT;
+        }
+    }
+
+    private void handleTreeCollisions(Terrain terrain) {
+        for (Terrain.Tree tree : terrain.getTrees()) {
+            Vector3 treePos = tree.getPosition();
+            float trunkRadius = tree.getTrunkRadius();
+            float trunkHeight = tree.getTrunkHeight();
+
+            float dx = position.x - treePos.x;
+            float dz = position.z - treePos.z;
+            float distXZ = (float) Math.sqrt(dx * dx + dz * dz);
+
+            if (distXZ < RADIUS + trunkRadius) {
+                if (position.y < treePos.y + trunkHeight && position.y > treePos.y) {
+                    Vector3 horizontalDir = new Vector3(dx, 0, dz).nor();
+                    float speedHorizontal = new Vector3(velocity.x, 0, velocity.z).len();
+
+                    velocity.x = horizontalDir.x * speedHorizontal;
+                    velocity.z = horizontalDir.z * speedHorizontal;
+                    velocity.scl(0.8f);
+
+                    float pushOut = (RADIUS + trunkRadius - distXZ) + 0.001f;
+                    position.x += horizontalDir.x * pushOut;
+                    position.z += horizontalDir.z * pushOut;
+                }
+            } else if (distXZ < tree.getFoliageRadius() && (position.y > treePos.y + trunkHeight && position.y < treePos.y + trunkHeight + tree.getFoliageRadius()*2)) {
+                System.out.println("in foliage");
+                applyCustomFriction(0.8f);
             }
         }
+    }
 
-        // Move ball
+    private void moveBall(float delta) {
         position.add(velocity.cpy().scl(delta));
+    }
 
-        // Update color based on state
+    private void updateColor() {
         Color color;
         switch (state) {
             case AIR -> color = Color.WHITE;
@@ -166,10 +192,13 @@ public class Ball {
             ColorAttribute ca = (ColorAttribute) m.get(ColorAttribute.Diffuse);
             ca.color.set(color);
         }
+    }
 
+    private void updateTransform() {
         instance.transform.setToTranslation(position);
+    }
 
-        // --- DEBUG: log velocity every frame ---
+    private void debugLog() {
         System.out.println(String.format(
                 "UPDATE | pos=(%.3f, %.3f, %.3f) velocity=(%.3f, %.3f, %.3f) state=%s",
                 position.x, position.y, position.z,
@@ -178,10 +207,11 @@ public class Ball {
         ));
     }
 
+    // ===================== Hit / Render / Dispose =====================
+
     public void hit(Vector3 shootDir, float power) {
         if (state != State.STATIONARY) return;
-        System.out.println("hitting with power: " + power);
-        // Rotate direction upward by 60 degrees
+
         Vector3 dir = shootDir.cpy().nor();
         float angleRad = 40 * MathUtils.degreesToRadians;
         dir.y = MathUtils.sin(angleRad);
@@ -189,17 +219,10 @@ public class Ball {
         dir.x *= horizontalLen;
         dir.z *= horizontalLen;
 
-        // Apply initial speed
-        float initialSpeed = power * 25; // tweak as needed
-        velocity.set(dir.scl(initialSpeed));
-
-        // Set state back to airborne
+        velocity.set(dir.scl(power * 25));
         state = State.AIR;
-
-        // Start cooldown to prevent terrain snap
         hitCooldown = HIT_COOLDOWN_TIME;
 
-        // --- DEBUG: show hit info ---
         System.out.println(String.format(
                 "HIT | pos=(%.3f, %.3f, %.3f) dir=(%.3f, %.3f, %.3f) velocity=(%.3f, %.3f, %.3f) state=%s",
                 position.x, position.y, position.z,
