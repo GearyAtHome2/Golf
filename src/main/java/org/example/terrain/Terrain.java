@@ -67,7 +67,7 @@ public class Terrain {
             float trunkRadius = MathUtils.random(0.25f, 0.5f);
             float foliageRadius = MathUtils.random(1.5f, 3f);
 
-            trees.add(new Tree(worldX, worldY, worldZ, trunkHeight, trunkRadius, foliageRadius));
+            trees.add(new Tree(worldX, worldY, worldZ, trunkHeight, trunkRadius, foliageRadius*6));
         }
     }
 
