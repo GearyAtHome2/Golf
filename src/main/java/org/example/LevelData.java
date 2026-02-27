@@ -18,4 +18,7 @@ public class LevelData {
     public float undulation;
     public float distance;
     public float treeDensity;
+    public float treeHeight;
+    public float foliageRadius;
+    public float holeSize;
 }

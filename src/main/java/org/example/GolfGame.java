@@ -7,54 +7,64 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.graphics.VertexAttributes;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
+import org.example.glamour.ParticleManager;
 import org.example.terrain.Terrain;
 
 public class GolfGame extends ApplicationAdapter {
-
     private enum GameState { START, PLAYING, PAUSED }
     private GameState currentState = GameState.START;
 
-    // Core Rendering
     private PerspectiveCamera camera;
+    private Viewport gameViewport;
     private ModelBatch modelBatch;
     private Environment environment;
-    private SpriteBatch spriteBatch;
-    private BitmapFont font;
 
-    // Game Objects
     private Terrain terrain;
     private Ball ball;
     private FreeCameraController cameraController;
+    private HUD hud;
+    private ShotController shotController;
 
-    // Power Bar
-    private Model powerBarModel;
-    private ModelInstance powerBarInstance;
-    private final float POWER_BAR_MAX_HEIGHT = 3f;
-    private final float POWER_BAR_OFFSET_Y = 2f;
-
-    // Game Settings
+    private ParticleManager particleManager;
+    private boolean isVictory = false;
     private float gameSpeed = 1.0f;
-    private boolean spacePressed = false;
-    private float spaceHoldTime = 0f;
-    private float shotPower = 0f;
+
+    // --- NEW: BEV Highlight ---
+    private Model highlightModel;
+    private ModelInstance highlightInstance;
 
     @Override
     public void create() {
         modelBatch = new ModelBatch();
-        spriteBatch = new SpriteBatch();
-        font = new BitmapFont();
+        hud = new HUD();
+        shotController = new ShotController();
+        particleManager = new ParticleManager();
 
         setupEnvironment();
         setupCamera();
-        setupPowerBar();
-        initLevel(); // Initial level load
+        setupHighlight();
+        initLevel();
+    }
+
+    private void setupHighlight() {
+        ModelBuilder mb = new ModelBuilder();
+        // Create a large sphere with transparency
+        highlightModel = mb.createSphere(8f, 8f, 8f, 24, 24,
+                new Material(
+                        ColorAttribute.createDiffuse(Color.WHITE),
+                        new BlendingAttribute(0.4f) // 40% opacity
+                ),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+        highlightInstance = new ModelInstance(highlightModel);
     }
 
     private void initLevel() {
@@ -62,41 +72,214 @@ public class GolfGame extends ApplicationAdapter {
         if (ball != null) ball.dispose();
 
         terrain = new Terrain();
-        ball = new Ball(terrain.getTeePosition());
-        cameraController = new FreeCameraController(camera, 40f);
+        Vector3 tee = terrain.getTeePosition();
+        Vector3 hole = terrain.getHolePosition();
+        ball = new Ball(tee);
+
+        Vector3 dirToHole = new Vector3(hole).sub(tee).nor();
+        camera.position.set(hole.x + dirToHole.x * 10f, hole.y + 15f, hole.z + dirToHole.z * 10f);
+        camera.up.set(0, 1, 0);
+        camera.lookAt(hole);
+        camera.update();
+
+        cameraController = new FreeCameraController(camera, 40f, hole);
+        hud.resetShots();
+        isVictory = false;
+        particleManager.clear();
     }
 
-    private void resetBall() {
-        ball.getPosition().set(terrain.getTeePosition());
-        ball.getVelocity().setZero();
-        // Force the ball state to STATIONARY via internal logic if needed,
-        // but setting velocity to zero usually triggers it in Ball.update
+    private void setupCamera() {
+        camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        camera.near = 0.1f;
+        camera.far = 1000f;
+        gameViewport = new FitViewport(1280, 720, camera);
     }
 
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
+        handleInput();
 
-        handleGlobalInput();
+        gameViewport.apply();
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
-        switch (currentState) {
-            case START -> renderStartMenu();
-            case PLAYING -> {
-                updateGame(delta);
-                renderScene();
-                renderHUD();
-            }
-            case PAUSED -> {
-                renderScene(); // Still render the world behind the menu
-                renderPauseMenu();
-            }
+        if (currentState == GameState.START) {
+            hud.renderStartMenu();
+        } else {
+            updateLogic(delta);
+            renderScene();
+            renderUI();
         }
     }
 
-    private void handleGlobalInput() {
+    private void updateLogic(float delta) {
+        if (currentState == GameState.PLAYING && !isVictory) {
+            float effDelta = delta * gameSpeed;
+
+            if (shotController.update(delta, effDelta, ball, camera.direction)) {
+                hud.incrementShots();
+            }
+
+            ball.update(effDelta, terrain);
+            cameraController.update(ball.getPosition());
+
+            // Much cleaner!
+            particleManager.handleBallInteraction(ball, terrain);
+
+            if (ball.checkVictory(terrain.getHolePosition(), terrain.getHoleSize())) {
+                triggerVictory();
+            }
+        }
+
+        particleManager.update(delta, terrain);
+        terrain.updateFlag(camera.position);
+    }
+
+    private void triggerVictory() {
+        isVictory = true;
+        ball.getVelocity().setZero();
+        ball.getPosition().set(terrain.getHolePosition());
+        particleManager.spawn(terrain.getHolePosition(), Color.GOLD, 40, 8f, 2.0f, 4.0f);
+    }
+
+    private void handleEnvironmentalParticles() {
+        Ball.Interaction interaction = ball.getLastInteraction();
+        if (interaction == Ball.Interaction.NONE) return;
+
+        float speed = ball.getVelocity().len();
+        if (speed < 1.0f) {
+            ball.clearInteraction();
+            return;
+        }
+
+        Color pColor;
+        int count;
+        float forceMult;
+        float life = 0.6f;
+
+        // Define behavior based on interaction type
+        switch (interaction) {
+            case WATER -> {
+                pColor = Color.CYAN;
+                count = (int)(speed * 3); // Very High
+                forceMult = 0.4f;
+                life = 1.2f;
+            }
+            case LEAVES -> {
+                pColor = Color.FOREST;
+                count = (int)(speed * 2.5f); // High
+                forceMult = 0.3f;
+            }
+            case TERRAIN -> {
+                Terrain.TerrainType type = terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
+                Ball.State state = ball.getState(); // We need this to check ROLLING vs CONTACT/AIR
+
+                // Default values
+                pColor = new Color(0.45f, 0.35f, 0.25f, 1f); // Soil Brown
+                float traitScale = 0.5f;
+
+                switch (type) {
+                    case BUNKER -> {
+                        pColor = Color.TAN;
+                        traitScale = 1.2f;
+                    }
+                    case GREEN, FAIRWAY, ROUGH -> {
+                        // Determine base green color based on surface
+                        Color surfaceGreen = switch(type) {
+                            case GREEN -> new Color(0.2f, 0.8f, 0.2f, 1f);   // Bright/Light Green
+                            case FAIRWAY -> new Color(0.1f, 0.6f, 0.1f, 1f); // Standard Green
+                            case ROUGH -> new Color(0.05f, 0.4f, 0.05f, 1f); // Dark Green
+                            default -> Color.GREEN;
+                        };
+
+                        // Set Trait Scale
+                        traitScale = (type == Terrain.TerrainType.GREEN) ? 0.15f :
+                                (type == Terrain.TerrainType.FAIRWAY) ? 0.4f : 0.8f;
+
+                        // COLOR LOGIC:
+                        // If rolling, 100% green. If bouncing (CONTACT/AIR), 80% chance green, 20% brown.
+                        if (state == Ball.State.ROLLING) {
+                            pColor = surfaceGreen;
+                        } else {
+                            // Mix in dirt on impacts
+                            pColor = (MathUtils.random() < 0.8f) ? surfaceGreen : new Color(0.4f, 0.25f, 0.15f, 1f);
+                        }
+                    }
+                }
+
+                count = (int)(speed * traitScale * 3); // Slightly increased count for better visuals
+                forceMult = 0.15f * traitScale;
+            }
+            default -> {
+                pColor = Color.WHITE;
+                count = 0;
+                forceMult = 0;
+            }
+        }
+
+        if (count > 0) {
+            // Calculate "Backwards" direction: Reverse of velocity
+            Vector3 splashDir = ball.getVelocity().cpy().scl(-1).nor();
+
+            // Add a slight upward bias so it doesn't just go into the ground
+            splashDir.add(0, 0.5f, 0).nor();
+
+            // Spawn using the new direction-based logic (we'll update ParticleManager next)
+            particleManager.spawnDirectional(ball.getPosition(), splashDir, pColor, count, speed * forceMult, life);
+        }
+
+        ball.clearInteraction();
+    }
+
+    private void renderScene() {
+        modelBatch.begin(camera);
+        terrain.render(modelBatch, environment);
+        ball.render(modelBatch, environment);
+
+        if (cameraController.isOverhead()) {
+            highlightInstance.transform.setToTranslation(ball.getPosition());
+            modelBatch.render(highlightInstance, environment);
+        }
+
+        shotController.render(modelBatch, environment, ball.getPosition(), camera.position);
+        particleManager.render(modelBatch, environment);
+        modelBatch.end();
+    }
+
+    private void renderUI() {
+        if (isVictory) {
+            hud.renderVictory(hud.getShotCount());
+        } else if (currentState == GameState.PAUSED) {
+            hud.renderPauseMenu();
+        } else {
+            hud.renderPlayingHUD(gameSpeed);
+        }
+    }
+
+    private void handleInput() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) && currentState == GameState.START) currentState = GameState.PLAYING;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F11)) {
+            if (Gdx.graphics.isFullscreen()) Gdx.graphics.setWindowedMode(1280, 720);
+            else Gdx.graphics.setFullscreenMode(Gdx.graphics.getDisplayMode());
+        }
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PLAYING) currentState = GameState.PAUSED;
             else if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
+        }
+
+        if (currentState == GameState.PAUSED || isVictory) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
+                initLevel();
+                currentState = GameState.PLAYING;
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+                hud.resetShots();
+                ball.getPosition().set(terrain.getTeePosition());
+                ball.getVelocity().setZero();
+                isVictory = false;
+                particleManager.clear();
+                currentState = GameState.PLAYING;
+            }
         }
 
         if (currentState == GameState.PLAYING) {
@@ -105,123 +288,27 @@ public class GolfGame extends ApplicationAdapter {
         }
     }
 
-    private void updateGame(float delta) {
-        // 1. Handle Shot Input
-        if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
-            if (!spacePressed) { spacePressed = true; spaceHoldTime = 0f; }
-            spaceHoldTime += delta;
-            if (spaceHoldTime > POWER_BAR_MAX_HEIGHT) spaceHoldTime = POWER_BAR_MAX_HEIGHT;
-        } else if (spacePressed) {
-            spacePressed = false;
-            shotPower = spaceHoldTime;
-            Vector3 shootDir = camera.direction.cpy().set(camera.direction.x, 0, camera.direction.z).nor();
-            ball.hit(shootDir, shotPower);
-            spaceHoldTime = 0f;
-        }
-
-        // 2. Physics & Camera
-        float effectiveDelta = delta * gameSpeed;
-        ball.update(effectiveDelta, terrain);
-        cameraController.update(ball.getPosition());
-
-        // 3. UI logic (Shot power drain)
-        if (!spacePressed && shotPower > 0) {
-            shotPower -= delta * 6f; // Raw delta for consistent UI feel
-            if (shotPower < 0) shotPower = 0;
-        }
-    }
-
-    // ===================== Rendering Methods =====================
-
-    private void renderScene() {
-        Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
-
-        modelBatch.begin(camera);
-        terrain.render(modelBatch, environment);
-        ball.render(modelBatch, environment);
-
-        float barHeight = spacePressed ? spaceHoldTime : shotPower;
-        if (barHeight > 0) {
-            updatePowerBarTransform(barHeight);
-            modelBatch.render(powerBarInstance, environment);
-        }
-        modelBatch.end();
-    }
-
-    private void renderStartMenu() {
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        spriteBatch.begin();
-        font.getData().setScale(3f);
-        font.draw(spriteBatch, "ULTIMATE GOLF", 100, Gdx.graphics.getHeight() / 2f + 100);
-        font.getData().setScale(1.5f);
-        font.draw(spriteBatch, "PRESS ENTER TO TEE OFF", 100, Gdx.graphics.getHeight() / 2f);
-        spriteBatch.end();
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) currentState = GameState.PLAYING;
-    }
-
-    private void renderPauseMenu() {
-        // Dim the background
-        Gdx.gl.glEnable(GL20.GL_BLEND);
-        spriteBatch.begin();
-        font.getData().setScale(2.5f);
-        font.draw(spriteBatch, "PAUSED", Gdx.graphics.getWidth()/2f - 80, Gdx.graphics.getHeight() - 100);
-        font.getData().setScale(1.2f);
-        font.draw(spriteBatch, "[R] RESET BALL  |  [N] NEW LEVEL  |  [ESC] RESUME", 50, 100);
-        spriteBatch.end();
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) { resetBall(); currentState = GameState.PLAYING; }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.N)) { initLevel(); currentState = GameState.PLAYING; }
-    }
-
-    private void renderHUD() {
-        spriteBatch.begin();
-        font.getData().setScale(1.2f);
-        font.draw(spriteBatch, String.format("Speed: %.1fx", gameSpeed), Gdx.graphics.getWidth() - 140, 40);
-        spriteBatch.end();
-    }
-
-    // ===================== Setup Helpers =====================
-
-    private void setupPowerBar() {
-        ModelBuilder mb = new ModelBuilder();
-        powerBarModel = mb.createBox(0.5f, 1f, 0.5f,
-                new Material(ColorAttribute.createDiffuse(Color.WHITE)),
-                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-        powerBarInstance = new ModelInstance(powerBarModel);
-    }
-
-    private void updatePowerBarTransform(float height) {
-        Color barColor = height < 1.5f ? Color.GREEN.cpy().lerp(Color.YELLOW, height/1.5f)
-                : Color.YELLOW.cpy().lerp(Color.RED, (height-1.5f)/1.5f);
-
-        powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(barColor));
-        powerBarInstance.transform.setToTranslation(ball.getPosition().x, ball.getPosition().y + POWER_BAR_OFFSET_Y + height/2f, ball.getPosition().z);
-        powerBarInstance.transform.scale(1f, height, 1f);
-    }
-
-    private void setupCamera() {
-        camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.position.set(0f, 50f, 0f);
-        camera.near = 0.1f;
-        camera.far = 1000f;
-    }
-
     private void setupEnvironment() {
         environment = new Environment();
         environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.4f, 0.4f, 0.4f, 1f));
         environment.add(new DirectionalLight().set(Color.WHITE, -1f, -0.8f, -0.2f));
-        Gdx.gl.glClearColor(0.53f, 0.81f, 0.92f, 1f); // Sky Blue
+        Gdx.gl.glClearColor(0.53f, 0.81f, 0.92f, 1f);
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        gameViewport.update(width, height);
+        hud.resize(width, height);
     }
 
     @Override
     public void dispose() {
         modelBatch.dispose();
-        spriteBatch.dispose();
-        font.dispose();
+        hud.dispose();
+        shotController.dispose();
         terrain.dispose();
         ball.dispose();
-        powerBarModel.dispose();
+        particleManager.dispose();
+        if (highlightModel != null) highlightModel.dispose();
     }
 }

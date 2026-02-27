@@ -15,8 +15,6 @@ import java.util.List;
 
 public class Terrain {
 
-    public enum TerrainType {TEE, FAIRWAY, ROUGH, BUNKER, GREEN}
-
     private ModelInstance waterInstance;
     java.util.Random rng = new java.util.Random(System.nanoTime());
     private final List<ModelInstance> chunks = new ArrayList<>();
@@ -33,10 +31,15 @@ public class Terrain {
     private float waterLevel;
     private final List<Tree> trees = new ArrayList<>();
     private float[][] heightMap;
+    private Vector3 holePosition;
+    private ModelInstance flagInstance;
+    private ModelInstance holeMarker;
+    private float holeSize;
 
     public Terrain() {
         terrainMap = new TerrainType[SIZE_X][SIZE_Z];
         heightMap = new float[SIZE_X][SIZE_Z];   // ← NEW
+        holeSize = 0.6f;//configurable on constructor
         generateTerrainTypes();
         generateHeightMap();                      // ← NEW
         createWaterPlane();
@@ -67,7 +70,7 @@ public class Terrain {
             float trunkRadius = MathUtils.random(0.25f, 0.5f);
             float foliageRadius = MathUtils.random(1.5f, 3f);
 
-            trees.add(new Tree(worldX, worldY, worldZ, trunkHeight, trunkRadius, foliageRadius*6));
+            trees.add(new Tree(worldX, worldY, worldZ, trunkHeight, trunkRadius, foliageRadius*4));
         }
     }
 
@@ -148,6 +151,15 @@ public class Terrain {
                         for (int fz = Math.max(0, z - 4); fz <= Math.min(SIZE_Z - 1, z + 4); fz++)
                             if (terrainMap[fx][fz] == TerrainType.ROUGH)
                                 terrainMap[fx][fz] = TerrainType.FAIRWAY;
+                    if (holePosition == null) {
+                        float hX = greenCenterX * SCALE - SIZE_X * SCALE / 2f;
+                        float hZ = (greenStartZ + (greenRadiusZ / 2f)) * SCALE - SIZE_Z * SCALE / 2f;
+                        float hY = getHeightAt(hX, hZ);
+                        this.holePosition = new Vector3(hX, hY, hZ);
+
+                        createFlag(holePosition);
+                        createHoleMarker(holePosition);
+                    }
                 }
             }
 
@@ -183,6 +195,86 @@ public class Terrain {
                 }
         }
     }
+
+    private void createHoleMarker(Vector3 pos) {
+        ModelBuilder mb = new ModelBuilder();
+        // A very thin cylinder (basically a disc) to represent the hole opening
+        Model disc = mb.createCylinder(holeSize, 0.01f, holeSize, 20,
+                new Material(ColorAttribute.createDiffuse(Color.BLACK)),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+
+        holeMarker = new ModelInstance(disc);
+        // Place it just slightly above the grass so it doesn't "z-fight" (flicker)
+        holeMarker.transform.setToTranslation(pos.x, pos.y + 0.02f, pos.z);
+    }
+
+    private void createFlag(Vector3 pos) {
+        ModelBuilder mb = new ModelBuilder();
+        mb.begin();
+
+        // Pole is 5m tall, centered at 0. It goes from -2.5 to +2.5
+        MeshPartBuilder pb = mb.part("pole", GL20.GL_TRIANGLES,
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal,
+                new Material(ColorAttribute.createDiffuse(Color.WHITE)));
+        pb.cylinder(0.1f, 5f, 0.1f, 8);
+
+        Material flagMaterial = new Material(ColorAttribute.createDiffuse(Color.RED));
+        flagMaterial.set(new com.badlogic.gdx.graphics.g3d.attributes.IntAttribute(
+                com.badlogic.gdx.graphics.g3d.attributes.IntAttribute.CullFace, 0));
+
+        MeshPartBuilder fb = mb.part("flag", GL20.GL_TRIANGLES,
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal, flagMaterial);
+
+        fb.rect(
+                0.1f, 1.5f, 0f,   // Bottom-left (starting just outside pole radius)
+                0.1f, 2.5f, 0f,   // Top-left
+                1.6f, 2.5f, 0f,   // Top-right
+                1.6f, 1.5f, 0f,   // Bottom-right
+                0f, 0f, 1f
+        );
+
+        Model flagModel = mb.end();
+        flagInstance = new ModelInstance(flagModel);
+        // Since the pole base is at -2.5, we translate the WHOLE thing up by 2.5
+        flagInstance.transform.setToTranslation(pos.x, pos.y + 2.5f, pos.z);
+    }
+
+    public void updateFlag(Vector3 cameraPosition) {
+        if (flagInstance == null) return;
+
+        float distance = cameraPosition.dst(holePosition);
+
+        // --- GROWTH TUNING ---
+        float threshold = 50f; // Distance before scaling starts
+        float growthRate = 0.015f; // Smaller = grows slower
+
+        // If distance is less than threshold, scale is 1.0.
+        // Otherwise, it grows based on the excess distance.
+        float dynamicScale = 1.0f;
+        if (distance > threshold) {
+            dynamicScale = 1.0f + ((distance - threshold) * growthRate);
+        }
+
+        dynamicScale = Math.min(dynamicScale, 4.0f); // Max size cap
+
+        // Update Position and Scale
+        // We adjust Y by (2.5 * dynamicScale) because the pole's origin is at its base now
+        flagInstance.transform.setToTranslation(holePosition.x, holePosition.y + (2.5f * dynamicScale), holePosition.z);
+        flagInstance.transform.scale(dynamicScale, dynamicScale, dynamicScale);
+
+        // Billboard rotation (Y-axis only)
+        Vector3 direction = new Vector3(cameraPosition).sub(holePosition);
+        direction.y = 0;
+        float angle = MathUtils.atan2(direction.x, direction.z) * MathUtils.radiansToDegrees;
+        flagInstance.transform.rotate(Vector3.Y, angle);
+    }
+
+    // Add this getter so GolfGame can call it if needed
+    public ModelInstance getFlagInstance() { return flagInstance; }
+
+    public Vector3 getHolePosition() { return holePosition; }
+
+    public float getHoleSize() { return holeSize; }
 
     private ModelInstance buildChunk(int zStart, int zEnd) {
         ModelBuilder builder = new ModelBuilder();
@@ -367,11 +459,18 @@ public class Terrain {
         for (ModelInstance chunk : chunks) batch.render(chunk, env);
         if (waterInstance != null) batch.render(waterInstance, env);
         for (Tree t : trees) t.render(batch, env);
+
+        // Render hole and flag
+        if (holeMarker != null) batch.render(holeMarker, env);
+        if (flagInstance != null) batch.render(flagInstance, env);
     }
 
     public void dispose() {
         for (ModelInstance chunk : chunks) chunk.model.dispose();
+        if (waterInstance != null) waterInstance.model.dispose();
         for (Tree t : trees) t.dispose();
+        if (holeMarker != null) holeMarker.model.dispose();
+        if (flagInstance != null) flagInstance.model.dispose();
     }
 
     private static class Bunker {
@@ -422,6 +521,25 @@ public class Terrain {
     public List<Tree> getTrees() {
         return trees;
     }
+
+    public enum TerrainType {
+        TEE(0.40f, 2.0f, 1.1f),
+        FAIRWAY(0.45f, 2.15f, 1.2f),
+        ROUGH(0.70f, 4.5f, 1.5f),
+        BUNKER(1.2f, 12.0f, 2.5f), // High friction/resistance to simulate sand
+        GREEN(0.25f, 0.8f, 1.05f); // Very low resistance for long putts
+
+        public final float kineticFriction;
+        public final float rollingResistance;
+        public final float staticMultiplier;
+
+        TerrainType(float kf, float rr, float sm) {
+            this.kineticFriction = kf;
+            this.rollingResistance = rr;
+            this.staticMultiplier = sm;
+        }
+    }
+
 
     public static class Tree {
         private final ModelInstance trunkInstance;

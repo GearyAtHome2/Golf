@@ -20,27 +20,27 @@ public class Ball {
     private static final float GRAVITY = -9.81f;
     private static final float BOUNCE_RESTITUTION = 0.3f;
 
-    // Friction Coefficients
-    private static final float KINETIC_FRICTION = 0.45f;    // Constant deceleration (m/s^2)
-    private static final float ROLLING_RESISTANCE = 2.15f;  // Proportional to velocity
-    private static final float STATIC_FRICTION_MULT = 1.2f; // Must overcome this to start rolling
+    private static final float FOLIAGE_DRAG_SQU = 0.04f;
+    private static final float FOLIAGE_DRAG_LIN = 0.04f;
 
-    private static final float FOLIAGE_DRAG_SQU = 0.04f; // Massive v^2 drag
-    private static final float FOLIAGE_DRAG_LIN = 0.04f;  // High linear drag
-    private static final float DEFLECTION_CHANCE = 1f; // 100% for testing as requested
-    private static final float DEFLECTION_MAGNITUDE = 5.95f; // How "wild" the bounce is
+    private static final float DEFLECTION_CHANCE_PER_METER = 0.6f;
+    private static final float DEFLECTION_MAGNITUDE = 10f;
 
     private static final float STOP_SPEED = 0.15f;
     private static final float MIN_BOUNCE_VY = 0.2f;
 
     private boolean wet;
     private float waterCountdown = 5;
+    private boolean wasInFoliageLastFrame = false;
 
-    private enum State {AIR, CONTACT, ROLLING, STATIONARY}
+    public enum State {AIR, CONTACT, ROLLING, STATIONARY}
     private State state = State.AIR;
 
     private float hitCooldown = 0f;
     private static final float HIT_COOLDOWN_TIME = 0.1f;
+
+    public enum Interaction { NONE, LEAVES, WATER, TERRAIN }
+    private Interaction lastInteraction = Interaction.NONE;
 
     public Ball(Vector3 startPosition) {
         ModelBuilder builder = new ModelBuilder();
@@ -69,7 +69,6 @@ public class Ball {
 
         handleWater(delta, terrain);
 
-        // Ground check
         float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
         boolean onTerrain = hitCooldown <= 0f && position.y <= terrainHeight;
 
@@ -83,9 +82,26 @@ public class Ball {
         moveBall(delta);
         updateColor();
         updateTransform();
-
-        debugLog();
     }
+
+    public boolean checkVictory(Vector3 holePos, float holeSize) {
+        float holeRadius = holeSize / 2f;
+        float distToHole = position.dst(holePos);
+        float speed = velocity.len();
+
+        if (distToHole < holeRadius) {
+            if (state == State.ROLLING || state == State.CONTACT) {
+                if (speed < 6f) return true;
+            }
+            if (state == State.AIR) {
+                float heightAboveHole = position.y - holePos.y;
+                if (heightAboveHole < 0.6f) return true;
+            }
+        }
+        return false;
+    }
+
+    public State getState() { return state; }
 
     private void reduceCooldown(float delta) {
         if (hitCooldown > 0f) hitCooldown -= delta;
@@ -93,6 +109,7 @@ public class Ball {
 
     private void handleWater(float delta, Terrain terrain) {
         if (position.y < terrain.getWaterLevel()) {
+            lastInteraction = Interaction.WATER;
             wet = true;
             waterCountdown -= delta;
             velocity.scl(0.9f);
@@ -104,63 +121,48 @@ public class Ball {
 
     private void handleTerrainCollision(float delta, Terrain terrain, float terrainHeight) {
         Vector3 terrainNormal = terrain.getNormalAt(position.x, position.z).nor();
-
         if (position.y < terrainHeight) position.y = terrainHeight;
 
-        // Split velocity into Normal and Tangential components
         Vector3 velNormalComp = terrainNormal.cpy().scl(velocity.dot(terrainNormal));
         Vector3 velTangentComp = velocity.cpy().sub(velNormalComp);
 
-        // Handle Bouncing
         if (velNormalComp.len() > MIN_BOUNCE_VY) {
             velNormalComp.scl(-BOUNCE_RESTITUTION);
             state = State.CONTACT;
+            lastInteraction = Interaction.TERRAIN; // Trigger particle on bounce
         } else {
             velNormalComp.setZero();
             state = State.ROLLING;
+            // Only trigger terrain particles while rolling if moving fast enough
+            if (velocity.len() > 1.5f) lastInteraction = Interaction.TERRAIN;
         }
 
-        // Apply Slope Acceleration (Gravity along the tangent)
         Vector3 gravityVec = new Vector3(0, GRAVITY, 0);
         Vector3 slopeForce = gravityVec.cpy().sub(terrainNormal.cpy().scl(gravityVec.dot(terrainNormal)));
         velTangentComp.add(slopeForce.scl(delta));
 
-        // Apply Improved Friction to the tangential velocity
-        applyRealisticFriction(velTangentComp, terrainNormal, slopeForce, delta);
+        Terrain.TerrainType currentType = terrain.getTerrainTypeAt(position.x, position.z);
+        applyRealisticFriction(velTangentComp, terrainNormal, delta, currentType);
 
         velocity.set(velTangentComp).add(velNormalComp);
-
-        updateState(velNormalComp, slopeForce, terrainNormal);
+        updateState(velNormalComp, slopeForce, terrainNormal, currentType);
     }
 
-    private void applyRealisticFriction(Vector3 tangentVel, Vector3 normal, Vector3 slopeForce, float delta) {
+    private void applyRealisticFriction(Vector3 tangentVel, Vector3 normal, float delta, Terrain.TerrainType type) {
         float speed = tangentVel.len();
         if (speed < 0.001f) return;
-
-        // Friction is proportional to the normal force (gravity pressing down)
         float normalForceMag = Math.abs(normal.y * GRAVITY);
+        float totalReduction = (type.kineticFriction * normalForceMag * delta) + (type.rollingResistance * speed * delta);
 
-        // 1. Coulomb Friction (Constant deceleration)
-        float coulombDecel = KINETIC_FRICTION * normalForceMag * delta;
-
-        // 2. Rolling Resistance (Linear speed reduction)
-        float rollingDecel = ROLLING_RESISTANCE * speed * delta;
-
-        float totalReduction = coulombDecel + rollingDecel;
-
-        if (totalReduction >= speed) {
-            tangentVel.setZero();
-        } else {
-            tangentVel.scl((speed - totalReduction) / speed);
-        }
+        if (totalReduction >= speed) tangentVel.setZero();
+        else tangentVel.scl((speed - totalReduction) / speed);
     }
 
-    private void updateState(Vector3 velNormal, Vector3 slopeForce, Vector3 normal) {
+    private void updateState(Vector3 velNormal, Vector3 slopeForce, Vector3 normal, Terrain.TerrainType type) {
         float speed = velocity.len();
         float slopeMag = slopeForce.len();
-        float maxStaticFriction = KINETIC_FRICTION * Math.abs(normal.y * GRAVITY) * STATIC_FRICTION_MULT;
+        float maxStaticFriction = type.kineticFriction * Math.abs(normal.y * GRAVITY) * type.staticMultiplier;
 
-        // If moving slow enough AND slope isn't steep enough to overcome static friction
         if (speed < STOP_SPEED && slopeMag < maxStaticFriction) {
             velocity.setZero();
             state = State.STATIONARY;
@@ -172,75 +174,74 @@ public class Ball {
     private void applyAirPhysics(float delta) {
         state = State.AIR;
         velocity.y += GRAVITY * delta;
-
-        float dragCoefficient = 0.003f;
         float speed = velocity.len();
         if (speed > 0f) {
-            Vector3 drag = velocity.cpy().nor().scl(-dragCoefficient * speed * speed);
+            Vector3 drag = velocity.cpy().nor().scl(-0.003f * speed * speed);
             velocity.add(drag.scl(delta));
         }
     }
 
     private void applyFoliagePhysics(float delta) {
+        lastInteraction = Interaction.LEAVES;
         float speed = velocity.len();
         if (speed < 0.1f) return;
 
-        // 1. Delta-Safe Drag
-        // We use the drag formula: v_new = v_old * (1 - drag * delta)
-        // This is more stable than subtracting forces manually.
-        float totalDrag = (FOLIAGE_DRAG_LIN + FOLIAGE_DRAG_SQU * speed);
-        float frictionScale = Math.max(0, 1 - totalDrag * delta);
-        velocity.scl(frictionScale);
+        velocity.scl(Math.max(0, 1 - (FOLIAGE_DRAG_LIN + FOLIAGE_DRAG_SQU * speed) * delta));
 
-        // 2. Delta-Safe Deflection Chance
-        // To make a chance delta-safe, we adjust the probability:
-        // P_delta = 1 - (1 - P_base)^delta
-        float frameIndependentChance = (float) (1.0f - Math.pow(1.0f - DEFLECTION_CHANCE, delta));
-
-        // For 100% testing, we can skip the math and just check > 0
-        if (DEFLECTION_CHANCE >= 1.0f || MathUtils.random() < frameIndependentChance) {
-
-            // Instead of adding a vector, we ROTATE the current velocity.
-            // This preserves speed but changes direction significantly.
-            float spr = DEFLECTION_MAGNITUDE * 90f * delta; // Max degrees to rotate per second
-
-            velocity.rotate(Vector3.X, MathUtils.random(-spr, spr));
-            velocity.rotate(Vector3.Y, MathUtils.random(-spr, spr));
-            velocity.rotate(Vector3.Z, MathUtils.random(-spr, spr));
+        float frameChance = 1.0f - (float) Math.pow(1.0f - DEFLECTION_CHANCE_PER_METER, speed * delta);
+        if (MathUtils.random() < frameChance) {
+            velocity.rotate(Vector3.X, MathUtils.random(-DEFLECTION_MAGNITUDE, DEFLECTION_MAGNITUDE));
+            velocity.rotate(Vector3.Y, MathUtils.random(-DEFLECTION_MAGNITUDE, DEFLECTION_MAGNITUDE));
+            velocity.rotate(Vector3.Z, MathUtils.random(-DEFLECTION_MAGNITUDE, DEFLECTION_MAGNITUDE));
+            velocity.scl(0.95f);
         }
     }
 
     private void handleTreeCollisions(Terrain terrain, float delta) {
+        boolean currentlyInFoliage = false;
+
         for (Terrain.Tree tree : terrain.getTrees()) {
             Vector3 treePos = tree.getPosition();
-            float trunkRadius = tree.getTrunkRadius();
+            float trunkRad = tree.getTrunkRadius();
             float trunkHeight = tree.getTrunkHeight();
+            float foliageRad = tree.getFoliageRadius();
 
+            // Trunk Collision
             float dx = position.x - treePos.x;
             float dz = position.z - treePos.z;
             float distXZ = (float) Math.sqrt(dx * dx + dz * dz);
 
-            if (distXZ < RADIUS + trunkRadius) {
-                if (position.y < treePos.y + trunkHeight && position.y > treePos.y) {
-                    Vector3 horizontalDir = new Vector3(dx, 0, dz).nor();
-                    float speedHorizontal = new Vector3(velocity.x, 0, velocity.z).len();
+            if (distXZ < RADIUS + trunkRad && position.y < treePos.y + trunkHeight && position.y > treePos.y) {
+                Vector3 hDir = new Vector3(dx, 0, dz).nor();
+                float sH = new Vector3(velocity.x, 0, velocity.z).len();
+                velocity.x = hDir.x * sH;
+                velocity.z = hDir.z * sH;
+                velocity.scl(0.8f);
+                position.x += hDir.x * ((RADIUS + trunkRad - distXZ) + 0.001f);
+                position.z += hDir.z * ((RADIUS + trunkRad - distXZ) + 0.001f);
+                lastInteraction = Interaction.TERRAIN; // Bark hit is like terrain
+                continue;
+            }
 
-                    velocity.x = horizontalDir.x * speedHorizontal;
-                    velocity.z = horizontalDir.z * speedHorizontal;
-                    velocity.scl(0.8f);
+            // Foliage Collision
+            float fY = treePos.y + trunkHeight + foliageRad;
+            float d3D = position.dst(treePos.x, fY, treePos.z);
 
-                    float pushOut = (RADIUS + trunkRadius - distXZ) + 0.001f;
-                    position.x += horizontalDir.x * pushOut;
-                    position.z += horizontalDir.z * pushOut;
-                }
-            } else if (distXZ < tree.getFoliageRadius() && (position.y > treePos.y + trunkHeight && position.y < treePos.y + trunkHeight + tree.getFoliageRadius()*2)) {
-                applyFoliagePhysics(delta); // Slightly slowed by leaves
+            if (d3D < foliageRad + RADIUS) {
+                currentlyInFoliage = true;
+                applyFoliagePhysics(delta);
             }
         }
+
+        // Logic for Exit Particles
+        if (wasInFoliageLastFrame && !currentlyInFoliage) {
+            lastInteraction = Interaction.LEAVES; // Trigger "exit explosion"
+        }
+        wasInFoliageLastFrame = currentlyInFoliage;
     }
 
     private void moveBall(float delta) {
-        position.add(velocity.cpy().scl(delta));
+        position.add(velocity.x * delta, velocity.y * delta, velocity.z * delta);
     }
 
     private void updateColor() {
@@ -251,8 +252,7 @@ public class Ball {
             case STATIONARY -> Color.ORANGE;
         };
         for (Material m : instance.materials) {
-            ColorAttribute ca = (ColorAttribute) m.get(ColorAttribute.Diffuse);
-            ca.color.set(color);
+            ((ColorAttribute) m.get(ColorAttribute.Diffuse)).color.set(color);
         }
     }
 
@@ -260,23 +260,14 @@ public class Ball {
         instance.transform.setToTranslation(position);
     }
 
-    private void debugLog() {
-        if (velocity.len() > 0) {
-            System.out.printf("PHYSICS | State: %s | Speed: %.3f | Pos: (%.2f, %.2f, %.2f)%n",
-                    state, velocity.len(), position.x, position.y, position.z);
-        }
-    }
-
     public void hit(Vector3 shootDir, float power) {
         if (state != State.STATIONARY) return;
-
         Vector3 dir = shootDir.cpy().nor();
         float angleRad = 40 * MathUtils.degreesToRadians;
         dir.y = MathUtils.sin(angleRad);
-        float horizontalLen = MathUtils.cos(angleRad);
-        dir.x *= horizontalLen;
-        dir.z *= horizontalLen;
-
+        float hLen = MathUtils.cos(angleRad);
+        dir.x *= hLen;
+        dir.z *= hLen;
         velocity.set(dir.scl(power * 25));
         state = State.AIR;
         hitCooldown = HIT_COOLDOWN_TIME;
@@ -292,4 +283,6 @@ public class Ball {
 
     public Vector3 getPosition() { return position; }
     public Vector3 getVelocity() { return velocity; }
+    public void clearInteraction() { lastInteraction = Interaction.NONE; }
+    public Interaction getLastInteraction() { return lastInteraction; }
 }
