@@ -22,7 +22,10 @@ public class ShotController {
     private boolean isCharging = false;
     private final float MAX_POWER = 3f;
 
-    // Animation timer for the pulse effect
+    // Cooldown to prevent immediate re-charging after a cancel
+    private float cancelCooldown = 0f;
+    private final float CANCEL_COOLDOWN_TIME = 0.5f;
+
     private float animationTimer = 0f;
 
     public ShotController() {
@@ -35,7 +38,6 @@ public class ShotController {
 
         maxPowerGhost = new ModelInstance(powerBarModel);
 
-        // Set up translucency and depth testing so the inner bar is always visible
         maxPowerGhost.materials.get(0).set(
                 new BlendingAttribute(0.5f),
                 new DepthTestAttribute(false),
@@ -43,22 +45,41 @@ public class ShotController {
         );
     }
 
-    public boolean update(float delta, float effectiveDelta, Ball ball, Vector3 camDir) {
-        animationTimer += delta;
+    public boolean update(float delta, float effectiveDelta, Ball ball, Vector3 camDir, Club club) {        animationTimer += delta;
 
-        if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
-            isCharging = true;
-            spaceHoldTime = Math.min(spaceHoldTime + delta, MAX_POWER);
+        // Manage the cooldown timer
+        if (cancelCooldown > 0) {
+            cancelCooldown -= delta;
+        }
+
+        // --- CANCEL LOGIC: Left Click while charging ---
+        if (isCharging && Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
+            isCharging = false;
+            spaceHoldTime = 0f;
+            cancelCooldown = CANCEL_COOLDOWN_TIME;
             return false;
-        } else if (isCharging) {
+        }
+
+        // Spacebar charging logic
+        if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
+            // Only start charging if the ball is still and we aren't in a cancel cooldown
+            if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
+                isCharging = true;
+                spaceHoldTime = Math.min(spaceHoldTime + delta, MAX_POWER);
+            }
+            return false;
+        }else if (isCharging) {
             isCharging = false;
             shotPower = spaceHoldTime;
             Vector3 hitDir = new Vector3(camDir.x, 0, camDir.z).nor();
-            ball.hit(hitDir, shotPower);
+
+            ball.hit(hitDir, shotPower, club.loft, club.powerMult);
+
             spaceHoldTime = 0;
             return true;
         }
 
+        // Power bar drain animation after hit
         if (shotPower > 0) {
             shotPower -= delta * 6f;
             if (shotPower < 0) shotPower = 0;
@@ -72,26 +93,17 @@ public class ShotController {
 
         float dist = camPos.dst(ballPos);
 
-        // 1. INVERSE DISTANCE SCALING
-        // This calculates a 'unit scale' that shrinks the object as you get closer
-        // to counteract the camera's natural perspective zoom.
         float baseScaleFactor = 0.04f;
         float currentUnitScale = MathUtils.clamp(dist * baseScaleFactor, 0.15f, 1.2f);
 
-        // 2. PULSE LOGIC
-        // Only pulse the width when we are at maximum charge
         float pulseWidthMult = 1.0f;
         if (isCharging && spaceHoldTime >= MAX_POWER) {
-            // Rapid sine wave pulsing between 1.0 and 1.4
             pulseWidthMult = 1.2f + (MathUtils.sin(animationTimer * 18f) * 0.2f);
         }
 
-        // Adjust the vertical offset based on the new scaled size
         float verticalOffset = currentUnitScale * 1.5f;
 
         if (isCharging) {
-            // We set translation first, then scale.
-            // The Y translation accounts for half of the MAX_POWER height scaled by our unit scale.
             maxPowerGhost.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (MAX_POWER * currentUnitScale / 2f), ballPos.z);
             maxPowerGhost.transform.scale(currentUnitScale * 1.1f, MAX_POWER * currentUnitScale, currentUnitScale * 1.1f);
             batch.render(maxPowerGhost, env);
@@ -105,12 +117,14 @@ public class ShotController {
             powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
 
             powerBarInstance.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (height * currentUnitScale / 2f), ballPos.z);
-
-            // Apply currentUnitScale to overall size, and pulseWidthMult to the X/Z thickness
             powerBarInstance.transform.scale(currentUnitScale * pulseWidthMult, height * currentUnitScale, currentUnitScale * pulseWidthMult);
 
             batch.render(powerBarInstance, env);
         }
+    }
+
+    public boolean isCharging() {
+        return isCharging;
     }
 
     public void dispose() { powerBarModel.dispose(); }

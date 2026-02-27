@@ -3,6 +3,7 @@ package org.example;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
@@ -34,6 +35,9 @@ public class GolfGame extends ApplicationAdapter {
     private HUD hud;
     private ShotController shotController;
 
+
+    private Club currentClub = Club.WOOD_5;
+
     private ParticleManager particleManager;
     private boolean isVictory = false;
     private float gameSpeed = 1.0f;
@@ -53,6 +57,30 @@ public class GolfGame extends ApplicationAdapter {
         setupCamera();
         setupHighlight();
         initLevel();
+
+        Gdx.input.setInputProcessor(new InputAdapter() {
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                // Rule 1: Right-Click or Tab = Camera Zoom/Overhead Zoom
+                if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.TAB)) {
+                    return cameraController.handleScroll(amountY);
+                }
+
+                // Rule 2: No scrolling clubs while charging space
+                if (shotController.isCharging()) {
+                    return false;
+                }
+
+                // Rule 3: Clamped club selection
+                int index = currentClub.ordinal();
+                if (amountY > 0) index++;
+                else if (amountY < 0) index--;
+
+                index = MathUtils.clamp(index, 0, Club.values().length - 1);
+                currentClub = Club.values()[index];
+                return true;
+            }
+        });
     }
 
     private void setupHighlight() {
@@ -116,7 +144,7 @@ public class GolfGame extends ApplicationAdapter {
         if (currentState == GameState.PLAYING && !isVictory) {
             float effDelta = delta * gameSpeed;
 
-            if (shotController.update(delta, effDelta, ball, camera.direction)) {
+            if (shotController.update(delta, effDelta, ball, camera.direction, currentClub)) {
                 hud.incrementShots();
             }
 
@@ -252,7 +280,7 @@ public class GolfGame extends ApplicationAdapter {
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu();
         } else {
-            hud.renderPlayingHUD(gameSpeed);
+            hud.renderPlayingHUD(gameSpeed, currentClub);
         }
     }
 

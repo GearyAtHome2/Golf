@@ -527,7 +527,7 @@ public class Terrain {
         FAIRWAY(0.45f, 2.15f, 1.2f),
         ROUGH(0.70f, 4.5f, 1.5f),
         BUNKER(1.2f, 12.0f, 2.5f), // High friction/resistance to simulate sand
-        GREEN(0.25f, 0.8f, 1.05f); // Very low resistance for long putts
+        GREEN(0.1f, 0.2f, 1.05f); // Very low resistance for long putts
 
         public final float kineticFriction;
         public final float rollingResistance;

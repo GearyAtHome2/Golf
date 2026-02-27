@@ -49,13 +49,18 @@ public class HUD {
         batch.end();
     }
 
-    public void renderPlayingHUD(float gameSpeed) {
+    public void renderPlayingHUD(float gameSpeed, Club currentClub) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         font.getData().setScale(1.5f);
         font.setColor(Color.WHITE);
+
+        // Top Left: Shots
         font.draw(batch, "Shots: " + shotCount, 40, viewport.getWorldHeight() - 40);
-        font.draw(batch, String.format("Speed: %.1fx", gameSpeed), viewport.getWorldWidth() - 160, 60);
+
+        font.draw(batch, "Club: " + currentClub.name, viewport.getWorldWidth() - 220, 100);
+        font.draw(batch, String.format("Speed: %.1fx", gameSpeed), viewport.getWorldWidth() - 220, 60);
+
         batch.end();
     }
 

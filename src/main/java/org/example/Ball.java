@@ -260,15 +260,19 @@ public class Ball {
         instance.transform.setToTranslation(position);
     }
 
-    public void hit(Vector3 shootDir, float power) {
+    public void hit(Vector3 shootDir, float power, float loft, float powerMult) {
         if (state != State.STATIONARY) return;
         Vector3 dir = shootDir.cpy().nor();
-        float angleRad = 40 * MathUtils.degreesToRadians;
+
+        float angleRad = loft * MathUtils.degreesToRadians;
         dir.y = MathUtils.sin(angleRad);
         float hLen = MathUtils.cos(angleRad);
         dir.x *= hLen;
         dir.z *= hLen;
-        velocity.set(dir.scl(power * 25));
+
+        // Use the powerMult from the club
+        velocity.set(dir.scl(power * powerMult));
+
         state = State.AIR;
         hitCooldown = HIT_COOLDOWN_TIME;
     }
