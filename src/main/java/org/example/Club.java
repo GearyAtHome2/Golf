@@ -1,13 +1,20 @@
 package org.example;
 
 public enum Club {
-    DRIVER("Driver", 12f, 35f),
-    WOOD_3("3 Wood", 15f, 30f),
-    WOOD_5("5 Wood", 40f, 25f), // Your Baseline
-    IRON_5("5 Iron", 25f, 20f),
-    IRON_9("9 Iron", 45f, 15f),
-    WEDGE("Wedge", 55f, 12f),
-    PUTTER("Putter", 0f, 8f);
+    DRIVER("Driver", 15f, 35f),
+    WOOD_3("3 Wood", 19f, 30f),
+    WOOD_5("5 Wood", 26f, 25f),
+    HYBRID_3("3 Hybrid", 24f, 25f),
+    IRON_5("5 Iron", 31f, 21.9f),
+    IRON_6("6 Iron", 34f, 20.8f),
+    IRON_7("7 Iron", 37f, 20f),
+    IRON_8("8 Iron", 40f, 19f),
+    IRON_9("9 Iron", 43f, 18f),
+    PWEDGE("Pitching Wedge", 45f, 13f),
+    GWEDGE("Gap Wedge", 50f, 12.6f),
+    SWEDGE("Sand Wedge", 55f, 12.2f),
+    LWEDGE("Lob Wedge", 60f, 12f),
+    PUTTER("Putter", 2f, 6f);
 
     public final String name;
     public final float loft;

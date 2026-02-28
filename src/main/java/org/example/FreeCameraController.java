@@ -33,10 +33,12 @@ public class FreeCameraController {
         this.distance = initialDistance;
         this.targetDistance = 12f;
         this.currentLookAt.set(startLookAt);
-        // Internal InputProcessor removed to allow GolfGame to manage inputs
     }
 
-    // NEW: Public method for GolfGame to trigger camera zoom
+    public void setIntroActive(boolean active) {
+        this.introActive = active;
+    }
+
     public boolean handleScroll(float amountY) {
         if (isOverhead) {
             overheadZoom += amountY * 25.0f;

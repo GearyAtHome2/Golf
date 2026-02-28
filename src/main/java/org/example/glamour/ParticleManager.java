@@ -15,10 +15,11 @@ public class ParticleManager {
     private final Array<GameParticle> particles = new Array<>();
     private final Model boxModel;
     private final Vector3 tempPos = new Vector3(); // Reuse vector to avoid GC pressure
+    private static final float particleSize = 0.12f;
 
     public ParticleManager() {
         ModelBuilder mb = new ModelBuilder();
-        boxModel = mb.createBox(0.12f, 0.12f, 0.12f,
+        boxModel = mb.createBox(particleSize, particleSize, particleSize,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
     }
@@ -41,20 +42,20 @@ public class ParticleManager {
         switch (interaction) {
             case WATER -> {
                 pColor = Color.CYAN;
-                count = (int)(speed * 3);
+                count = (int) (speed * 3);
                 forceMult = 0.4f;
                 life = 1.2f;
             }
             case LEAVES -> {
                 pColor = Color.FOREST;
-                count = (int)(speed * 2.5f);
+                count = (int) (speed * 2.5f);
                 forceMult = 0.3f;
             }
             case TERRAIN -> {
                 Terrain.TerrainType type = terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
                 float traitScale = getTraitScale(type);
                 pColor = getTerrainColor(type, ball.getState());
-                count = (int)(speed * traitScale * 3);
+                count = (int) (speed * traitScale * 3);
                 forceMult = 0.15f * traitScale;
             }
         }
@@ -133,7 +134,7 @@ public class ParticleManager {
         public GameParticle(Vector3 pos, Color color, Model model, float force, float lifeBase, float gravity) {
             this.instance = new ModelInstance(model);
             this.instance.transform.setToTranslation(pos);
-            ((ColorAttribute)instance.materials.get(0).get(ColorAttribute.Diffuse)).color.set(color);
+            ((ColorAttribute) instance.materials.get(0).get(ColorAttribute.Diffuse)).color.set(color);
 
             this.gravity = gravity;
             velocity.set(MathUtils.random(-1f, 1f), MathUtils.random(0.5f, 2f), MathUtils.random(-1f, 1f))
@@ -156,8 +157,8 @@ public class ParticleManager {
 
             // Terrain Collision (Physics)
             float terrainHeight = terrain.getHeightAt(pos.x, pos.z);
-            if (pos.y < terrainHeight) {
-                pos.y = terrainHeight;
+            if (pos.y < terrainHeight + particleSize) {
+                pos.y = terrainHeight + particleSize;
                 // Bounce: flip Y velocity and reduce it (friction/restitution)
                 velocity.y = -velocity.y * 0.4f;
                 // Slow down horizontal movement on impact

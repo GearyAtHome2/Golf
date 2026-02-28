@@ -22,7 +22,6 @@ public class ShotController {
     private boolean isCharging = false;
     private final float MAX_POWER = 3f;
 
-    // Cooldown to prevent immediate re-charging after a cancel
     private float cancelCooldown = 0f;
     private final float CANCEL_COOLDOWN_TIME = 0.5f;
 
@@ -45,11 +44,26 @@ public class ShotController {
         );
     }
 
-    public boolean update(float delta, float effectiveDelta, Ball ball, Vector3 camDir, Club club) {        animationTimer += delta;
+    public boolean update(float delta, Ball ball, Vector3 camDir, Club club) {
+        animationTimer += delta;
 
-        // Manage the cooldown timer
         if (cancelCooldown > 0) {
             cancelCooldown -= delta;
+        }
+
+        // --- NEW: LCTRL + SPACE AUTO-MAX-POWER HIT ---
+        if (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
+                isCharging = false; // Reset charging state if it was active
+                spaceHoldTime = 0;
+
+                Vector3 hitDir = new Vector3(camDir.x, 0, camDir.z).nor();
+                ball.hit(hitDir, MAX_POWER, club.loft, club.powerMult);
+
+                // Keep the visual bar briefly so we see the feedback
+                shotPower = MAX_POWER;
+                return true;
+            }
         }
 
         // --- CANCEL LOGIC: Left Click while charging ---
@@ -60,15 +74,14 @@ public class ShotController {
             return false;
         }
 
-        // Spacebar charging logic
+        // Standard Spacebar charging logic
         if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
-            // Only start charging if the ball is still and we aren't in a cancel cooldown
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
                 isCharging = true;
                 spaceHoldTime = Math.min(spaceHoldTime + delta, MAX_POWER);
             }
             return false;
-        }else if (isCharging) {
+        } else if (isCharging) {
             isCharging = false;
             shotPower = spaceHoldTime;
             Vector3 hitDir = new Vector3(camDir.x, 0, camDir.z).nor();
@@ -79,7 +92,7 @@ public class ShotController {
             return true;
         }
 
-        // Power bar drain animation after hit
+        // Fade out the visual power bar after a hit
         if (shotPower > 0) {
             shotPower -= delta * 6f;
             if (shotPower < 0) shotPower = 0;
@@ -92,7 +105,6 @@ public class ShotController {
         if (height <= 0 && !isCharging) return;
 
         float dist = camPos.dst(ballPos);
-
         float baseScaleFactor = 0.04f;
         float currentUnitScale = MathUtils.clamp(dist * baseScaleFactor, 0.15f, 1.2f);
 
@@ -105,7 +117,7 @@ public class ShotController {
 
         if (isCharging) {
             maxPowerGhost.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (MAX_POWER * currentUnitScale / 2f), ballPos.z);
-            maxPowerGhost.transform.scale(currentUnitScale * 1.1f, MAX_POWER * currentUnitScale, currentUnitScale * 1.1f);
+            maxPowerGhost.transform.set(maxPowerGhost.transform).scale(currentUnitScale * 1.1f, MAX_POWER * currentUnitScale, currentUnitScale * 1.1f);
             batch.render(maxPowerGhost, env);
         }
 
@@ -115,9 +127,8 @@ public class ShotController {
                     Color.YELLOW.cpy().lerp(Color.RED, (height - (MAX_POWER / 2)) / (MAX_POWER / 2));
 
             powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
-
             powerBarInstance.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (height * currentUnitScale / 2f), ballPos.z);
-            powerBarInstance.transform.scale(currentUnitScale * pulseWidthMult, height * currentUnitScale, currentUnitScale * pulseWidthMult);
+            powerBarInstance.transform.set(powerBarInstance.transform).scale(currentUnitScale * pulseWidthMult, height * currentUnitScale, currentUnitScale * pulseWidthMult);
 
             batch.render(powerBarInstance, env);
         }
@@ -127,5 +138,7 @@ public class ShotController {
         return isCharging;
     }
 
-    public void dispose() { powerBarModel.dispose(); }
+    public void dispose() {
+        if (powerBarModel != null) powerBarModel.dispose();
+    }
 }

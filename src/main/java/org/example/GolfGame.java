@@ -18,11 +18,24 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.glamour.ParticleManager;
-import org.example.terrain.Terrain;
+import org.example.terrain.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class GolfGame extends ApplicationAdapter {
-    private enum GameState { START, PLAYING, PAUSED }
+
+    private enum GameState { START, PLAYING, PRACTICE, PAUSED }
     private GameState currentState = GameState.START;
+    private final List<DistanceSign> rangeSigns = new ArrayList<>();
+    // Shot Comparison Logic
+    private final List<Ball> shotHistory = new ArrayList<>();
+    private final int MAX_GHOSTS = 8;
+    private float practiceResetTimer = 0f;
+    private static final float RESET_DELAY = 1.0f;
+
+    // NEW: Prevents auto-reset loop while the ball is just sitting on the tee
+    private boolean hasCurrentBallBeenHit = false;
 
     private PerspectiveCamera camera;
     private Viewport gameViewport;
@@ -35,14 +48,12 @@ public class GolfGame extends ApplicationAdapter {
     private HUD hud;
     private ShotController shotController;
 
-
+    private int menuSelection = 0; // 0 for Play, 1 for Practice
     private Club currentClub = Club.WOOD_5;
-
     private ParticleManager particleManager;
     private boolean isVictory = false;
     private float gameSpeed = 1.0f;
 
-    // --- NEW: BEV Highlight ---
     private Model highlightModel;
     private ModelInstance highlightInstance;
 
@@ -56,40 +67,14 @@ public class GolfGame extends ApplicationAdapter {
         setupEnvironment();
         setupCamera();
         setupHighlight();
-        initLevel();
-
-        Gdx.input.setInputProcessor(new InputAdapter() {
-            @Override
-            public boolean scrolled(float amountX, float amountY) {
-                // Rule 1: Right-Click or Tab = Camera Zoom/Overhead Zoom
-                if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.TAB)) {
-                    return cameraController.handleScroll(amountY);
-                }
-
-                // Rule 2: No scrolling clubs while charging space
-                if (shotController.isCharging()) {
-                    return false;
-                }
-
-                // Rule 3: Clamped club selection
-                int index = currentClub.ordinal();
-                if (amountY > 0) index++;
-                else if (amountY < 0) index--;
-
-                index = MathUtils.clamp(index, 0, Club.values().length - 1);
-                currentClub = Club.values()[index];
-                return true;
-            }
-        });
     }
 
     private void setupHighlight() {
         ModelBuilder mb = new ModelBuilder();
-        // Create a large sphere with transparency
         highlightModel = mb.createSphere(8f, 8f, 8f, 24, 24,
                 new Material(
                         ColorAttribute.createDiffuse(Color.WHITE),
-                        new BlendingAttribute(0.4f) // 40% opacity
+                        new BlendingAttribute(0.4f)
                 ),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         highlightInstance = new ModelInstance(highlightModel);
@@ -98,22 +83,67 @@ public class GolfGame extends ApplicationAdapter {
     private void initLevel() {
         if (terrain != null) terrain.dispose();
         if (ball != null) ball.dispose();
+        for (DistanceSign s : rangeSigns) s.dispose();
+        rangeSigns.clear();
 
-        terrain = new Terrain();
+        // Clear history when starting/restarting a level
+        for (Ball ghost : shotHistory) ghost.dispose();
+        shotHistory.clear();
+
+        ITerrainGenerator generator;
+        if (currentState == GameState.PRACTICE) {
+            generator = new PracticeRangeGenerator();
+        } else {
+            generator = new ClassicGenerator();
+        }
+
+
+        terrain = new Terrain(generator);
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
         ball = new Ball(tee);
 
+        if (currentState == GameState.PRACTICE && generator instanceof PracticeRangeGenerator gen) {
+            for (PracticeRangeGenerator.SignData data : gen.getSignPositions()) {
+                rangeSigns.add(new DistanceSign(data.position, data.distance));
+            }
+        }
+        hasCurrentBallBeenHit = false; // Reset hit flag for the new ball
+
         Vector3 dirToHole = new Vector3(hole).sub(tee).nor();
+        if (dirToHole.len() < 0.1f) dirToHole.set(0, 0, 1);
+
         camera.position.set(hole.x + dirToHole.x * 10f, hole.y + 15f, hole.z + dirToHole.z * 10f);
         camera.up.set(0, 1, 0);
         camera.lookAt(hole);
         camera.update();
 
         cameraController = new FreeCameraController(camera, 40f, hole);
+
+        if (currentState == GameState.PRACTICE) {
+            cameraController.setIntroActive(false);
+        }
+
         hud.resetShots();
         isVictory = false;
+        practiceResetTimer = 0f;
         particleManager.clear();
+
+        Gdx.input.setInputProcessor(new InputAdapter() {
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.TAB)) {
+                    return cameraController.handleScroll(amountY);
+                }
+                if (shotController.isCharging()) return false;
+                int index = currentClub.ordinal();
+                if (amountY > 0) index++;
+                else if (amountY < 0) index--;
+                index = MathUtils.clamp(index, 0, Club.values().length - 1);
+                currentClub = Club.values()[index];
+                return true;
+            }
+        });
     }
 
     private void setupCamera() {
@@ -132,7 +162,7 @@ public class GolfGame extends ApplicationAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
         if (currentState == GameState.START) {
-            hud.renderStartMenu();
+            hud.renderStartMenu(menuSelection);
         } else {
             updateLogic(delta);
             renderScene();
@@ -141,18 +171,44 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void updateLogic(float delta) {
-        if (currentState == GameState.PLAYING && !isVictory) {
+        if ((currentState == GameState.PLAYING || currentState == GameState.PRACTICE) && !isVictory) {
             float effDelta = delta * gameSpeed;
 
-            if (shotController.update(delta, effDelta, ball, camera.direction, currentClub)) {
+            // Flip the hit flag when the shot is executed
+            if (shotController.update(delta, ball, camera.direction, currentClub)) {
                 hud.incrementShots();
+                hasCurrentBallBeenHit = true;
             }
 
             ball.update(effDelta, terrain);
             cameraController.update(ball.getPosition());
-
-            // Much cleaner!
             particleManager.handleBallInteraction(ball, terrain);
+
+            // PRACTICE COMPARISON & AUTO-RESET LOGIC
+            if (currentState == GameState.PRACTICE) {
+                // Only count the timer if the ball has actually been hit at least once
+                if (hasCurrentBallBeenHit && ball.getState() == Ball.State.STATIONARY) {
+                    practiceResetTimer += delta;
+                    if (practiceResetTimer >= RESET_DELAY) {
+                        // Mark current as ghost
+                        ball.setGhostColor(new Color(0.7f, 0.7f, 0.7f, 0.5f));
+                        shotHistory.add(ball);
+
+                        // Prune history
+                        if (shotHistory.size() > MAX_GHOSTS) {
+                            Ball oldest = shotHistory.remove(0);
+                            oldest.dispose();
+                        }
+
+                        // Spawn new active ball and reset the hit flag
+                        ball = new Ball(terrain.getTeePosition());
+                        hasCurrentBallBeenHit = false;
+                        practiceResetTimer = 0f;
+                    }
+                } else {
+                    practiceResetTimer = 0f;
+                }
+            }
 
             if (ball.checkVictory(terrain.getHolePosition(), terrain.getHoleSize())) {
                 triggerVictory();
@@ -160,109 +216,32 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         particleManager.update(delta, terrain);
-        terrain.updateFlag(camera.position);
+        if (terrain != null) terrain.updateFlag(camera.position);
     }
 
     private void triggerVictory() {
         isVictory = true;
+        float vel = ball.getVelocity().len();
         ball.getVelocity().setZero();
         ball.getPosition().set(terrain.getHolePosition());
-        particleManager.spawn(terrain.getHolePosition(), Color.GOLD, 40, 8f, 2.0f, 4.0f);
-    }
-
-    private void handleEnvironmentalParticles() {
-        Ball.Interaction interaction = ball.getLastInteraction();
-        if (interaction == Ball.Interaction.NONE) return;
-
-        float speed = ball.getVelocity().len();
-        if (speed < 1.0f) {
-            ball.clearInteraction();
-            return;
-        }
-
-        Color pColor;
-        int count;
-        float forceMult;
-        float life = 0.6f;
-
-        // Define behavior based on interaction type
-        switch (interaction) {
-            case WATER -> {
-                pColor = Color.CYAN;
-                count = (int)(speed * 3); // Very High
-                forceMult = 0.4f;
-                life = 1.2f;
-            }
-            case LEAVES -> {
-                pColor = Color.FOREST;
-                count = (int)(speed * 2.5f); // High
-                forceMult = 0.3f;
-            }
-            case TERRAIN -> {
-                Terrain.TerrainType type = terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
-                Ball.State state = ball.getState(); // We need this to check ROLLING vs CONTACT/AIR
-
-                // Default values
-                pColor = new Color(0.45f, 0.35f, 0.25f, 1f); // Soil Brown
-                float traitScale = 0.5f;
-
-                switch (type) {
-                    case BUNKER -> {
-                        pColor = Color.TAN;
-                        traitScale = 1.2f;
-                    }
-                    case GREEN, FAIRWAY, ROUGH -> {
-                        // Determine base green color based on surface
-                        Color surfaceGreen = switch(type) {
-                            case GREEN -> new Color(0.2f, 0.8f, 0.2f, 1f);   // Bright/Light Green
-                            case FAIRWAY -> new Color(0.1f, 0.6f, 0.1f, 1f); // Standard Green
-                            case ROUGH -> new Color(0.05f, 0.4f, 0.05f, 1f); // Dark Green
-                            default -> Color.GREEN;
-                        };
-
-                        // Set Trait Scale
-                        traitScale = (type == Terrain.TerrainType.GREEN) ? 0.15f :
-                                (type == Terrain.TerrainType.FAIRWAY) ? 0.4f : 0.8f;
-
-                        // COLOR LOGIC:
-                        // If rolling, 100% green. If bouncing (CONTACT/AIR), 80% chance green, 20% brown.
-                        if (state == Ball.State.ROLLING) {
-                            pColor = surfaceGreen;
-                        } else {
-                            // Mix in dirt on impacts
-                            pColor = (MathUtils.random() < 0.8f) ? surfaceGreen : new Color(0.4f, 0.25f, 0.15f, 1f);
-                        }
-                    }
-                }
-
-                count = (int)(speed * traitScale * 3); // Slightly increased count for better visuals
-                forceMult = 0.15f * traitScale;
-            }
-            default -> {
-                pColor = Color.WHITE;
-                count = 0;
-                forceMult = 0;
-            }
-        }
-
-        if (count > 0) {
-            // Calculate "Backwards" direction: Reverse of velocity
-            Vector3 splashDir = ball.getVelocity().cpy().scl(-1).nor();
-
-            // Add a slight upward bias so it doesn't just go into the ground
-            splashDir.add(0, 0.5f, 0).nor();
-
-            // Spawn using the new direction-based logic (we'll update ParticleManager next)
-            particleManager.spawnDirectional(ball.getPosition(), splashDir, pColor, count, speed * forceMult, life);
-        }
-
-        ball.clearInteraction();
+        particleManager.spawn(terrain.getHolePosition(), Color.GOLD, 40, vel+5, 50.0f, 4.0f);
     }
 
     private void renderScene() {
+        if (terrain == null) return;
         modelBatch.begin(camera);
         terrain.render(modelBatch, environment);
+
+        // Render Active Ball
         ball.render(modelBatch, environment);
+
+        //practice range stuff
+        for (Ball ghost : shotHistory) {
+            ghost.render(modelBatch, environment);
+        }
+        for (DistanceSign s : rangeSigns) {
+            s.render(modelBatch, environment);
+        }
 
         if (cameraController.isOverhead()) {
             highlightInstance.transform.setToTranslation(ball.getPosition());
@@ -280,39 +259,38 @@ public class GolfGame extends ApplicationAdapter {
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu();
         } else {
-            hud.renderPlayingHUD(gameSpeed, currentClub);
+            boolean isPractice = (currentState == GameState.PRACTICE);
+            hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice);
         }
     }
 
     private void handleInput() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) && currentState == GameState.START) currentState = GameState.PLAYING;
+        if (currentState == GameState.START) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) menuSelection = 0;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) menuSelection = 1;
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                if (menuSelection == 0) currentState = GameState.PLAYING;
+                else currentState = GameState.PRACTICE;
+                initLevel();
+            }
+            return;
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
+            else if (currentState == GameState.PLAYING || currentState == GameState.PRACTICE) currentState = GameState.PAUSED;
+        }
+
+        // Practice Range specific: Clear ghosts
+        if (currentState == GameState.PRACTICE && Gdx.input.isKeyJustPressed(Input.Keys.C)) {
+            for (Ball ghost : shotHistory) ghost.dispose();
+            shotHistory.clear();
+        }
+
         if (Gdx.input.isKeyJustPressed(Input.Keys.F11)) {
             if (Gdx.graphics.isFullscreen()) Gdx.graphics.setWindowedMode(1280, 720);
             else Gdx.graphics.setFullscreenMode(Gdx.graphics.getDisplayMode());
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            if (currentState == GameState.PLAYING) currentState = GameState.PAUSED;
-            else if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
-        }
-
-        if (currentState == GameState.PAUSED || isVictory) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
-                initLevel();
-                currentState = GameState.PLAYING;
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
-                hud.resetShots();
-                ball.getPosition().set(terrain.getTeePosition());
-                ball.getVelocity().setZero();
-                isVictory = false;
-                particleManager.clear();
-                currentState = GameState.PLAYING;
-            }
-        }
-
-        if (currentState == GameState.PLAYING) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) gameSpeed = Math.min(gameSpeed + 0.5f, 5f);
-            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
         }
     }
 
@@ -334,9 +312,11 @@ public class GolfGame extends ApplicationAdapter {
         modelBatch.dispose();
         hud.dispose();
         shotController.dispose();
-        terrain.dispose();
-        ball.dispose();
+        if (terrain != null) terrain.dispose();
+        if (ball != null) ball.dispose();
+        for (Ball ghost : shotHistory) ghost.dispose();
         particleManager.dispose();
         if (highlightModel != null) highlightModel.dispose();
+        for (DistanceSign s : rangeSigns) s.dispose();
     }
 }

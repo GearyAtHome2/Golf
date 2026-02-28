@@ -36,164 +36,27 @@ public class Terrain {
     private ModelInstance holeMarker;
     private float holeSize;
 
-    public Terrain() {
+    public Terrain(ITerrainGenerator generator) {
         terrainMap = new TerrainType[SIZE_X][SIZE_Z];
-        heightMap = new float[SIZE_X][SIZE_Z];   // ← NEW
-        holeSize = 0.6f;//configurable on constructor
-        generateTerrainTypes();
-        generateHeightMap();                      // ← NEW
+        heightMap = new float[SIZE_X][SIZE_Z];
+        holeSize = 0.6f;
+
+        // 1. FILL THE DATA: The generator populates terrainMap and heightMap
+        generator.generate(terrainMap, heightMap, trees, teeCenter = new Vector3(), holePosition = new Vector3());
+
+        // 2. CREATE WATER
         createWaterPlane();
+
         int z = 0;
         while (z < SIZE_Z) {
             int zEnd = Math.min(z + CHUNK_Z, SIZE_Z);
             chunks.add(buildChunk(z, zEnd));
-            chunkOffsets.add(new int[]{0, z});
             z = zEnd;
         }
-        handleTrees(30);
-    }
 
-    private void handleTrees(int nTrees) {
-        for (int i = 0; i < nTrees; i++) {
-            int x = MathUtils.random(0, SIZE_X - 1);
-            int z = MathUtils.random(0, SIZE_Z - 1);
-
-            // Only in ROUGH
-            if (terrainMap[x][z] != TerrainType.ROUGH) continue;
-
-            float worldX = x * SCALE - SIZE_X * SCALE / 2f;
-            float worldZ = z * SCALE - SIZE_Z * SCALE / 2f;
-            float worldY = getHeightAt(worldX, worldZ);
-
-            // Randomize tree dimensions
-            float trunkHeight = MathUtils.random(6f, 12f);
-            float trunkRadius = MathUtils.random(0.25f, 0.5f);
-            float foliageRadius = MathUtils.random(1.5f, 3f);
-
-            trees.add(new Tree(worldX, worldY, worldZ, trunkHeight, trunkRadius, foliageRadius*4));
-        }
-    }
-
-    private void generateTerrainTypes() {
-        int teeWidth = 10;
-        int teeLength = 5;
-
-        // --- Tee box ---
-        int teeStartX = SIZE_X / 2 - teeWidth / 2;
-        int teeEndX = teeStartX + teeWidth - 1;
-        int teeStartZ = teeLength * 4;
-        int teeEndZ = teeStartZ + teeLength - 1;
-
-        // Fill all with rough
-        for (int x = 0; x < SIZE_X; x++)
-            for (int z = 0; z < SIZE_Z; z++)
-                terrainMap[x][z] = TerrainType.ROUGH;
-
-        // Tee
-        for (int x = teeStartX; x <= teeEndX; x++)
-            for (int z = teeStartZ; z <= teeEndZ; z++)
-                terrainMap[x][z] = TerrainType.TEE;
-
-        float maxOffset = SIZE_X * 0.30f;
-        float offset = MathUtils.random(-maxOffset, maxOffset);
-        int greenLength = 10;
-        int greenStartZ = SIZE_Z - 20; // green closer to end
-        int greenEndZ = SIZE_Z - 1;
-        greenCenterX = MathUtils.clamp(
-                (int) (SIZE_X / 2f + offset),
-                10,                     // keep away from extreme edge
-                SIZE_X - 10
-        );
-        int greenRadiusX = 8;
-        int greenRadiusZ = greenLength / 2;
-
-        // --- Fairway generation ---
-        int fairwayStartZ = teeEndZ + MathUtils.random(10, 20);
-        int fairwayEndZ = SIZE_Z; // extend fully to the end
-        float center = SIZE_X / 2f;
-        float minWidth = 20f;
-        float maxWidth = 75f;
-        float noise = 0f;
-
-        for (int z = fairwayStartZ; z < fairwayEndZ; z++) {
-            // Smooth centerline
-            noise += MathUtils.random(-0.3f, 0.3f);
-            center += MathUtils.sin(z * 0.015f) * 0.8f + noise * 0.2f;
-            center = MathUtils.clamp(center, maxWidth / 2f + 5, SIZE_X - maxWidth / 2f - 5);
-
-            // Width curve: narrower near tee, wider mid-hole, slightly narrower near green
-            float t = (float) (z - fairwayStartZ) / (fairwayEndZ - fairwayStartZ);
-            float pullStart = 0.75f; // start steering at 75% of hole length
-            if (t > pullStart) {
-                float pullT = (t - pullStart) / (1f - pullStart);
-                pullT = pullT * pullT * (3f - 2f * pullT); // smoothstep
-
-                center = MathUtils.lerp(center, greenCenterX, pullT);
-            }
-            float width = minWidth + (maxWidth - minWidth) * MathUtils.sin(t * MathUtils.PI);
-            width += MathUtils.random(-2f, 2f);
-            width = MathUtils.clamp(width, minWidth, maxWidth);
-
-            int left = MathUtils.clamp((int) (center - width / 2), 0, SIZE_X - 1);
-            int right = MathUtils.clamp((int) (center + width / 2), 0, SIZE_X - 1);
-            for (int x = left; x <= right; x++)
-                terrainMap[x][z] = TerrainType.FAIRWAY;
-        }
-
-        for (int x = 0; x < SIZE_X; x++)
-            for (int z = greenStartZ; z <= greenEndZ; z++) {
-                float dx = (x - greenCenterX) / (float) greenRadiusX;
-                float dz = (z - (greenStartZ + greenRadiusZ)) / (float) greenRadiusZ;
-                if (dx * dx + dz * dz <= 1f) {
-                    terrainMap[x][z] = TerrainType.GREEN; // fairway is still underneath
-                    // Surround green with fairway
-                    for (int fx = Math.max(0, x - 4); fx <= Math.min(SIZE_X - 1, x + 4); fx++)
-                        for (int fz = Math.max(0, z - 4); fz <= Math.min(SIZE_Z - 1, z + 4); fz++)
-                            if (terrainMap[fx][fz] == TerrainType.ROUGH)
-                                terrainMap[fx][fz] = TerrainType.FAIRWAY;
-                    if (holePosition == null) {
-                        float hX = greenCenterX * SCALE - SIZE_X * SCALE / 2f;
-                        float hZ = (greenStartZ + (greenRadiusZ / 2f)) * SCALE - SIZE_Z * SCALE / 2f;
-                        float hY = getHeightAt(hX, hZ);
-                        this.holePosition = new Vector3(hX, hY, hZ);
-
-                        createFlag(holePosition);
-                        createHoleMarker(holePosition);
-                    }
-                }
-            }
-
-        // --- Store tee center ---
-        int teeCenterX = teeStartX + teeWidth / 2;
-        int teeCenterZ = teeStartZ + teeLength / 2;
-        float worldX = teeCenterX * SCALE - SIZE_X * SCALE / 2f;
-        float worldZ = teeCenterZ * SCALE - SIZE_Z * SCALE / 2f;
-        float worldY = getHeightAt(worldX, worldZ);
-        teeCenter = new Vector3(worldX, worldY, worldZ);
-
-        // --- Bunkers ---
-        int numBunkers = 5;
-        for (int b = 0; b < numBunkers; b++) {
-            int centerZ = MathUtils.random(10, SIZE_Z - 25);
-            int centerX = MathUtils.random(5, SIZE_X - 6);
-            if (centerX < SIZE_X / 2) centerX = MathUtils.random(5, 15);
-            else centerX = MathUtils.random(SIZE_X - 16, SIZE_X - 6);
-
-            int radiusX = MathUtils.random(3, 6);
-            int radiusZ = MathUtils.random(3, 6);
-
-            Bunker bunker = new Bunker(centerX, centerZ, radiusX, radiusZ);
-            bunkers.add(bunker);
-
-            for (int x = centerX - radiusX; x <= centerX + radiusX; x++)
-                for (int z = centerZ - radiusZ; z <= centerZ + radiusZ; z++) {
-                    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) continue;
-                    float dx = (x - centerX) / (float) radiusX;
-                    float dz = (z - centerZ) / (float) radiusZ;
-                    if (dx * dx + dz * dz <= 1f)
-                        terrainMap[x][z] = TerrainType.BUNKER;
-                }
-        }
+        // 4. DECORATIONS
+        createFlag(holePosition);
+        createHoleMarker(holePosition);
     }
 
     private void createHoleMarker(Vector3 pos) {
@@ -337,46 +200,6 @@ public class Terrain {
 
     private float baseHeightAt(int x, int z) {
         return heightMap[x][z];
-    }
-
-    private void generateHeightMap() {
-
-        // Random global phase offsets (critical so waves differ each run)
-        float off1 = rng.nextFloat() * 1000f;
-        float off2 = rng.nextFloat() * 1000f;
-        float off3 = rng.nextFloat() * 1000f;
-        float off4 = rng.nextFloat() * 1000f;
-
-        float undulationLevel = (rng.nextFloat() * 0.8f) + 0.2f;
-
-        for (int x = 0; x < SIZE_X; x++) {
-            for (int z = 0; z < SIZE_Z; z++) {
-                float worldX = x * SCALE;
-                float worldZ = z * SCALE;
-
-                float hills =
-                        MathUtils.sin((worldX + off1) * 0.035f) * 2.0f +
-                                MathUtils.cos((worldZ + off2) * 0.02f) * 1.7f +
-                                MathUtils.sin((worldX + worldZ + off3) * 0.018f) * 1.2f +
-                                MathUtils.cos((worldX - worldZ + off4) * 0.015f) * 1.0f;
-                hills *= undulationLevel;
-
-                hills += (rng.nextFloat() - 0.5f) * 0.01f;
-
-                // --- Envelope flattening near tee and green ---
-                float zNorm = z / (float) SIZE_Z;
-
-                float teeFade = MathUtils.clamp((zNorm - 0.05f) / 0.15f, 0f, 1f);
-                teeFade = teeFade * teeFade * (3f - 2f * teeFade);
-
-                float greenFade = MathUtils.clamp((1f - zNorm - 0.05f) / 0.15f, 0f, 1f);
-                greenFade = greenFade * greenFade * (3f - 2f * greenFade);
-
-                float envelope = teeFade * greenFade;
-
-                heightMap[x][z] = hills * HEIGHT_SCALE * envelope;
-            }
-        }
     }
 
     private void buildTriangle(MeshPartBuilder builder, Vector3 v1, Vector3 v2, Vector3 v3, int gridX, int gridZ) {
