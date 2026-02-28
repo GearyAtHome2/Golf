@@ -13,6 +13,7 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
     }
 
     private final List<SignData> signPositions = new ArrayList<>();
+    private final List<Float> markerZPositions = new ArrayList<>();
 
     @Override
     public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, Vector3 teePos, Vector3 holePos) {
@@ -39,18 +40,16 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
                 else if (distFromCenter < 35) type = Terrain.TerrainType.FAIRWAY;
                 else type = Terrain.TerrainType.ROUGH;
 
-                // Thinner horizontal yardage bars (0.5 units wide)
-                if (distFromTee > 10 && distFromTee % 50 < 0.5f) {
-                    type = Terrain.TerrainType.GREEN;
-                }
-
                 map[x][z] = type;
                 heights[x][z] = 0;
             }
 
-            // Mark position for signs every 50m
+            if (distFromTee > 10 && distFromTee % 50 < 0.5f) {
+                markerZPositions.add(worldZ);
+            }
+
+            // Mark position for signs
             if (distFromTee > 40 && (int)distFromTee % 50 == 0) {
-                // Place signs on both sides of the center lane
                 signPositions.add(new SignData(new Vector3(14, 0, worldZ), (int)distFromTee));
                 signPositions.add(new SignData(new Vector3(-14, 0, worldZ), (int)distFromTee));
             }
@@ -58,4 +57,5 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
     }
 
     public List<SignData> getSignPositions() { return signPositions; }
+    public List<Float> getMarkerZPositions() { return markerZPositions; }
 }

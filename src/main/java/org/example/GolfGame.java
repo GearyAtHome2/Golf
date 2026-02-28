@@ -28,13 +28,12 @@ public class GolfGame extends ApplicationAdapter {
     private enum GameState { START, PLAYING, PRACTICE, PAUSED }
     private GameState currentState = GameState.START;
     private final List<DistanceSign> rangeSigns = new ArrayList<>();
-    // Shot Comparison Logic
+
     private final List<Ball> shotHistory = new ArrayList<>();
     private final int MAX_GHOSTS = 8;
     private float practiceResetTimer = 0f;
     private static final float RESET_DELAY = 1.0f;
 
-    // NEW: Prevents auto-reset loop while the ball is just sitting on the tee
     private boolean hasCurrentBallBeenHit = false;
 
     private PerspectiveCamera camera;
@@ -48,7 +47,7 @@ public class GolfGame extends ApplicationAdapter {
     private HUD hud;
     private ShotController shotController;
 
-    private int menuSelection = 0; // 0 for Play, 1 for Practice
+    private int menuSelection = 0;
     private Club currentClub = Club.WOOD_5;
     private ParticleManager particleManager;
     private boolean isVictory = false;
@@ -56,6 +55,9 @@ public class GolfGame extends ApplicationAdapter {
 
     private Model highlightModel;
     private ModelInstance highlightInstance;
+
+    private Model markerLineModel;
+    private final List<ModelInstance> yardageMarkers = new ArrayList<>();
 
     @Override
     public void create() {
@@ -80,13 +82,29 @@ public class GolfGame extends ApplicationAdapter {
         highlightInstance = new ModelInstance(highlightModel);
     }
 
+    private void createYardageMarkers(PracticeRangeGenerator gen) {
+        if (markerLineModel != null) markerLineModel.dispose();
+        yardageMarkers.clear();
+
+        ModelBuilder mb = new ModelBuilder();
+        markerLineModel = mb.createBox(70f, 0.05f, 0.3f,
+                new Material(ColorAttribute.createDiffuse(new Color(1, 1, 1, 0.6f)), new BlendingAttribute(0.6f)),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+
+        for (Float zPos : gen.getMarkerZPositions()) {
+            ModelInstance marker = new ModelInstance(markerLineModel);
+            marker.transform.setToTranslation(0, 0.02f, zPos);
+            yardageMarkers.add(marker);
+        }
+    }
+
     private void initLevel() {
         if (terrain != null) terrain.dispose();
         if (ball != null) ball.dispose();
         for (DistanceSign s : rangeSigns) s.dispose();
         rangeSigns.clear();
+        yardageMarkers.clear();
 
-        // Clear history when starting/restarting a level
         for (Ball ghost : shotHistory) ghost.dispose();
         shotHistory.clear();
 
@@ -97,7 +115,6 @@ public class GolfGame extends ApplicationAdapter {
             generator = new ClassicGenerator();
         }
 
-
         terrain = new Terrain(generator);
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
@@ -107,18 +124,19 @@ public class GolfGame extends ApplicationAdapter {
             for (PracticeRangeGenerator.SignData data : gen.getSignPositions()) {
                 rangeSigns.add(new DistanceSign(data.position, data.distance));
             }
+            createYardageMarkers(gen);
         }
-        hasCurrentBallBeenHit = false; // Reset hit flag for the new ball
+
+        hasCurrentBallBeenHit = false;
 
         Vector3 dirToHole = new Vector3(hole).sub(tee).nor();
         if (dirToHole.len() < 0.1f) dirToHole.set(0, 0, 1);
 
-        camera.position.set(hole.x + dirToHole.x * 10f, hole.y + 15f, hole.z + dirToHole.z * 10f);
-        camera.up.set(0, 1, 0);
-        camera.lookAt(hole);
+        camera.position.set(tee.x - dirToHole.x * 10f, tee.y + 5f, tee.z - dirToHole.z * 10f);
+        camera.lookAt(tee);
         camera.update();
 
-        cameraController = new FreeCameraController(camera, 40f, hole);
+        cameraController = new FreeCameraController(camera, 40f, tee);
 
         if (currentState == GameState.PRACTICE) {
             cameraController.setIntroActive(false);
@@ -174,8 +192,7 @@ public class GolfGame extends ApplicationAdapter {
         if ((currentState == GameState.PLAYING || currentState == GameState.PRACTICE) && !isVictory) {
             float effDelta = delta * gameSpeed;
 
-            // Flip the hit flag when the shot is executed
-            if (shotController.update(delta, ball, camera.direction, currentClub)) {
+            if (shotController.update(delta, ball, camera.direction, currentClub, hud)) {
                 hud.incrementShots();
                 hasCurrentBallBeenHit = true;
             }
@@ -184,23 +201,18 @@ public class GolfGame extends ApplicationAdapter {
             cameraController.update(ball.getPosition());
             particleManager.handleBallInteraction(ball, terrain);
 
-            // PRACTICE COMPARISON & AUTO-RESET LOGIC
             if (currentState == GameState.PRACTICE) {
-                // Only count the timer if the ball has actually been hit at least once
                 if (hasCurrentBallBeenHit && ball.getState() == Ball.State.STATIONARY) {
                     practiceResetTimer += delta;
                     if (practiceResetTimer >= RESET_DELAY) {
-                        // Mark current as ghost
                         ball.setGhostColor(new Color(0.7f, 0.7f, 0.7f, 0.5f));
                         shotHistory.add(ball);
 
-                        // Prune history
                         if (shotHistory.size() > MAX_GHOSTS) {
                             Ball oldest = shotHistory.remove(0);
                             oldest.dispose();
                         }
 
-                        // Spawn new active ball and reset the hit flag
                         ball = new Ball(terrain.getTeePosition());
                         hasCurrentBallBeenHit = false;
                         practiceResetTimer = 0f;
@@ -232,13 +244,18 @@ public class GolfGame extends ApplicationAdapter {
         modelBatch.begin(camera);
         terrain.render(modelBatch, environment);
 
-        // Render Active Ball
-        ball.render(modelBatch, environment);
+        for (ModelInstance marker : yardageMarkers) {
+            modelBatch.render(marker, environment);
+        }
 
-        //practice range stuff
+        ball.render(modelBatch, environment);
+        ball.renderTrail(modelBatch, environment);
+
         for (Ball ghost : shotHistory) {
             ghost.render(modelBatch, environment);
+            ghost.renderTrail(modelBatch, environment);
         }
+
         for (DistanceSign s : rangeSigns) {
             s.render(modelBatch, environment);
         }
@@ -277,12 +294,23 @@ public class GolfGame extends ApplicationAdapter {
             return;
         }
 
+        // --- GLOBAL KEYS ---
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
             else if (currentState == GameState.PLAYING || currentState == GameState.PRACTICE) currentState = GameState.PAUSED;
         }
 
-        // Practice Range specific: Clear ghosts
+        // R - Reset Level / Ball
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            initLevel();
+        }
+
+        // N - New Course
+        if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
+            initLevel();
+        }
+
+        // C - Clear Ghosts (Practice only)
         if (currentState == GameState.PRACTICE && Gdx.input.isKeyJustPressed(Input.Keys.C)) {
             for (Ball ghost : shotHistory) ghost.dispose();
             shotHistory.clear();
@@ -317,6 +345,7 @@ public class GolfGame extends ApplicationAdapter {
         for (Ball ghost : shotHistory) ghost.dispose();
         particleManager.dispose();
         if (highlightModel != null) highlightModel.dispose();
+        if (markerLineModel != null) markerLineModel.dispose();
         for (DistanceSign s : rangeSigns) s.dispose();
     }
 }

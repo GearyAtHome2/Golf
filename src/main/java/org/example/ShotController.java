@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.DepthTestAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 
 public class ShotController {
@@ -29,12 +30,10 @@ public class ShotController {
 
     public ShotController() {
         ModelBuilder mb = new ModelBuilder();
-
         powerBarModel = mb.createBox(0.5f, 1f, 0.5f,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         powerBarInstance = new ModelInstance(powerBarModel);
-
         maxPowerGhost = new ModelInstance(powerBarModel);
 
         maxPowerGhost.materials.get(0).set(
@@ -44,29 +43,20 @@ public class ShotController {
         );
     }
 
-    public boolean update(float delta, Ball ball, Vector3 camDir, Club club) {
+    public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud) {
         animationTimer += delta;
+        if (cancelCooldown > 0) cancelCooldown -= delta;
 
-        if (cancelCooldown > 0) {
-            cancelCooldown -= delta;
-        }
-
-        // --- NEW: LCTRL + SPACE AUTO-MAX-POWER HIT ---
         if (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
-                isCharging = false; // Reset charging state if it was active
+                isCharging = false;
                 spaceHoldTime = 0;
-
-                Vector3 hitDir = new Vector3(camDir.x, 0, camDir.z).nor();
-                ball.hit(hitDir, MAX_POWER, club.loft, club.powerMult);
-
-                // Keep the visual bar briefly so we see the feedback
+                executeShot(ball, camDir, club, MAX_POWER, hud);
                 shotPower = MAX_POWER;
                 return true;
             }
         }
 
-        // --- CANCEL LOGIC: Left Click while charging ---
         if (isCharging && Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
             isCharging = false;
             spaceHoldTime = 0f;
@@ -74,7 +64,6 @@ public class ShotController {
             return false;
         }
 
-        // Standard Spacebar charging logic
         if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
                 isCharging = true;
@@ -84,20 +73,40 @@ public class ShotController {
         } else if (isCharging) {
             isCharging = false;
             shotPower = spaceHoldTime;
-            Vector3 hitDir = new Vector3(camDir.x, 0, camDir.z).nor();
-
-            ball.hit(hitDir, shotPower, club.loft, club.powerMult);
-
+            executeShot(ball, camDir, club, shotPower, hud);
             spaceHoldTime = 0;
             return true;
         }
 
-        // Fade out the visual power bar after a hit
         if (shotPower > 0) {
             shotPower -= delta * 6f;
             if (shotPower < 0) shotPower = 0;
         }
         return false;
+    }
+
+    private void executeShot(Ball ball, Vector3 camDir, Club club, float power, HUD hud) {
+        Vector2 spinOffset = hud.getSpinOffset(); // Range -1 to 1 (X: Right, Y: Top)
+        float distanceFRomCenter = spinOffset.len();
+        float r = MathUtils.clamp(distanceFRomCenter, 0f, 1f);
+
+        float powerEfficiency = 1.0f - (r * r * r * 0.5f);
+        float finalPowerMult = club.powerMult * powerEfficiency;
+
+        float adjustedLoft = club.loft + (spinOffset.y * -20f);
+        adjustedLoft = MathUtils.clamp(adjustedLoft, 5f, 85f);
+
+        Vector3 shootDir = new Vector3(camDir.x, 0, camDir.z).nor();
+        shootDir.rotate(Vector3.Y, spinOffset.x * 2.5f);
+
+        ball.hit(shootDir, power, adjustedLoft, finalPowerMult);
+
+        float totalSpeed = power * finalPowerMult;
+
+        ball.getSpin().y = -spinOffset.x * totalSpeed * 6.0f;
+
+        float spinImpact = spinOffset.y * totalSpeed * 1.5f;
+        ball.getSpin().x -= spinImpact;
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {
@@ -129,16 +138,10 @@ public class ShotController {
             powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
             powerBarInstance.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (height * currentUnitScale / 2f), ballPos.z);
             powerBarInstance.transform.set(powerBarInstance.transform).scale(currentUnitScale * pulseWidthMult, height * currentUnitScale, currentUnitScale * pulseWidthMult);
-
             batch.render(powerBarInstance, env);
         }
     }
 
-    public boolean isCharging() {
-        return isCharging;
-    }
-
-    public void dispose() {
-        if (powerBarModel != null) powerBarModel.dispose();
-    }
+    public boolean isCharging() { return isCharging; }
+    public void dispose() { if (powerBarModel != null) powerBarModel.dispose(); }
 }
