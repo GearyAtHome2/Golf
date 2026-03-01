@@ -12,7 +12,15 @@ public class LevelData {
         ISLAND_COAST
     }
 
+    public enum TerrainAlgorithm {
+        SMOOTH_SINE,    // The original simple style
+        MULTI_WAVE,     // The 10-layer overlapping waves
+        TERRACED,       // Flat plateaus with steep drops
+        MOUNDS          // Sharp, isolated peaks
+    }
+
     private Archetype archetype;
+    private TerrainAlgorithm terrainAlgorithm;
     private long seed;
     private int nBunkers;
     private float waterLevel;
@@ -79,4 +87,7 @@ public class LevelData {
 
     public Vector3 getWind() { return wind; }
     public void setWind(Vector3 wind) { this.wind.set(wind); }
+
+    public TerrainAlgorithm getTerrainAlgorithm() { return terrainAlgorithm; }
+    public void setTerrainAlgorithm(TerrainAlgorithm algorithm) { this.terrainAlgorithm = algorithm; }
 }

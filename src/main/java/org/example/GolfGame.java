@@ -265,10 +265,10 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void renderUI() {
+        boolean isPractice = (currentState == GameState.PRACTICE);
         if (isVictory) hud.renderVictory(hud.getShotCount());
-        else if (currentState == GameState.PAUSED) hud.renderPauseMenu();
+        else if (currentState == GameState.PAUSED) hud.renderPauseMenu(isPractice, currentLevelData.getSeed());
         else {
-            boolean isPractice = (currentState == GameState.PRACTICE);
             hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice, currentLevelData, camera);
         }
     }
@@ -307,7 +307,7 @@ public class GolfGame extends ApplicationAdapter {
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             if (currentState == GameState.PAUSED) currentState = previousState;
-            resetBallToTee();
+            resetBallToLastShot();
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
             if (currentState == GameState.PAUSED) currentState = previousState;
@@ -319,10 +319,8 @@ public class GolfGame extends ApplicationAdapter {
         }
     }
 
-    private void resetBallToTee() {
-        if (ball != null) ball.dispose();
-        Vector3 tee = terrain.getTeePosition();
-        ball = new Ball(tee);
+    private void resetBallToLastShot() {
+        ball.resetToLastPosition();
         hasCurrentBallBeenHit = false;
         isVictory = false;
         practiceResetTimer = 0f;

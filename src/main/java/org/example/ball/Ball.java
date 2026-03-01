@@ -35,6 +35,9 @@ public class Ball {
     private final Vector3 velocity = new Vector3();
     private final Vector3 spin = new Vector3();
 
+    // Captured just before a hit for the [R] reset functionality
+    private final Vector3 lastStationaryPosition = new Vector3();
+
     private Model trailPointModel;
     private ModelInstance trailInstance;
 
@@ -67,6 +70,7 @@ public class Ball {
         trailInstance = new ModelInstance(trailPointModel);
 
         this.position.set(startPosition);
+        this.lastStationaryPosition.set(startPosition);
         updateTransform();
     }
 
@@ -89,7 +93,7 @@ public class Ball {
         if (touchingTerrain) {
             handleTerrainPhysics(delta, terrain, terrainHeight);
         } else {
-            handleAirPhysics(delta, baseWind); // Pass wind here
+            handleAirPhysics(delta, baseWind);
         }
 
         handleTreeCollisions(terrain, delta);
@@ -99,18 +103,12 @@ public class Ball {
         updateTransform();
     }
 
-    // --- GROUPED PHYSICS LOGIC ---
-
     private void handleAirPhysics(float delta, Vector3 baseWind) {
         state = State.AIR;
-
-        // 1. Calculate wind at this specific height
         Vector3 windAtHeight = BallPhysics.getWindAtHeight(baseWind, position.y);
 
         tempV1.setZero();
         tempV1.add(BallPhysics.getGravityForce(GRAVITY));
-
-        // 2. Use relative airspeed for Drag and Magnus
         tempV1.add(BallPhysics.getAirDrag(velocity, windAtHeight, AIR_DRAG_COEFF));
         tempV1.add(BallPhysics.getMagnusForce(velocity, windAtHeight, spin, LIFT_COEFF, SIDE_COEFF));
 
@@ -143,15 +141,11 @@ public class Ball {
     }
 
     private void applyBounce(Vector3 normal) {
-        // Use BallPhysics to calculate the new 3D velocity after impact
-        // Pass original BOUNCE_RESTITUTION and the 0.7f tangent friction factor
         velocity.set(BallPhysics.calculateBounce(velocity, normal, BOUNCE_RESTITUTION));
-        // Re-extract normal/tangent from the new velocity for logic below
         float vDotN = velocity.dot(normal);
         vNormal.set(normal).scl(vDotN);
         vTangent.set(velocity).sub(vNormal);
 
-        // Apply Backspin "Bite"
         tempV1.set(vTangent).nor().scl(-spin.x * 0.015f);
         vTangent.add(tempV1);
 
@@ -162,13 +156,10 @@ public class Ball {
 
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, float delta, Terrain terrain) {
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
-
         tempV1.set(BallPhysics.getSlopeForce(BallPhysics.getGravityForce(GRAVITY), normal));
         tangentVel.add(tempV1.scl(delta));
-
         tempV2.set(BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY));
         tangentVel.add(tempV2.scl(delta));
-
         spin.setZero();
     }
 
@@ -243,11 +234,13 @@ public class Ball {
         position.add(tempV1.set(velocity).scl(delta));
     }
 
-    // --- INPUT AND SYSTEM ---
-
     public void hit(Vector3 shootDir, float power, float loft, float powerMult) {
-        spin.setZero();
         if (state != State.STATIONARY) return;
+
+        // Store exact location for potential reset
+        lastStationaryPosition.set(position);
+
+        spin.setZero();
         float finalSpeed = power * powerMult;
         float angleRad = loft * MathUtils.degreesToRadians;
         velocity.set(shootDir).nor();
@@ -258,6 +251,15 @@ public class Ball {
         state = State.AIR;
         hitCooldown = 0.1f;
         trail.clear();
+    }
+
+    public void resetToLastPosition() {
+        this.position.set(lastStationaryPosition);
+        this.velocity.setZero();
+        this.spin.setZero();
+        this.state = State.STATIONARY;
+        this.trail.clear();
+        updateTransform();
     }
 
     public boolean checkVictory(Vector3 holePos, float holeSize) {

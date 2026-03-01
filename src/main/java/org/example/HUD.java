@@ -25,6 +25,9 @@ public class HUD {
     private final Vector2 spinDot = new Vector2(0, 0);
     private final float SPIN_UI_RADIUS = 50f;
 
+    // Timer for "Seed Copied" feedback
+    private float seedFeedbackTimer = 0;
+
     // Reusable vectors for wind projection to avoid GC pressure
     private final Vector3 tempWind = new Vector3();
     private final Vector3 camForward = new Vector3();
@@ -66,13 +69,35 @@ public class HUD {
         batch.end();
     }
 
-    public void renderPauseMenu() {
+    public void renderPauseMenu(boolean isPractice, long seed) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         font.getData().setScale(2.5f);
+        font.setColor(Color.WHITE);
         font.draw(batch, "PAUSED", viewport.getWorldWidth()/2f - 80, viewport.getWorldHeight() - 100);
+
         font.getData().setScale(1.2f);
-        font.draw(batch, "[R] RESET BALL  |  [N] NEW LEVEL  |  [ESC] RESUME", 50, 100);
+        String menuText = "[R] RESET BALL  |  [N] NEW LEVEL  |  [ESC] RESUME";
+
+        // Only show copy seed option if not in practice mode
+        if (!isPractice) {
+            menuText += "  |  [C] COPY SEED";
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.C)) {
+                Gdx.app.getClipboard().setContents(String.valueOf(seed));
+                seedFeedbackTimer = 2.0f; // Show for 2 seconds
+            }
+        }
+
+        font.draw(batch, menuText, 50, 100);
+
+        // Feedback text
+        if (seedFeedbackTimer > 0) {
+            seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
+            font.setColor(Color.GREEN);
+            font.draw(batch, "SEED COPIED TO CLIPBOARD: " + seed, 50, 150);
+        }
+
         batch.end();
     }
 
@@ -150,25 +175,20 @@ public class HUD {
         shapeRenderer.end();
 
         if (windSpeed > 0.1f) {
-            // Calculate wind relative to camera view
-            // Project world wind onto camera's Right and Forward (XZ plane)
             camForward.set(camera.direction.x, 0, camera.direction.z).nor();
             camRight.set(camera.direction).crs(camera.up).nor();
             camRight.y = 0;
             camRight.nor();
 
-            // Dot products to find how much wind is moving relative to camera "screen"
             float screenX = worldWind.dot(camRight);
             float screenY = worldWind.dot(camForward);
 
-            // Calculate HUD angle based on these components
             float angle = MathUtils.atan2(screenY, screenX);
             float cos = MathUtils.cos(angle);
             float sin = MathUtils.sin(angle);
 
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
             shapeRenderer.setColor(Color.YELLOW);
-            // Draw arrow
             shapeRenderer.rectLine(uiX - cos * (radius - 10), uiY - sin * (radius - 10),
                     uiX + cos * (radius - 10), uiY + sin * (radius - 10), 3f);
 

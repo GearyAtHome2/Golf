@@ -1,6 +1,5 @@
 package org.example;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import java.util.Random;
@@ -20,8 +19,20 @@ public class LevelDataGenerator {
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
         data.setArchetype(selectedType);
 
-        float teeH = r.nextFloat() * 20.0f;
-        float greenH = r.nextFloat() * 20.0f;
+        // --- NEW: Select Algorithm based on Archetype ---
+        LevelData.TerrainAlgorithm algo;
+        switch (selectedType) {
+            case CLIFFSIDE_BLUFF -> algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.TERRACED : LevelData.TerrainAlgorithm.MULTI_WAVE;
+            case ISLAND_COAST -> algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.SMOOTH_SINE : LevelData.TerrainAlgorithm.MULTI_WAVE;
+            default -> {
+                LevelData.TerrainAlgorithm[] algos = LevelData.TerrainAlgorithm.values();
+                algo = algos[r.nextInt(algos.length)];
+            }
+        }
+        data.setTerrainAlgorithm(algo); // Assuming you add this setter to LevelData
+
+        float teeH = 10.0f;
+        float greenH = 10.0f;
         float maxWindSpeed = 15.0f;
 
         switch (selectedType) {
@@ -57,13 +68,10 @@ public class LevelDataGenerator {
         data.setFoliageRadius(2.5f);
         data.setTrunkRadius(0.4f);
 
-        // --- FIX: Water MUST be below the lowest playable point ---
         float lowerBound = Math.min(teeH, greenH);
-        // Subtracting ensures the green is at least 1-3 units ABOVE water
         float waterLvl = lowerBound - (1.0f + r.nextFloat() * 2.0f);
 
         if (selectedType == LevelData.Archetype.ISLAND_COAST) {
-            // Keep water very close to the land level
             waterLvl = lowerBound - 0.5f;
         }
 
@@ -76,6 +84,7 @@ public class LevelDataGenerator {
         float strength = r.nextFloat() * maxWindSpeed;
         data.setWind(new Vector3(MathUtils.cos(angle) * strength, 0, MathUtils.sin(angle) * strength));
 
+        System.out.println("Generated terrain: " + data.getArchetype() + " using " + data.getTerrainAlgorithm() + ", seed: " + data.getSeed());
         return data;
     }
 }
