@@ -16,7 +16,7 @@ public enum Club {
     GWEDGE("Gap Wedge", 50.0f, 12.0f),
     SWEDGE("Sand Wedge", 54.0f, 10.5f),
     LWEDGE("Lob Wedge", 58.0f, 9.0f),
-    PUTTER("Putter", 3.5f, 6.0f); // Putters need ~3-4 deg to lift ball out of its 'indent' on grass
+    PUTTER("Putter", 2f, 8.0f); // Putters need ~3-4 deg to lift ball out of its 'indent' on grass
 
     public final String name;
     public final float loft;

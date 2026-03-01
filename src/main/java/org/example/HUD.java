@@ -2,12 +2,14 @@ package org.example;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
@@ -20,9 +22,13 @@ public class HUD {
     private int shotCount = 0;
     private float lastDisplayedSpin = 0f;
 
-    // --- Spin Selection ---
-    private final Vector2 spinDot = new Vector2(0, 0); // -1 to 1 range
+    private final Vector2 spinDot = new Vector2(0, 0);
     private final float SPIN_UI_RADIUS = 50f;
+
+    // Reusable vectors for wind projection to avoid GC pressure
+    private final Vector3 tempWind = new Vector3();
+    private final Vector3 camForward = new Vector3();
+    private final Vector3 camRight = new Vector3();
 
     public HUD() {
         batch = new SpriteBatch();
@@ -42,30 +48,21 @@ public class HUD {
     public void renderStartMenu(int selection) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
-
         font.getData().setScale(3f);
         font.setColor(Color.WHITE);
         font.draw(batch, "ULTIMATE GOLF", centerX - 180, centerY + 150);
-
         font.getData().setScale(1.5f);
-
-        // Selection 0: Play
         font.setColor(selection == 0 ? Color.YELLOW : Color.WHITE);
-        String playText = (selection == 0 ? "> " : "  ") + "PLAY GAME";
-        font.draw(batch, playText, centerX - 80, centerY);
-
-        // Selection 1: Practice
+        font.draw(batch, (selection == 0 ? "> " : "  ") + "PLAY GAME", centerX - 80, centerY);
         font.setColor(selection == 1 ? Color.YELLOW : Color.WHITE);
-        String practiceText = (selection == 1 ? "> " : "  ") + "PRACTICE RANGE";
-        font.draw(batch, practiceText, centerX - 80, centerY - 60);
-
+        font.draw(batch, (selection == 1 ? "> " : "  ") + "PRACTICE RANGE", centerX - 80, centerY - 60);
+        font.setColor(selection == 2 ? Color.YELLOW : Color.WHITE);
+        font.draw(batch, (selection == 2 ? "> " : "  ") + "PLAY SEED FROM CLIPBOARD", centerX - 80, centerY - 120);
         font.getData().setScale(1f);
         font.setColor(Color.GRAY);
-        font.draw(batch, "Use UP/DOWN to select, ENTER to start", centerX - 130, centerY - 150);
-
+        font.draw(batch, "Use UP/DOWN to select, ENTER to start", centerX - 130, centerY - 210);
         batch.end();
     }
 
@@ -79,7 +76,7 @@ public class HUD {
         batch.end();
     }
 
-    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice) {
+    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera) {
         updateSpinInput(Gdx.graphics.getDeltaTime());
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
@@ -88,49 +85,41 @@ public class HUD {
         // --- Render Spin Selector (Bottom Left) ---
         float spinX = 80;
         float spinY = 80;
-
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        // Outer Ball (Shadow layer)
         shapeRenderer.setColor(Color.WHITE);
         shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS);
-        // Inner Ball (Main UI surface)
-        shapeRenderer.setColor(0.9f, 0.9f, 0.9f, 1f);
+        shapeRenderer.setColor(0.1f, 0.1f, 0.1f, 1f);
         shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS - 3);
         shapeRenderer.end();
 
-        // --- Draw Central Crosshair ---
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        shapeRenderer.setColor(Color.DARK_GRAY);
-        float crossSize = 6f;
-        // Horizontal line
-        shapeRenderer.line(spinX - crossSize, spinY, spinX + crossSize, spinY);
-        // Vertical line
-        shapeRenderer.line(spinX, spinY - crossSize, spinX, spinY + crossSize);
-        shapeRenderer.end();
-
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        // The Contact Dot
         shapeRenderer.setColor(Color.RED);
-        // Using SPIN_UI_RADIUS - 10 to keep the dot within the visual border
         shapeRenderer.circle(spinX + (spinDot.x * (SPIN_UI_RADIUS - 10)),
                 spinY + (spinDot.y * (SPIN_UI_RADIUS - 10)), 5);
         shapeRenderer.end();
+
+        // --- Render Wind (Top Right) ---
+        if (levelData != null) {
+            renderWindIndicator(levelData.getWind(), gameCamera);
+        }
 
         batch.begin();
         font.getData().setScale(1f);
         font.setColor(Color.WHITE);
         font.draw(batch, "CONTACT POINT", spinX - 45, spinY - 60);
 
-        // --- Top Left: Mode & Shots ---
         font.getData().setScale(1.5f);
         if (isPractice) {
             font.setColor(Color.CYAN);
-            font.draw(batch, "PRACTICE MODE", 40, viewport.getWorldHeight() - 40);
+            font.draw(batch, "PRACTICE RANGE", 40, viewport.getWorldHeight() - 40);
+        } else if (levelData != null) {
+            font.setColor(Color.GOLD);
+            font.draw(batch, levelData.getArchetype().name().replace("_", " "), 40, viewport.getWorldHeight() - 40);
         }
-        font.setColor(Color.WHITE);
-        font.draw(batch, "Shots: " + shotCount, 40, isPractice ? viewport.getWorldHeight() - 80 : viewport.getWorldHeight() - 40);
 
-        // --- Bottom Right: Equipment & Physics ---
+        font.setColor(Color.WHITE);
+        font.draw(batch, "Shots: " + shotCount, 40, viewport.getWorldHeight() - 80);
+
         float rightX = viewport.getWorldWidth() - 250;
         font.draw(batch, "Club: " + currentClub.name(), rightX, 140);
 
@@ -149,17 +138,66 @@ public class HUD {
         batch.end();
     }
 
+    private void renderWindIndicator(Vector3 worldWind, Camera camera) {
+        float uiX = viewport.getWorldWidth() - 80;
+        float uiY = viewport.getWorldHeight() - 80;
+        float radius = 40f;
+        float windSpeed = worldWind.len();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(Color.WHITE);
+        shapeRenderer.circle(uiX, uiY, radius);
+        shapeRenderer.end();
+
+        if (windSpeed > 0.1f) {
+            // Calculate wind relative to camera view
+            // Project world wind onto camera's Right and Forward (XZ plane)
+            camForward.set(camera.direction.x, 0, camera.direction.z).nor();
+            camRight.set(camera.direction).crs(camera.up).nor();
+            camRight.y = 0;
+            camRight.nor();
+
+            // Dot products to find how much wind is moving relative to camera "screen"
+            float screenX = worldWind.dot(camRight);
+            float screenY = worldWind.dot(camForward);
+
+            // Calculate HUD angle based on these components
+            float angle = MathUtils.atan2(screenY, screenX);
+            float cos = MathUtils.cos(angle);
+            float sin = MathUtils.sin(angle);
+
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            shapeRenderer.setColor(Color.YELLOW);
+            // Draw arrow
+            shapeRenderer.rectLine(uiX - cos * (radius - 10), uiY - sin * (radius - 10),
+                    uiX + cos * (radius - 10), uiY + sin * (radius - 10), 3f);
+
+            float headAngle = 0.5f;
+            shapeRenderer.triangle(
+                    uiX + cos * radius, uiY + sin * radius,
+                    uiX + MathUtils.cos(angle + MathUtils.PI - headAngle) * 15f, uiY + MathUtils.sin(angle + MathUtils.PI - headAngle) * 15f,
+                    uiX + MathUtils.cos(angle + MathUtils.PI + headAngle) * 15f, uiY + MathUtils.sin(angle + MathUtils.PI + headAngle) * 15f
+            );
+            shapeRenderer.end();
+        }
+
+        batch.begin();
+        font.getData().setScale(1.2f);
+        font.setColor(Color.WHITE);
+        String windText = String.format("%.0f MPH", windSpeed);
+        font.draw(batch, windText, uiX - 30, uiY - radius - 10);
+        batch.end();
+    }
+
     public void renderVictory(int finalShots) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         font.getData().setScale(4f);
         font.setColor(Color.GOLD);
         font.draw(batch, "HOLE IN ONE!", viewport.getWorldWidth() / 2f - 200, viewport.getWorldHeight() / 2f + 100);
-
         font.getData().setScale(2f);
         font.setColor(Color.WHITE);
         font.draw(batch, "Total Strokes: " + finalShots, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() / 2f);
-
         font.getData().setScale(1.2f);
         font.draw(batch, "Press [N] for a New Level", viewport.getWorldWidth() / 2f - 110, viewport.getWorldHeight() / 2f - 100);
         batch.end();
@@ -171,7 +209,6 @@ public class HUD {
         if (Gdx.input.isKeyPressed(Input.Keys.S)) spinDot.y = MathUtils.clamp(spinDot.y - delta * speed, -1f, 1f);
         if (Gdx.input.isKeyPressed(Input.Keys.A)) spinDot.x = MathUtils.clamp(spinDot.x - delta * speed, -1f, 1f);
         if (Gdx.input.isKeyPressed(Input.Keys.D)) spinDot.x = MathUtils.clamp(spinDot.x + delta * speed, -1f, 1f);
-
         if (spinDot.len() > 1f) spinDot.nor();
     }
 

@@ -7,8 +7,14 @@ public class DesktopLauncher {
 
     public static void main(String[] args) {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
-        config.setTitle("Golf Game");
-        config.setWindowedMode(800, 600);
+        config.setTitle("Golf Game 2026 - Alpha");
+
+        config.setWindowedMode(1280, 720);
+
+        config.setForegroundFPS(60);
+
+        config.useVsync(true);
+
         new Lwjgl3Application(new GolfGame(), config);
     }
 }

@@ -70,7 +70,7 @@ public class Ball {
         updateTransform();
     }
 
-    public void update(float delta, Terrain terrain) {
+    public void update(float delta, Terrain terrain, Vector3 baseWind) {
         if (hitCooldown > 0) hitCooldown -= delta;
 
         updateTrail(delta);
@@ -89,7 +89,7 @@ public class Ball {
         if (touchingTerrain) {
             handleTerrainPhysics(delta, terrain, terrainHeight);
         } else {
-            handleAirPhysics(delta);
+            handleAirPhysics(delta, baseWind); // Pass wind here
         }
 
         handleTreeCollisions(terrain, delta);
@@ -101,18 +101,22 @@ public class Ball {
 
     // --- GROUPED PHYSICS LOGIC ---
 
-    private void handleAirPhysics(float delta) {
+    private void handleAirPhysics(float delta, Vector3 baseWind) {
         state = State.AIR;
+
+        // 1. Calculate wind at this specific height
+        Vector3 windAtHeight = BallPhysics.getWindAtHeight(baseWind, position.y);
+
         tempV1.setZero();
         tempV1.add(BallPhysics.getGravityForce(GRAVITY));
-        tempV1.add(BallPhysics.getAirDrag(velocity, AIR_DRAG_COEFF));
-        tempV1.add(BallPhysics.getMagnusForce(velocity, spin, LIFT_COEFF, SIDE_COEFF));
+
+        // 2. Use relative airspeed for Drag and Magnus
+        tempV1.add(BallPhysics.getAirDrag(velocity, windAtHeight, AIR_DRAG_COEFF));
+        tempV1.add(BallPhysics.getMagnusForce(velocity, windAtHeight, spin, LIFT_COEFF, SIDE_COEFF));
 
         velocity.add(tempV1.scl(delta));
 
         if (velocity.len() > 0.1f) {
-            // Here we use speed to accelerate decay.
-            // 0.005f is a 'rotational drag coefficient' you can tune.
             float spinDrag = 0.05f + (velocity.len() * velocity.len() * 0.0002f);
             spin.scl(1.0f - (spinDrag * delta));
         }

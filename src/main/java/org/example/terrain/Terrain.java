@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import org.example.LevelData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,11 +24,9 @@ public class Terrain {
     public static final int SIZE_Z = 500;
     private final int CHUNK_Z = 64;
     private final float SCALE = 1f;
-    private final float HEIGHT_SCALE = 5f;
     private Vector3 teeCenter;
     private TerrainType[][] terrainMap;
     private final List<Bunker> bunkers = new ArrayList<>();
-    private float greenCenterX;
     private float waterLevel;
     private final List<Tree> trees = new ArrayList<>();
     private float[][] heightMap;
@@ -36,15 +35,15 @@ public class Terrain {
     private ModelInstance holeMarker;
     private float holeSize;
 
-    public Terrain(ITerrainGenerator generator) {
-        terrainMap = new TerrainType[SIZE_X][SIZE_Z];
-        heightMap = new float[SIZE_X][SIZE_Z];
-        holeSize = 0.6f;
 
-        // 1. FILL THE DATA: The generator populates terrainMap and heightMap
+    public Terrain(ITerrainGenerator generator, float waterLevel) {
+        this.waterLevel = waterLevel;
+        this.terrainMap = new TerrainType[SIZE_X][SIZE_Z];
+        this.heightMap = new float[SIZE_X][SIZE_Z];
+        this.holeSize = 0.6f;
+
         generator.generate(terrainMap, heightMap, trees, teeCenter = new Vector3(), holePosition = new Vector3());
 
-        // 2. CREATE WATER
         createWaterPlane();
 
         int z = 0;
@@ -61,13 +60,11 @@ public class Terrain {
 
     private void createHoleMarker(Vector3 pos) {
         ModelBuilder mb = new ModelBuilder();
-        // A very thin cylinder (basically a disc) to represent the hole opening
         Model disc = mb.createCylinder(holeSize, 0.01f, holeSize, 20,
                 new Material(ColorAttribute.createDiffuse(Color.BLACK)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
 
         holeMarker = new ModelInstance(disc);
-        // Place it just slightly above the grass so it doesn't "z-fight" (flicker)
         holeMarker.transform.setToTranslation(pos.x, pos.y + 0.02f, pos.z);
     }
 
@@ -75,7 +72,6 @@ public class Terrain {
         ModelBuilder mb = new ModelBuilder();
         mb.begin();
 
-        // Pole is 5m tall, centered at 0. It goes from -2.5 to +2.5
         MeshPartBuilder pb = mb.part("pole", GL20.GL_TRIANGLES,
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)));
@@ -89,16 +85,16 @@ public class Terrain {
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal, flagMaterial);
 
         fb.rect(
-                0.1f, 1.5f, 0f,   // Bottom-left (starting just outside pole radius)
-                0.1f, 2.5f, 0f,   // Top-left
-                1.6f, 2.5f, 0f,   // Top-right
-                1.6f, 1.5f, 0f,   // Bottom-right
+                0.1f, 1.5f, 0f,
+                0.1f, 2.5f, 0f,
+                1.6f, 2.5f, 0f,
+                1.6f, 1.5f, 0f,
                 0f, 0f, 1f
         );
 
         Model flagModel = mb.end();
         flagInstance = new ModelInstance(flagModel);
-        // Since the pole base is at -2.5, we translate the WHOLE thing up by 2.5
+        // Initial placement
         flagInstance.transform.setToTranslation(pos.x, pos.y + 2.5f, pos.z);
     }
 
@@ -106,37 +102,28 @@ public class Terrain {
         if (flagInstance == null) return;
 
         float distance = cameraPosition.dst(holePosition);
+        float threshold = 50f;
+        float growthRate = 0.015f;
 
-        // --- GROWTH TUNING ---
-        float threshold = 50f; // Distance before scaling starts
-        float growthRate = 0.015f; // Smaller = grows slower
-
-        // If distance is less than threshold, scale is 1.0.
-        // Otherwise, it grows based on the excess distance.
         float dynamicScale = 1.0f;
         if (distance > threshold) {
             dynamicScale = 1.0f + ((distance - threshold) * growthRate);
         }
+        dynamicScale = Math.min(dynamicScale, 4.0f);
 
-        dynamicScale = Math.min(dynamicScale, 4.0f); // Max size cap
-
-        // Update Position and Scale
-        // We adjust Y by (2.5 * dynamicScale) because the pole's origin is at its base now
-        flagInstance.transform.setToTranslation(holePosition.x, holePosition.y + (2.5f * dynamicScale), holePosition.z);
-        flagInstance.transform.scale(dynamicScale, dynamicScale, dynamicScale);
-
-        // Billboard rotation (Y-axis only)
+        // Billboarding logic
         Vector3 direction = new Vector3(cameraPosition).sub(holePosition);
         direction.y = 0;
         float angle = MathUtils.atan2(direction.x, direction.z) * MathUtils.radiansToDegrees;
+
+        // Rebuild the transform matrix correctly: Scale -> Rotate -> Translate
+        flagInstance.transform.setToScaling(dynamicScale, dynamicScale, dynamicScale);
         flagInstance.transform.rotate(Vector3.Y, angle);
+        flagInstance.transform.setTranslation(holePosition.x, holePosition.y + (2.5f * dynamicScale), holePosition.z);
     }
 
-    // Add this getter so GolfGame can call it if needed
     public ModelInstance getFlagInstance() { return flagInstance; }
-
     public Vector3 getHolePosition() { return holePosition; }
-
     public float getHoleSize() { return holeSize; }
 
     private ModelInstance buildChunk(int zStart, int zEnd) {
@@ -172,16 +159,9 @@ public class Terrain {
     }
 
     private Vector3 vertex(int x, int z) {
-
         float worldX = x * SCALE;
         float worldZ = z * SCALE;
-        TerrainType type = terrainMap[x][z];
-        float height;
-        if (type == TerrainType.TEE) {
-            height = 0.2f;
-        } else {
-            height = baseHeightAt(x, z);
-        }
+        float height = baseHeightAt(x, z);
 
         for (Bunker b : bunkers) {
             float dx = (x - b.centerX) / (float) b.radiusX;
@@ -194,7 +174,6 @@ public class Terrain {
                 break;
             }
         }
-
         return new Vector3(worldX, height, worldZ);
     }
 
@@ -232,13 +211,8 @@ public class Terrain {
         return terrainMap[ix][iz];
     }
 
-    public Vector3 getTeePosition() {
-        return teeCenter.cpy();
-    }
-
-    public float getWaterLevel() {
-        return waterLevel;
-    }
+    public Vector3 getTeePosition() { return teeCenter.cpy(); }
+    public float getWaterLevel() { return waterLevel; }
 
     public float getHeightAt(float worldX, float worldZ) {
         float localX = worldX + SIZE_X * SCALE / 2f;
@@ -254,7 +228,7 @@ public class Terrain {
         float h01 = vertex(ix, iz + 1).y;
         float h11 = vertex(ix + 1, iz + 1).y;
 
-        return MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
+        return MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fz), fz);
     }
 
     public Vector3 getNormalAt(float worldX, float worldZ) {
@@ -272,18 +246,13 @@ public class Terrain {
         Vector3 nTri1 = new Vector3(v10).sub(v00).crs(new Vector3(v01).sub(v00)).nor();
         Vector3 nTri2 = new Vector3(v11).sub(v10).crs(new Vector3(v01).sub(v10)).nor();
 
-        Vector3 n0 = nTri1.cpy().lerp(nTri2, localX / SCALE - ix);
-        Vector3 n1 = nTri1.cpy().lerp(nTri2, localX / SCALE - ix);
-
-        return n0.cpy().lerp(n1, localZ / SCALE - iz).nor();
+        return nTri1.lerp(nTri2, localX / SCALE - ix).nor();
     }
 
     public void render(ModelBatch batch, Environment env) {
         for (ModelInstance chunk : chunks) batch.render(chunk, env);
         if (waterInstance != null) batch.render(waterInstance, env);
         for (Tree t : trees) t.render(batch, env);
-
-        // Render hole and flag
         if (holeMarker != null) batch.render(holeMarker, env);
         if (flagInstance != null) batch.render(flagInstance, env);
     }
@@ -324,9 +293,6 @@ public class Terrain {
         float w = SIZE_X * SCALE;
         float h = SIZE_Z * SCALE;
 
-
-        waterLevel = -(rng.nextFloat() * 4) - 2;// water elevation
-
         Vector3 v00 = new Vector3(0, waterLevel, 0);
         Vector3 v10 = new Vector3(w, waterLevel, 0);
         Vector3 v01 = new Vector3(0, waterLevel, h);
@@ -337,20 +303,17 @@ public class Terrain {
 
         Model model = builder.end();
         waterInstance = new ModelInstance(model);
-        // Center over terrain
         waterInstance.transform.setToTranslation(-w / 2f, 0, -h / 2f);
     }
 
-    public List<Tree> getTrees() {
-        return trees;
-    }
+    public List<Tree> getTrees() { return trees; }
 
     public enum TerrainType {
         TEE(0.40f, 2.0f, 1.1f),
-        FAIRWAY(0.45f, 2.15f, 1.2f),
-        ROUGH(0.70f, 4.5f, 1.5f),
-        BUNKER(1.2f, 12.0f, 2.5f), // High friction/resistance to simulate sand
-        GREEN(0.1f, 0.2f, 1.05f); // Very low resistance for long putts
+        FAIRWAY(1.1f, 0.2f, 1.05f),
+        ROUGH(1.70f, 4.5f, 1.5f),
+        BUNKER(1.2f, 12.0f, 2.5f),
+        GREEN(0.25f, 0.4f, 1.2f);
 
         public final float kineticFriction;
         public final float rollingResistance;
@@ -363,11 +326,10 @@ public class Terrain {
         }
     }
 
-
     public static class Tree {
         private final ModelInstance trunkInstance;
         private final List<ModelInstance> foliageInstances = new ArrayList<>();
-        private final Vector3 position;      // bottom center of trunk
+        private final Vector3 position;
         private final float trunkHeight;
         private final float trunkRadius;
         private final float foliageHeight;
@@ -379,21 +341,18 @@ public class Terrain {
             this.trunkRadius = trunkRadius;
 
             ModelBuilder builder = new ModelBuilder();
-
-            // --- Trunk ---
             builder.begin();
             MeshPartBuilder trunkBuilder = builder.part(
                     "trunk",
                     GL20.GL_TRIANGLES,
                     VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.ColorPacked,
-                    new Material(ColorAttribute.createDiffuse(new Color(0.55f, 0.27f, 0.07f, 1f))) // brown
+                    new Material(ColorAttribute.createDiffuse(new Color(0.55f, 0.27f, 0.07f, 1f)))
             );
             trunkBuilder.cylinder(trunkRadius * 2, trunkHeight, trunkRadius * 2, 16);
             Model trunkModel = builder.end();
             trunkInstance = new ModelInstance(trunkModel);
             trunkInstance.transform.setToTranslation(x, y + trunkHeight / 2f, z);
 
-            // --- Foliage ---
             builder = new ModelBuilder();
             builder.begin();
             MeshPartBuilder foliageBuilder = builder.part(
@@ -411,7 +370,6 @@ public class Terrain {
             foliageInstances.add(foliageInstance);
         }
 
-        // --- Render & Dispose ---
         void render(ModelBatch batch, Environment env) {
             batch.render(trunkInstance, env);
             for (ModelInstance f : foliageInstances) batch.render(f, env);
@@ -422,25 +380,10 @@ public class Terrain {
             for (ModelInstance f : foliageInstances) f.model.dispose();
         }
 
-        // --- Collision getters ---
-        public Vector3 getPosition() {
-            return position.cpy();
-        }
-
-        public float getTrunkHeight() {
-            return trunkHeight;
-        }
-
-        public float getTrunkRadius() {
-            return trunkRadius;
-        }
-
-        public float getFoliageHeight() {
-            return foliageHeight;
-        }
-
-        public float getFoliageRadius() {
-            return foliageRadius;
-        }
+        public Vector3 getPosition() { return position.cpy(); }
+        public float getTrunkHeight() { return trunkHeight; }
+        public float getTrunkRadius() { return trunkRadius; }
+        public float getFoliageHeight() { return foliageHeight; }
+        public float getFoliageRadius() { return foliageRadius; }
     }
 }
