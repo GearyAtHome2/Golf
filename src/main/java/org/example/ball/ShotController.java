@@ -88,52 +88,39 @@ public class ShotController {
     }
 
     private void executeShot(Ball ball, Vector3 camDir, Club club, float power, HUD hud) {
-        // --- TUNING KNOBS ---
-        float PWR_EXP = 5.0f;           // Sweet spot size (higher = larger flat center)
-        float PWR_PENALTY = 0.8f;      // Max power loss at extreme edge
-        float SPIN_EXP = 2.0f;          // Spin growth curve (higher = edge is sharper)
-        float LOFT_ADJ = -15.0f;        // Max degrees to add/remove from club loft
-        float ATTACK_ANGLE_MAX = 18.0f; // Max angle of attack for spin calculation
-        float STINGER_LIMIT = 30.0f;    // Clubs with loft below this can "Stinger"
-        float STINGER_BOOST = 3.5f;     // Strength of the upward climb effect
-        float BASE_SPIN_MULT = 22.0f;   // Global backspin master volume
-        float SPIN_LOFT_CAP = 35.0f;    // Prevents infinite spin on high-lofted clubs
-        // --------------------
+        float MAX_DELOFT = -65.0f;
+        float BASE_SPIN_MULT = 14.5f;
+        float PINCH_FACTOR = 1.8f; // Increase this to boost the "Pinch" spin on Top hits
+        float INPUT_EXP = 2.8f;
 
-        Vector2 spinOffset = hud.getSpinOffset();
-        float r = MathUtils.clamp(spinOffset.len(), 0f, 1f);
+        Vector2 rawOffset = hud.getSpinOffset();
+        float rawR = MathUtils.clamp(rawOffset.len(), 0f, 1f);
+        float quadR = (float)Math.pow(rawR, INPUT_EXP);
+        Vector2 quadOffset = new Vector2();
+        if (rawR > 0) quadOffset.set(rawOffset).nor().scl(quadR);
 
-        float powerEfficiency = 1.0f - (float)Math.pow(r, PWR_EXP) * PWR_PENALTY;
-        float finalPowerMult = club.powerMult * powerEfficiency;
-
-        float spinSensitivity = (float)Math.pow(r, SPIN_EXP);
-
-        float deloftResistance = MathUtils.clamp(1.0f - (club.loft / 60f), 0.2f, 1.0f);
-        float loftAdjustment = (spinOffset.y * spinSensitivity) * (LOFT_ADJ * deloftResistance);
-        float adjustedLoft = MathUtils.clamp(club.loft + loftAdjustment, 1f, 65f);
-
-        Vector3 shootDir = new Vector3(camDir.x, 0, camDir.z).nor();
-        shootDir.rotate(Vector3.Y, spinOffset.x * 2.5f);
-        ball.hit(shootDir, power, adjustedLoft, finalPowerMult);
-
+        float powerPenalty = (float)Math.pow(rawR, 6) * 0.40f;
+        float finalPowerMult = club.powerMult * (1.0f - powerPenalty);
         float totalSpeed = power * finalPowerMult;
-        ball.getSpin().y = -spinOffset.x * spinSensitivity * totalSpeed * 8.0f;
 
-        float attackAngle = (spinOffset.y * spinSensitivity) * ATTACK_ANGLE_MAX;
-        float spinLoft = MathUtils.clamp(Math.abs(adjustedLoft - attackAngle), 5f, SPIN_LOFT_CAP);
+        float deloftAbility = MathUtils.clamp(1.2f - (club.loft / 45f), 0.2f, 1.2f);
+        float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * MAX_DELOFT * deloftAbility), 0.1f, 85f);
 
-        float spinForce = (float) Math.sin(spinLoft * MathUtils.degreesToRadians);
-        float contactQuality = (spinOffset.y > 0) ? 1.0f : 0.4f;
-        float clubSpinDamping = MathUtils.clamp(1.2f - (club.loft / 50f), 0.4f, 1.0f);
+        Vector3 shotDir = new Vector3(camDir.x, 0, camDir.z).nor().rotate(Vector3.Y, quadOffset.x * 2.5f);
+        ball.hit(shotDir, power, adjustedLoft, finalPowerMult);
 
-        float stingerScale = 0.6f;
-        if (spinOffset.y > 0) {
-            float loftFactor = MathUtils.clamp(1.0f - (club.loft / STINGER_LIMIT), 0f, 1.0f);
-            stingerScale += (spinOffset.y * spinSensitivity * STINGER_BOOST * loftFactor);
-        }
+        float attackAngle = quadOffset.y * -20.0f;
+        float spinLoft = Math.abs(club.loft - attackAngle);
+        float sForce = (float)Math.sin(spinLoft * MathUtils.degreesToRadians);
 
-        float speedNormalized = totalSpeed / 25f;
-        ball.getSpin().x = totalSpeed * spinForce * BASE_SPIN_MULT * speedNormalized * contactQuality * stingerScale * clubSpinDamping;
+        // Scaling factor: 1.0 at center, grows by TOP_SPIN_SENSITIVITY at the top, shrinks at bottom
+        float pinchFactor = 1.0f + (quadOffset.y * PINCH_FACTOR);
+
+        ball.getSpin().x = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor);
+        ball.getSpin().y = -quadOffset.x * totalSpeed * 10.0f;
+
+        Gdx.app.log("SHOT_LOG", String.format("%s | Launch: %.1f | SpinX: %.0f | Pinch: %.2f",
+                club.name(), adjustedLoft, ball.getSpin().x, pinchFactor));
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {

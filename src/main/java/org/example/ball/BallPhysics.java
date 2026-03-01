@@ -1,5 +1,7 @@
 package org.example.ball;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.Terrain;
 
@@ -20,12 +22,31 @@ public class BallPhysics {
     }
 
     public static Vector3 getMagnusForce(Vector3 velocity, Vector3 spin, float liftCoeff, float sideCoeff) {
+        float speed = velocity.len();
+        if (speed < 1f) return new Vector3(0, 0, 0);
+
         Vector3 force = new Vector3(0, 0, 0);
-        // Vertical Lift (Backspin)
-        temp.set(velocity).crs(Vector3.X).nor().scl(spin.x * liftCoeff);
+
+        float surfaceSpeed = spin.len() * 0.02f;
+        float spinRatio = surfaceSpeed / speed;
+        float CL = 1.0f - (float)Math.exp(-0.9f * spinRatio);
+
+        // Using your stable reference speed
+        float speedRef = speed / 20.0f;
+        float dynamicLift = (speedRef * speedRef) * CL;
+
+        temp.set(velocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * liftCoeff);
         force.add(temp);
-        temp.set(velocity).crs(Vector3.Y).nor().scl(spin.y * sideCoeff);
-        force.add(temp);
+
+        // Side Force (unchanged)
+        temp2.set(velocity).crs(Vector3.Y).nor().scl(spin.y * dynamicLift * sideCoeff);
+        force.add(temp2);
+
+        if (speed > 50f) {
+            Gdx.app.log("MAGNUS_DEBUG", String.format("Speed: %.1f | SpinX: %.0f | ForceY: %.2f",
+                    speed, spin.x, force.y));
+        }
+
         return force;
     }
 

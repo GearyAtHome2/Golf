@@ -90,14 +90,28 @@ public class HUD {
         float spinY = 80;
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        // Outer Ball
+        // Outer Ball (Shadow layer)
         shapeRenderer.setColor(Color.WHITE);
         shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS);
-        // Shadow/Depth for the UI ball
-        shapeRenderer.setColor(0.8f, 0.8f, 0.8f, 1f);
-        shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS - 5);
+        // Inner Ball (Main UI surface)
+        shapeRenderer.setColor(0.9f, 0.9f, 0.9f, 1f);
+        shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS - 3);
+        shapeRenderer.end();
+
+        // --- Draw Central Crosshair ---
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(Color.DARK_GRAY);
+        float crossSize = 6f;
+        // Horizontal line
+        shapeRenderer.line(spinX - crossSize, spinY, spinX + crossSize, spinY);
+        // Vertical line
+        shapeRenderer.line(spinX, spinY - crossSize, spinX, spinY + crossSize);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         // The Contact Dot
         shapeRenderer.setColor(Color.RED);
+        // Using SPIN_UI_RADIUS - 10 to keep the dot within the visual border
         shapeRenderer.circle(spinX + (spinDot.x * (SPIN_UI_RADIUS - 10)),
                 spinY + (spinDot.y * (SPIN_UI_RADIUS - 10)), 5);
         shapeRenderer.end();

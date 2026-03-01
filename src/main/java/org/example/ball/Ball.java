@@ -18,9 +18,9 @@ public class Ball {
 
     private static final float RADIUS = 0.2f;
     private static final float GRAVITY = -9.81f;
-    private static final float AIR_DRAG_COEFF = 0.003f;
-    private static final float LIFT_COEFF = 0.016f;
-    private static final float SIDE_COEFF = 0.01f;
+    private static final float AIR_DRAG_COEFF = 0.006f;
+    private static final float LIFT_COEFF = 0.015f;
+    private static final float SIDE_COEFF = 0.015f;
     private static final float STOP_SPEED = 0.15f;
     private static final float MIN_BOUNCE_VY = 0.3f;
     private static final float BOUNCE_RESTITUTION = 0.35f;
@@ -106,7 +106,6 @@ public class Ball {
         tempV1.setZero();
         tempV1.add(BallPhysics.getGravityForce(GRAVITY));
         tempV1.add(BallPhysics.getAirDrag(velocity, AIR_DRAG_COEFF));
-//        tempV1.add(BallPhysics.getMagnusForce(velocity, spin, AIR_DRAG_COEFF, AIR_DRAG_COEFF));
         tempV1.add(BallPhysics.getMagnusForce(velocity, spin, LIFT_COEFF, SIDE_COEFF));
 
         velocity.add(tempV1.scl(delta));
