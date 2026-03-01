@@ -88,44 +88,52 @@ public class ShotController {
     }
 
     private void executeShot(Ball ball, Vector3 camDir, Club club, float power, HUD hud) {
+        // --- TUNING KNOBS ---
+        float PWR_EXP = 5.0f;           // Sweet spot size (higher = larger flat center)
+        float PWR_PENALTY = 0.8f;      // Max power loss at extreme edge
+        float SPIN_EXP = 2.0f;          // Spin growth curve (higher = edge is sharper)
+        float LOFT_ADJ = -15.0f;        // Max degrees to add/remove from club loft
+        float ATTACK_ANGLE_MAX = 18.0f; // Max angle of attack for spin calculation
+        float STINGER_LIMIT = 30.0f;    // Clubs with loft below this can "Stinger"
+        float STINGER_BOOST = 3.5f;     // Strength of the upward climb effect
+        float BASE_SPIN_MULT = 22.0f;   // Global backspin master volume
+        float SPIN_LOFT_CAP = 35.0f;    // Prevents infinite spin on high-lofted clubs
+        // --------------------
+
         Vector2 spinOffset = hud.getSpinOffset();
         float r = MathUtils.clamp(spinOffset.len(), 0f, 1f);
 
-        float powerEfficiency = 1.0f - (r * 0.15f);
+        float powerEfficiency = 1.0f - (float)Math.pow(r, PWR_EXP) * PWR_PENALTY;
         float finalPowerMult = club.powerMult * powerEfficiency;
 
+        float spinSensitivity = (float)Math.pow(r, SPIN_EXP);
+
         float deloftResistance = MathUtils.clamp(1.0f - (club.loft / 60f), 0.2f, 1.0f);
-        float loftAdjustment = spinOffset.y * (-12f * deloftResistance);
+        float loftAdjustment = (spinOffset.y * spinSensitivity) * (LOFT_ADJ * deloftResistance);
         float adjustedLoft = MathUtils.clamp(club.loft + loftAdjustment, 1f, 65f);
 
         Vector3 shootDir = new Vector3(camDir.x, 0, camDir.z).nor();
         shootDir.rotate(Vector3.Y, spinOffset.x * 2.5f);
-
         ball.hit(shootDir, power, adjustedLoft, finalPowerMult);
 
         float totalSpeed = power * finalPowerMult;
+        ball.getSpin().y = -spinOffset.x * spinSensitivity * totalSpeed * 8.0f;
 
-        ball.getSpin().y = -spinOffset.x * totalSpeed * 6.0f;
-
-        float attackAngle = spinOffset.y * 15f;
-        float spinLoft = Math.abs(adjustedLoft - attackAngle);
-        spinLoft = MathUtils.clamp(spinLoft, 5f, 35f);
+        float attackAngle = (spinOffset.y * spinSensitivity) * ATTACK_ANGLE_MAX;
+        float spinLoft = MathUtils.clamp(Math.abs(adjustedLoft - attackAngle), 5f, SPIN_LOFT_CAP);
 
         float spinForce = (float) Math.sin(spinLoft * MathUtils.degreesToRadians);
-
         float contactQuality = (spinOffset.y > 0) ? 1.0f : 0.4f;
+        float clubSpinDamping = MathUtils.clamp(1.2f - (club.loft / 50f), 0.4f, 1.0f);
 
-        // This multiplier is the secret sauce.
-        // Low loft clubs (Stinger/Driver) get a massive boost when hitting down (spinOffset.y > 0).
-        // Wedges get almost no boost from hitting down.
-        float stingerScale = 1.9f;
+        float stingerScale = 0.6f;
         if (spinOffset.y > 0) {
-            float loftFactor = MathUtils.clamp(1.0f - (club.loft / 35f), 0f, 1.0f);
-            stingerScale += (spinOffset.y * 1.8f * loftFactor);
+            float loftFactor = MathUtils.clamp(1.0f - (club.loft / STINGER_LIMIT), 0f, 1.0f);
+            stingerScale += (spinOffset.y * spinSensitivity * STINGER_BOOST * loftFactor);
         }
 
         float speedNormalized = totalSpeed / 25f;
-        ball.getSpin().x = totalSpeed * spinForce * 18f * speedNormalized * contactQuality * stingerScale;
+        ball.getSpin().x = totalSpeed * spinForce * BASE_SPIN_MULT * speedNormalized * contactQuality * stingerScale * clubSpinDamping;
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {

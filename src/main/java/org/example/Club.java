@@ -1,9 +1,9 @@
 package org.example;
 
 public enum Club {
-    STINGER("Stinger", 2f, 30f),
-    DRIVER("Driver", 12f, 30f),
-    WOOD_3("3 Wood", 19f, 26f),
+    STINGER("Stinger", 2f, 32f),
+    DRIVER("Driver", 14f, 31f),
+    WOOD_3("3 Wood", 19f, 24f),
     WOOD_5("5 Wood", 23f, 21f),
     HYBRID_3("3 Hybrid", 24f, 20f),
     IRON_5("5 Iron", 28, 19.2f),

@@ -296,23 +296,29 @@ public class GolfGame extends ApplicationAdapter {
             return;
         }
 
-        // --- GLOBAL KEYS ---
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
             else if (currentState == GameState.PLAYING || currentState == GameState.PRACTICE) currentState = GameState.PAUSED;
         }
 
-        // R - Reset Level / Ball
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
-            initLevel();
+        // --- SPEED CONTROLS ---
+        if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+            gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+            gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
         }
 
-        // N - New Course
+        // R - Put ball back on tee without regenerating map
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            resetBallToTee();
+        }
+
+        // N - New Course (Full regeneration)
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
             initLevel();
         }
 
-        // C - Clear Ghosts (Practice only)
         if (currentState == GameState.PRACTICE && Gdx.input.isKeyJustPressed(Input.Keys.C)) {
             for (Ball ghost : shotHistory) ghost.dispose();
             shotHistory.clear();
@@ -322,6 +328,15 @@ public class GolfGame extends ApplicationAdapter {
             if (Gdx.graphics.isFullscreen()) Gdx.graphics.setWindowedMode(1280, 720);
             else Gdx.graphics.setFullscreenMode(Gdx.graphics.getDisplayMode());
         }
+    }
+
+    private void resetBallToTee() {
+        if (ball != null) ball.dispose();
+        Vector3 tee = terrain.getTeePosition();
+        ball = new Ball(tee);
+        hasCurrentBallBeenHit = false;
+        isVictory = false;
+        practiceResetTimer = 0f;
     }
 
     private void setupEnvironment() {
