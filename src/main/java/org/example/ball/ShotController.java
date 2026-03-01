@@ -1,4 +1,4 @@
-package org.example;
+package org.example.ball;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -12,6 +12,8 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import org.example.Club;
+import org.example.HUD;
 
 public class ShotController {
     private Model powerBarModel;
@@ -86,15 +88,15 @@ public class ShotController {
     }
 
     private void executeShot(Ball ball, Vector3 camDir, Club club, float power, HUD hud) {
-        Vector2 spinOffset = hud.getSpinOffset(); // Range -1 to 1 (X: Right, Y: Top)
-        float distanceFRomCenter = spinOffset.len();
-        float r = MathUtils.clamp(distanceFRomCenter, 0f, 1f);
+        Vector2 spinOffset = hud.getSpinOffset();
+        float r = MathUtils.clamp(spinOffset.len(), 0f, 1f);
 
-        float powerEfficiency = 1.0f - (r * r * r * 0.5f);
+        float powerEfficiency = 1.0f - (r * 0.15f);
         float finalPowerMult = club.powerMult * powerEfficiency;
 
-        float adjustedLoft = club.loft + (spinOffset.y * -20f);
-        adjustedLoft = MathUtils.clamp(adjustedLoft, 5f, 85f);
+        float deloftResistance = MathUtils.clamp(1.0f - (club.loft / 60f), 0.2f, 1.0f);
+        float loftAdjustment = spinOffset.y * (-12f * deloftResistance);
+        float adjustedLoft = MathUtils.clamp(club.loft + loftAdjustment, 1f, 65f);
 
         Vector3 shootDir = new Vector3(camDir.x, 0, camDir.z).nor();
         shootDir.rotate(Vector3.Y, spinOffset.x * 2.5f);
@@ -105,8 +107,25 @@ public class ShotController {
 
         ball.getSpin().y = -spinOffset.x * totalSpeed * 6.0f;
 
-        float spinImpact = spinOffset.y * totalSpeed * 1.5f;
-        ball.getSpin().x -= spinImpact;
+        float attackAngle = spinOffset.y * 15f;
+        float spinLoft = Math.abs(adjustedLoft - attackAngle);
+        spinLoft = MathUtils.clamp(spinLoft, 5f, 35f);
+
+        float spinForce = (float) Math.sin(spinLoft * MathUtils.degreesToRadians);
+
+        float contactQuality = (spinOffset.y > 0) ? 1.0f : 0.4f;
+
+        // This multiplier is the secret sauce.
+        // Low loft clubs (Stinger/Driver) get a massive boost when hitting down (spinOffset.y > 0).
+        // Wedges get almost no boost from hitting down.
+        float stingerScale = 1.9f;
+        if (spinOffset.y > 0) {
+            float loftFactor = MathUtils.clamp(1.0f - (club.loft / 35f), 0f, 1.0f);
+            stingerScale += (spinOffset.y * 1.8f * loftFactor);
+        }
+
+        float speedNormalized = totalSpeed / 25f;
+        ball.getSpin().x = totalSpeed * spinForce * 18f * speedNormalized * contactQuality * stingerScale;
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {
