@@ -123,7 +123,6 @@ public class GolfGame extends ApplicationAdapter {
 
         float waterLevel =  currentLevelData == null ? -1 : currentLevelData.getWaterLevel();
         terrain = new Terrain(generator, waterLevel);
-
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
         ball = new Ball(tee);

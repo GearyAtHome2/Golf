@@ -35,7 +35,6 @@ public class BallPhysics {
     }
 
     public static Vector3 getMagnusForce(Vector3 velocity, Vector3 wind, Vector3 spin, float liftCoeff, float sideCoeff) {
-        // Magnus effect also depends on relative airspeed
         relativeVelocity.set(velocity).sub(wind);
         float airspeed = relativeVelocity.len();
 
@@ -50,11 +49,9 @@ public class BallPhysics {
         float speedRef = airspeed / 20.0f;
         float dynamicLift = (speedRef * speedRef) * CL;
 
-        // Lift (X-axis spin creates Y-axis lift relative to movement)
         temp.set(relativeVelocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * liftCoeff);
         force.add(temp);
 
-        // Side Force (Y-axis spin)
         temp2.set(relativeVelocity).crs(Vector3.Y).nor().scl(spin.y * dynamicLift * sideCoeff);
         force.add(temp2);
 
@@ -81,10 +78,16 @@ public class BallPhysics {
 
     public static Vector3 calculateBounce(Vector3 velocity, Vector3 normal, float restitution) {
         float vDotN = velocity.dot(normal);
+
         Vector3 vNormal = new Vector3(normal).scl(vDotN);
         Vector3 vTangent = new Vector3(velocity).sub(vNormal);
+
         vNormal.scl(-restitution);
-        vTangent.scl(0.7f);
+
+        float impactSpeed = Math.abs(vDotN);
+        float frictionScale = MathUtils.clamp(1.0f - (0.2f * impactSpeed), 0.95f, 1.0f);
+        vTangent.scl(frictionScale);
+
         return vTangent.add(vNormal);
     }
 }

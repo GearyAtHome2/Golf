@@ -2,6 +2,7 @@ package org.example;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+
 import java.util.Random;
 
 public class LevelDataGenerator {
@@ -28,12 +29,15 @@ public class LevelDataGenerator {
             case MOGUL_HIGHLANDS:
                 algo = LevelData.TerrainAlgorithm.MOUNDS;
                 break;
+            case BUSH_WORLD:
             case ISLAND_COAST:
                 algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.SMOOTH_SINE : LevelData.TerrainAlgorithm.MULTI_WAVE;
                 break;
-            case BUSH_WORLD:
             case BUNKER_ISLANDS:
                 algo = LevelData.TerrainAlgorithm.SMOOTH_SINE;
+                break;
+            case FLOATING_PLATEAUS:
+                algo = LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
                 break;
             default:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
@@ -149,7 +153,6 @@ public class LevelDataGenerator {
         data.setUndulation(undulation);
         data.setHoleSize(0.6f);
         data.setnBunkers(bunkerCount);
-
 
         float lowerBound = Math.min(teeH, greenH);
         data.setWaterLevel(lowerBound - (3.0f + r.nextFloat() * 2.0f));

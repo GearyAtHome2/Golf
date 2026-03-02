@@ -10,14 +10,16 @@ public class LevelData {
         REDWOOD_VALLEY,
         CLIFFSIDE_BLUFF,
         ISLAND_COAST,
-        BUNKER_ISLANDS
+        BUNKER_ISLANDS,
+        FLOATING_PLATEAUS
     }
 
     public enum TerrainAlgorithm {
         SMOOTH_SINE,    // The original simple style
         MULTI_WAVE,     // The 10-layer overlapping waves
         TERRACED,       // Flat plateaus with steep drops
-        MOUNDS          // Sharp, isolated peaks
+        MOUNDS,         // Sharp, isolated peaks
+        RAISED_FAIRWAY  // High-elevation play areas with sunken rough/water
     }
 
     private Archetype archetype;
@@ -41,6 +43,7 @@ public class LevelData {
     // Wind vector (x, 0, z)
     private Vector3 wind = new Vector3();
 
+    // Getters and Setters
     public Archetype getArchetype() { return archetype; }
     public void setArchetype(Archetype archetype) { this.archetype = archetype; }
 

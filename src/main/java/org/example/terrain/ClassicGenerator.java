@@ -42,6 +42,10 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
     }
 
+    public LevelData getData() {
+        return data;
+    }
+
     @Override
     public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, Vector3 teePos, Vector3 holePos) {
         int SIZE_X = map.length;
@@ -56,6 +60,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         boolean isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
         boolean isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
         boolean isBunkerIslands = data.getArchetype() == LevelData.Archetype.BUNKER_ISLANDS;
+        boolean isRaisedFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
 
         float cliffSteepness = isCliffMap ? 100.0f : 15.0f;
         float teeFlatBufferZ = 0.12f;
@@ -105,16 +110,67 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
 
-        // 2. TEE & BASIC MAPPING (Greens / Fairways)
+        // 2. TEE & BASIC MAPPING
         mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, waterLevel, maxFairwayWidth);
 
-        // 3. SPECIAL CASE: BUNKER ISLANDS
+        // 3. RAISED FAIRWAY LOGIC (Updated for long curved slopes)
+        if (isRaisedFairway) {
+            waterLevel = applyRaisedFairwayLogic(map, heights, waterLevel);
+        }
+
         if (isBunkerIslands) {
             generateBunkerIslands(map, heights, greenCenterX, greenCenterZ);
         }
 
-        // 4. POSITIONING & TREES
         finalizePositionsAndTrees(map, heights, teePos, holePos, trees, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
+    }
+
+    private float applyRaisedFairwayLogic(Terrain.TerrainType[][] map, float[][] heights, float currentWater) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+        float DROP_AMOUNT = 25.0f;
+        float SLOPE_DISTANCE = 8.0f; // Increase this for longer slopes (e.g., 12.0f or 15.0f)
+
+        // 1. Identify "High Ground" tiles
+        boolean[][] isHighGround = new boolean[SIZE_X][SIZE_Z];
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                Terrain.TerrainType t = map[x][z];
+                if (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE) {
+                    isHighGround[x][z] = true;
+                }
+            }
+        }
+
+        // 2. Calculate distance to nearest high ground and apply curved drop
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                if (isHighGround[x][z]) continue;
+
+                float minDistSq = SLOPE_DISTANCE * SLOPE_DISTANCE;
+                // Optimization: only check a local neighborhood
+                int range = (int)SLOPE_DISTANCE + 1;
+                for (int ix = x - range; ix <= x + range; ix++) {
+                    for (int iz = z - range; iz <= z + range; iz++) {
+                        if (ix >= 0 && ix < SIZE_X && iz >= 0 && iz < SIZE_Z && isHighGround[ix][iz]) {
+                            float dSq = (x - ix) * (x - ix) + (z - iz) * (z - iz);
+                            if (dSq < minDistSq) minDistSq = dSq;
+                        }
+                    }
+                }
+
+                float dist = (float)Math.sqrt(minDistSq);
+                float t = MathUtils.clamp(dist / SLOPE_DISTANCE, 0, 1);
+
+                // Use smoothstep or pow for a nice curved "shoulder" on the fairway
+                float curvedT = t * t * (3 - 2 * t);
+                heights[x][z] -= (DROP_AMOUNT * curvedT);
+            }
+        }
+
+        float newWater = currentWater - DROP_AMOUNT - 2.0f;
+        data.setWaterLevel(newWater);
+        return newWater;
     }
 
     private void generateBunkerIslands(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ) {
@@ -131,10 +187,9 @@ public class ClassicGenerator implements ITerrainGenerator {
             int cx = (int)(centerlineX + (rng.nextFloat() - 0.5f) * 60f);
             cx = MathUtils.clamp(cx, 20, SIZE_X - 20);
 
-            // --- SLOPE CHECK ---
             float sX = heights[cx+1][cz] - heights[cx-1][cz];
             float sZ = heights[cx][cz+1] - heights[cx][cz-1];
-            if (Math.sqrt(sX*sX + sZ*sZ) > 0.8f) continue; // Skip if too steep
+            if (Math.sqrt(sX*sX + sZ*sZ) > 0.8f) continue;
 
             placed++;
             float baseH = heights[cx][cz];
@@ -146,24 +201,19 @@ public class ClassicGenerator implements ITerrainGenerator {
             for (int x = cx - 25; x <= cx + 25; x++) {
                 for (int z = cz - 25; z <= cz + 25; z++) {
                     if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) continue;
-
                     float dx = x - cx;
                     float dz = z - cz;
                     float angle = (float)Math.atan2(dz, dx);
-
-                    // Wobbly radius using simple harmonic noise
                     float wobble = MathUtils.sin(angle * 3 + i) * 1.5f + MathUtils.cos(angle * 5 - i) * 1.0f;
                     float dist = (float)Math.sqrt(dx*dx + dz*dz);
                     float effectiveDist = dist + wobble;
 
-                    // 1. SOFT RADIAL FLATTENING
                     if (dist < flattenRadius) {
                         float fT = 1.0f - MathUtils.clamp(dist / flattenRadius, 0, 1);
                         fT = Interpolation.pow2In.apply(fT);
                         heights[x][z] = MathUtils.lerp(heights[x][z], baseH, fT * 0.8f);
                     }
 
-                    // 2. ISLAND & MOAT
                     if (effectiveDist < islandRadiusOuter) {
                         map[x][z] = Terrain.TerrainType.FAIRWAY;
                         float lift = 2.2f;
@@ -218,6 +268,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private void finalizePositionsAndTrees(Terrain.TerrainType[][] map, float[][] heights, Vector3 teeP, Vector3 holeP, List<Terrain.Tree> trees, int gX, int gZ, float water, boolean isCliff) {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
+
         teeP.set((SIZE_X / 2f * SCALE) - (SIZE_X * SCALE / 2f), data.getTeeHeight() + 0.2f, ((SIZE_Z * 0.05f) * SCALE) - (SIZE_Z * SCALE / 2f));
         holeP.set((gX * SCALE) - (SIZE_X * SCALE / 2f), heights[gX][gZ], (gZ * SCALE) - (SIZE_Z * SCALE / 2f));
 
@@ -259,6 +310,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             case MULTI_WAVE -> generateMultiWaveNoise(wX, wZ, freq) * und * maxH * 2.5f;
             case TERRACED -> Math.signum(generateMultiWaveNoise(wX, wZ, freq)) * (float)Math.pow(Math.abs(generateMultiWaveNoise(wX, wZ, freq)), 0.4f) * und * maxH * 2.5f;
             case MOUNDS -> (float)Math.pow(Math.abs(generateMultiWaveNoise(wX, wZ, freq)), 1.5f) * und * maxH * 4.0f;
+            case RAISED_FAIRWAY -> generateMultiWaveNoise(wX, wZ, freq * 0.5f) * und * maxH * 1.5f;
             default -> (MathUtils.sin(wX * freq) * 2.0f + MathUtils.cos(wZ * freq * 0.6f) * 1.7f) * und * maxH;
         };
     }
