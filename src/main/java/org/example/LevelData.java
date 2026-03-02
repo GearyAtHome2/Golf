@@ -9,7 +9,8 @@ public class LevelData {
         STANDARD_LINKS,
         REDWOOD_VALLEY,
         CLIFFSIDE_BLUFF,
-        ISLAND_COAST
+        ISLAND_COAST,
+        BUNKER_ISLANDS
     }
 
     public enum TerrainAlgorithm {

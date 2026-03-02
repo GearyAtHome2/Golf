@@ -1,5 +1,6 @@
 package org.example.ball;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
@@ -35,7 +36,6 @@ public class Ball {
     private final Vector3 velocity = new Vector3();
     private final Vector3 spin = new Vector3();
 
-    // Captured just before a hit for the [R] reset functionality
     private final Vector3 lastStationaryPosition = new Vector3();
 
     private Model trailPointModel;
@@ -76,7 +76,6 @@ public class Ball {
 
     public void update(float delta, Terrain terrain, Vector3 baseWind) {
         if (hitCooldown > 0) hitCooldown -= delta;
-
         updateTrail(delta);
 
         if (state == State.STATIONARY) {
@@ -88,7 +87,11 @@ public class Ball {
         handleWater(delta, terrain);
 
         float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
-        boolean touchingTerrain = hitCooldown <= 0f && position.y <= terrainHeight;
+
+        // STICKY LOGIC: If we are rolling, we are MUCH more lenient about being "in the air"
+        // This prevents micro-bounces over triangle seams.
+        float stickiness = (state == State.ROLLING) ? 0.15f : 0.02f;
+        boolean touchingTerrain = hitCooldown <= 0f && position.y <= (terrainHeight + stickiness);
 
         if (touchingTerrain) {
             handleTerrainPhysics(delta, terrain, terrainHeight);
@@ -122,21 +125,43 @@ public class Ball {
 
     private void handleTerrainPhysics(float delta, Terrain terrain, float terrainHeight) {
         Vector3 normal = terrain.getNormalAt(position.x, position.z).nor();
+        Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
+        boolean isGreen = (type == Terrain.TerrainType.GREEN);
+
         if (position.y < terrainHeight) position.y = terrainHeight;
 
         float vDotN = velocity.dot(normal);
-        vNormal.set(normal).scl(vDotN);
-        vTangent.set(velocity).sub(vNormal);
 
-        if (Math.abs(vDotN) > MIN_BOUNCE_VY) {
+        if (isGreen) {
+            Gdx.app.log("PUTT_LOG", "--- COLLISION START ---");
+            Gdx.app.log("PUTT_LOG", "Pre-Vel: " + velocity.len() + " vDotN: " + vDotN + " State: " + state);
+        }
+
+        // FORCE ALIGNMENT: If rolling, we eliminate any velocity into or away from the normal
+        if (state == State.ROLLING) {
+            vNormal.set(normal).scl(vDotN);
+            velocity.sub(vNormal); // Strip the vertical jitter
+            vTangent.set(velocity);
+            vNormal.setZero();
+        } else {
+            vNormal.set(normal).scl(vDotN);
+            vTangent.set(velocity).sub(vNormal);
+        }
+
+        if (state != State.ROLLING && Math.abs(vDotN) > MIN_BOUNCE_VY) {
+            if (isGreen) Gdx.app.log("PUTT_LOG", "ACTION: BOUNCING");
             applyBounce(normal);
         } else {
+            if (isGreen) Gdx.app.log("PUTT_LOG", "ACTION: ROLLING");
             vNormal.setZero();
             state = State.ROLLING;
             applyRollingPhysics(vTangent, normal, delta, terrain);
         }
 
         velocity.set(vTangent).add(vNormal);
+
+        if (isGreen) Gdx.app.log("PUTT_LOG", "Post-Vel: " + velocity.len());
+
         checkStationaryCondition(terrain, normal);
     }
 
@@ -156,10 +181,16 @@ public class Ball {
 
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, float delta, Terrain terrain) {
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
+
         tempV1.set(BallPhysics.getSlopeForce(BallPhysics.getGravityForce(GRAVITY), normal));
         tangentVel.add(tempV1.scl(delta));
-        tempV2.set(BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY));
-        tangentVel.add(tempV2.scl(delta));
+
+        Vector3 friction = BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY);
+        if (type == Terrain.TerrainType.GREEN) {
+            Gdx.app.log("PUTT_LOG", "Slope Force: " + tempV1.len() + " Friction Force: " + friction.len());
+        }
+
+        tangentVel.add(friction.scl(delta));
         spin.setZero();
     }
 
@@ -169,6 +200,7 @@ public class Ball {
         float staticFriction = type.kineticFriction * Math.abs(normal.y * GRAVITY) * type.staticMultiplier;
 
         if (velocity.len() < STOP_SPEED && slopeMag < staticFriction) {
+            if (type == Terrain.TerrainType.GREEN) Gdx.app.log("PUTT_LOG", "STOPPING: Speed below threshold.");
             velocity.setZero();
             spin.setZero();
             state = State.STATIONARY;
@@ -236,10 +268,7 @@ public class Ball {
 
     public void hit(Vector3 shootDir, float power, float loft, float powerMult) {
         if (state != State.STATIONARY) return;
-
-        // Store exact location for potential reset
         lastStationaryPosition.set(position);
-
         spin.setZero();
         float finalSpeed = power * powerMult;
         float angleRad = loft * MathUtils.degreesToRadians;
@@ -248,8 +277,14 @@ public class Ball {
         float hLen = MathUtils.cos(angleRad);
         velocity.x *= hLen; velocity.z *= hLen;
         velocity.scl(finalSpeed);
-        state = State.AIR;
-        hitCooldown = 0.1f;
+
+        if (loft < 1.0f) {
+            state = State.ROLLING;
+            hitCooldown = 0.02f;
+        } else {
+            state = State.AIR;
+            hitCooldown = 0.1f;
+        }
         trail.clear();
     }
 

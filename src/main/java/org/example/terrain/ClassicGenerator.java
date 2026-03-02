@@ -1,6 +1,7 @@
 package org.example.terrain;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.LevelData;
@@ -14,11 +15,13 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final Random rng;
     private float off1, off2;
 
-    // Multi-wave parameters stored per seed
     private final float[] waveAngles = new float[10];
     private final float[] waveFreqs = new float[10];
     private final float[] waveAmps = new float[10];
     private final float[] waveOffsets = new float[10];
+
+    private final float[] greenWaveAngles = new float[4];
+    private final float[] greenWaveOffsets = new float[4];
 
     public ClassicGenerator(LevelData data) {
         this.data = data;
@@ -26,12 +29,16 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.off1 = rng.nextFloat() * 1000f;
         this.off2 = rng.nextFloat() * 1000f;
 
-        // Pre-randomize the 10 waves for the Multi-Wave algorithm
         for (int i = 0; i < 10; i++) {
             waveAngles[i] = rng.nextFloat() * MathUtils.PI * 2;
             waveFreqs[i] = 1.0f + (rng.nextFloat() * 1.5f);
             waveAmps[i] = 1.0f / (i + 1.5f);
             waveOffsets[i] = rng.nextFloat() * 100f;
+        }
+
+        for (int i = 0; i < 4; i++) {
+            greenWaveAngles[i] = rng.nextFloat() * MathUtils.PI * 2;
+            greenWaveOffsets[i] = rng.nextFloat() * 100f;
         }
     }
 
@@ -46,34 +53,24 @@ public class ClassicGenerator implements ITerrainGenerator {
         float waterLevel = data.getWaterLevel();
         float maxFairwayWidth = data.getFairwayWidth();
 
-        Gdx.app.log("GEN_DEBUG", "Starting Gen. Archetype: " + data.getArchetype() + " | Algo: " + data.getTerrainAlgorithm());
+        boolean isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
+        boolean isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
+        boolean isBunkerIslands = data.getArchetype() == LevelData.Archetype.BUNKER_ISLANDS;
 
-        float slopeEaseExp = 2.5f;
-
+        float cliffSteepness = isCliffMap ? 100.0f : 15.0f;
+        float teeFlatBufferZ = 0.12f;
         int greenCenterZ = (int)(SIZE_Z * 0.92f);
         float greenOffset = (rng.nextFloat() - 0.5f) * (SIZE_X * 0.5f);
         int greenCenterX = MathUtils.clamp((int)(SIZE_X / 2 + greenOffset), 20, SIZE_X - 20);
 
-        float teeFlatBufferZ = 0.12f;
-
-        boolean isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
-        boolean isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
-        float cliffSteepness = isCliffMap ? 100.0f : 15.0f;
-
-        float greenRadiusX = 10.0f + rng.nextFloat() * 5.0f;
-        float greenRadiusZ = 14.0f + rng.nextFloat() * 6.0f;
-
-        // This radius defines the "cliff edge" of the protection.
-        float protectionRadius = SIZE_Z * 0.22f;
-
+        // 1. HEIGHT PASS
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 float zNorm = z / (float) (SIZE_Z - 1);
-                float finalHeight;
                 map[x][z] = Terrain.TerrainType.ROUGH;
 
                 if (zNorm <= teeFlatBufferZ) {
-                    finalHeight = data.getTeeHeight();
+                    heights[x][z] = data.getTeeHeight();
                 } else {
                     float climbNorm = (zNorm - teeFlatBufferZ) / (1.0f - teeFlatBufferZ);
                     float baseElevation;
@@ -82,7 +79,7 @@ public class ClassicGenerator implements ITerrainGenerator {
                         float sigmoid = 1f / (1f + (float)Math.exp(-cliffSteepness * (climbNorm - 0.15f)));
                         baseElevation = MathUtils.lerp(data.getTeeHeight(), data.getGreenHeight(), sigmoid);
                     } else {
-                        float curveStep = 1.0f - (float)Math.pow(1.0f - climbNorm, slopeEaseExp);
+                        float curveStep = 1.0f - (float)Math.pow(1.0f - climbNorm, 2.5f);
                         baseElevation = MathUtils.lerp(data.getTeeHeight(), data.getGreenHeight(), curveStep);
                     }
 
@@ -91,37 +88,108 @@ public class ClassicGenerator implements ITerrainGenerator {
                     hillRamp = hillRamp * hillRamp * (3 - 2 * hillRamp);
 
                     float rawHeight = baseElevation + (noise * hillRamp);
+                    if (isIslandMap) rawHeight -= (float) Math.pow(zNorm, 2.5f) * (data.getTeeHeight() - waterLevel + 20.0f);
 
-                    if (isIslandMap) {
-                        // Exponential dip that gets very deep
-                        float dipStrength = (float) Math.pow(zNorm, 2.5f) * (data.getTeeHeight() - waterLevel + 20.0f);
-                        rawHeight -= dipStrength;
-                    }
-
-                    // --- ULTRA-STRONG GREEN PROTECTION ---
                     float dxGreen = x - greenCenterX;
                     float dzGreen = z - greenCenterZ;
                     float distGreen = (float) Math.sqrt(dxGreen * dxGreen + dzGreen * dzGreen);
+                    float protectionRadius = SIZE_Z * 0.22f;
 
-                    // Normalize distance 0.0 to 1.0
-                    float finalRaw = getFinalRaw(distGreen, protectionRadius, rawHeight);
+                    float protectedHeight = getFinalRaw(distGreen, protectionRadius, rawHeight);
+                    float greenEffectMask = 1.0f - MathUtils.clamp(distGreen / (protectionRadius * 0.7f), 0f, 1f);
+                    protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask * greenEffectMask * (3 - 2 * greenEffectMask));
 
                     float teeTransition = MathUtils.clamp(climbNorm / 0.15f, 0f, 1f);
-                    finalHeight = MathUtils.lerp(data.getTeeHeight(), finalRaw, teeTransition * teeTransition * (3 - 2 * teeTransition));
+                    heights[x][z] = MathUtils.lerp(data.getTeeHeight(), protectedHeight, teeTransition * teeTransition * (3 - 2 * teeTransition));
                 }
-                heights[x][z] = finalHeight;
             }
         }
 
-        // 2. TEE BOX MAPPING
-        int teeWidth = 14, teeLength = 12;
+        // 2. TEE & BASIC MAPPING (Greens / Fairways)
+        mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, waterLevel, maxFairwayWidth);
+
+        // 3. SPECIAL CASE: BUNKER ISLANDS
+        if (isBunkerIslands) {
+            generateBunkerIslands(map, heights, greenCenterX, greenCenterZ);
+        }
+
+        // 4. POSITIONING & TREES
+        finalizePositionsAndTrees(map, heights, teePos, holePos, trees, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
+    }
+
+    private void generateBunkerIslands(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+        int attempts = data.getnBunkers();
+        int placed = 0;
+        int maxIslands = data.getnBunkers() / 3;
+
+        for (int i = 0; i < attempts && placed < maxIslands; i++) {
+            float zP = 0.2f + rng.nextFloat() * 0.65f;
+            int cz = (int)(SIZE_Z * zP);
+            float centerlineX = MathUtils.lerp(SIZE_X / 2f, (float)gX, zP);
+            int cx = (int)(centerlineX + (rng.nextFloat() - 0.5f) * 60f);
+            cx = MathUtils.clamp(cx, 20, SIZE_X - 20);
+
+            // --- SLOPE CHECK ---
+            float sX = heights[cx+1][cz] - heights[cx-1][cz];
+            float sZ = heights[cx][cz+1] - heights[cx][cz-1];
+            if (Math.sqrt(sX*sX + sZ*sZ) > 0.8f) continue; // Skip if too steep
+
+            placed++;
+            float baseH = heights[cx][cz];
+            float islandRadiusOuter = 8.0f + rng.nextFloat() * 6.0f;
+            float islandRadiusInner = islandRadiusOuter * 0.6f;
+            float moatWidth = 4.0f + rng.nextFloat() * 2.0f;
+            float flattenRadius = islandRadiusOuter + moatWidth + 5.0f;
+
+            for (int x = cx - 25; x <= cx + 25; x++) {
+                for (int z = cz - 25; z <= cz + 25; z++) {
+                    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) continue;
+
+                    float dx = x - cx;
+                    float dz = z - cz;
+                    float angle = (float)Math.atan2(dz, dx);
+
+                    // Wobbly radius using simple harmonic noise
+                    float wobble = MathUtils.sin(angle * 3 + i) * 1.5f + MathUtils.cos(angle * 5 - i) * 1.0f;
+                    float dist = (float)Math.sqrt(dx*dx + dz*dz);
+                    float effectiveDist = dist + wobble;
+
+                    // 1. SOFT RADIAL FLATTENING
+                    if (dist < flattenRadius) {
+                        float fT = 1.0f - MathUtils.clamp(dist / flattenRadius, 0, 1);
+                        fT = Interpolation.pow2In.apply(fT);
+                        heights[x][z] = MathUtils.lerp(heights[x][z], baseH, fT * 0.8f);
+                    }
+
+                    // 2. ISLAND & MOAT
+                    if (effectiveDist < islandRadiusOuter) {
+                        map[x][z] = Terrain.TerrainType.FAIRWAY;
+                        float lift = 2.2f;
+                        if (effectiveDist > islandRadiusInner) {
+                            float t = (effectiveDist - islandRadiusInner) / (islandRadiusOuter - islandRadiusInner);
+                            lift *= Interpolation.pow2Out.apply(1.0f - t);
+                        }
+                        heights[x][z] += lift;
+                    } else if (effectiveDist < islandRadiusOuter + moatWidth) {
+                        map[x][z] = Terrain.TerrainType.BUNKER;
+                        float dipT = 1.0f - Math.abs((islandRadiusOuter + moatWidth/2f) - effectiveDist) / (moatWidth/2f);
+                        heights[x][z] -= MathUtils.sin(dipT * MathUtils.PI / 2f) * 1.5f;
+                    }
+                }
+            }
+        }
+    }
+
+    private void mapStandardFeatures(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ, float water, float fWidth) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+
         int teeCenterX = SIZE_X / 2;
         int teeCenterZ = (int)(SIZE_Z * 0.05f);
-        int teeStartX = teeCenterX - teeWidth / 2;
-        int teeStartZ = teeCenterZ - teeLength / 2;
-
-        for (int x = teeStartX; x < teeStartX + teeWidth; x++) {
-            for (int z = teeStartZ; z < teeStartZ + teeLength; z++) {
+        for (int x = teeCenterX - 7; x < teeCenterX + 7; x++) {
+            for (int z = teeCenterZ - 6; z < teeCenterZ + 6; z++) {
                 if (x >= 0 && x < SIZE_X && z >= 0 && z < SIZE_Z) {
                     map[x][z] = Terrain.TerrainType.TEE;
                     heights[x][z] = data.getTeeHeight();
@@ -129,108 +197,79 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
 
-        // 3. FAIRWAY & GREEN PASS
-        int adjacencyCheckRadius = 2;
+        float greenRX = 12f, greenRZ = 18f;
         for (int z = 0; z < SIZE_Z; z++) {
             float zNorm = z / (float) (SIZE_Z - 1);
-            float centerlineX = MathUtils.lerp(SIZE_X / 2f, (float)greenCenterX, zNorm);
-            centerlineX += MathUtils.sin(z * 0.02f + off1) * (SIZE_X * 0.1f);
-            float widthNoise = (MathUtils.sin(z * 0.03f + off2) + 1f) * 0.5f;
-            float currentWidth = maxFairwayWidth * (0.8f + widthNoise * 0.4f);
+            float centerlineX = MathUtils.lerp(SIZE_X / 2f, (float)gX, zNorm) + MathUtils.sin(z * 0.02f + off1) * (SIZE_X * 0.1f);
+            float currentWidth = fWidth * (0.8f + (MathUtils.sin(z * 0.03f + off2) + 1f) * 0.2f);
 
             for (int x = 0; x < SIZE_X; x++) {
-                float dxGreen = (x - greenCenterX) * SCALE;
-                float dzGreen = (z - greenCenterZ) * SCALE;
-                boolean isGreenShape = (dxGreen*dxGreen)/(greenRadiusX*greenRadiusX) + (dzGreen*dzGreen)/(greenRadiusZ*greenRadiusZ) <= 1.0f;
-                float distToCenter = Math.abs(x - centerlineX) * SCALE;
-                boolean isFairwayShape = distToCenter < currentWidth / 2f;
-                float height = heights[x][z];
-
-                if (isGreenShape && height > waterLevel) {
+                float dxG = (x - gX) * SCALE;
+                float dzG = (z - gZ) * SCALE;
+                if ((dxG*dxG)/(greenRX*greenRX) + (dzG*dzG)/(greenRZ*greenRZ) <= 1.0f && heights[x][z] > water) {
                     map[x][z] = Terrain.TerrainType.GREEN;
-                }
-                else if (isFairwayShape && map[x][z] == Terrain.TerrainType.ROUGH) {
-                    if (height <= waterLevel) continue;
-                    boolean nearWater = false;
-                    for (int nx = -adjacencyCheckRadius; nx <= adjacencyCheckRadius; nx++) {
-                        for (int nz = -adjacencyCheckRadius; nz <= adjacencyCheckRadius; nz++) {
-                            int cx = x + nx; int cz = z + nz;
-                            if (cx >= 0 && cx < SIZE_X && cz >= 0 && cz < SIZE_Z) {
-                                if (heights[cx][cz] < waterLevel) { nearWater = true; break; }
-                            }
-                        }
-                        if (nearWater) break;
-                    }
-                    if (!nearWater) map[x][z] = Terrain.TerrainType.FAIRWAY;
+                } else if (Math.abs(x - centerlineX) < currentWidth / 2f && map[x][z] == Terrain.TerrainType.ROUGH && heights[x][z] > water) {
+                    map[x][z] = Terrain.TerrainType.FAIRWAY;
                 }
             }
         }
+    }
 
-        // --- POSITIONING ---
-        float ballWorldX = (teeCenterX * SCALE) - (SIZE_X * SCALE / 2f);
-        float ballWorldZ = (teeCenterZ * SCALE) - (SIZE_Z * SCALE / 2f);
-        teePos.set(ballWorldX, data.getTeeHeight() + 0.2f, ballWorldZ);
+    private void finalizePositionsAndTrees(Terrain.TerrainType[][] map, float[][] heights, Vector3 teeP, Vector3 holeP, List<Terrain.Tree> trees, int gX, int gZ, float water, boolean isCliff) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+        teeP.set((SIZE_X / 2f * SCALE) - (SIZE_X * SCALE / 2f), data.getTeeHeight() + 0.2f, ((SIZE_Z * 0.05f) * SCALE) - (SIZE_Z * SCALE / 2f));
+        holeP.set((gX * SCALE) - (SIZE_X * SCALE / 2f), heights[gX][gZ], (gZ * SCALE) - (SIZE_Z * SCALE / 2f));
 
-        float holeWorldX = (greenCenterX * SCALE) - (SIZE_X * SCALE / 2f);
-        float holeWorldZ = (greenCenterZ * SCALE) - (SIZE_Z * SCALE / 2f);
-        holePos.set(holeWorldX, heights[greenCenterX][greenCenterZ], holeWorldZ);
+        float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
+        int treeCount = (int) (SIZE_Z * data.getTreeDensity());
 
-        // 4. TREE GENERATION
-        float treeDensity = data.getTreeDensity();
-        int treeCount = (int) (SIZE_Z * treeDensity);
         for (int i = 0; i < treeCount; i++) {
             int tx = rng.nextInt(SIZE_X - 1);
             int tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
-            if (worldY < waterLevel + 0.5f) continue;
-            float dx = heights[tx + 1][tz] - worldY;
-            float dz = heights[tx][tz + 1] - worldY;
-            float slopeMagnitude = (float) Math.sqrt(dx * dx + dz * dz);
-            if (slopeMagnitude > 1.2f || map[tx][tz] != Terrain.TerrainType.ROUGH) continue;
+            if (worldY < water + 0.5f || map[tx][tz] != Terrain.TerrainType.ROUGH) continue;
 
-            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f),
-                    data.getTreeHeight(), data.getTrunkRadius(), data.getFoliageRadius()));
+            float slope = (float) Math.sqrt(Math.pow(heights[tx+1][tz]-worldY, 2) + Math.pow(heights[tx][tz+1]-worldY, 2));
+            if (slope > 1.2f) continue;
+
+            float tH = isCliff ? cliffDelta * (0.8f + rng.nextFloat() * 0.2f) : data.getTreeHeight();
+            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius()));
         }
     }
 
-    private float getFinalRaw(float distGreen, float protectionRadius, float rawHeight) {
-        float t = MathUtils.clamp(distGreen / protectionRadius, 0f, 1f);
-
-        // High-exponent falloff: stays near 1.0 for a long time, then crashes to 0.0.
-        // This ensures 100% at hole and ~99% at the edge of the green.
-        float protectionMask = 1.0f - (float)Math.pow(t, 3.0f);
-
-        // Blending the "ocean floor" height with our target Green height
-        float finalRaw = MathUtils.lerp(rawHeight, data.getGreenHeight(), protectionMask);
-        return finalRaw;
+    private float getFinalRaw(float dG, float pR, float rH) {
+        float t = MathUtils.clamp(dG / pR, 0f, 1f);
+        return MathUtils.lerp(rH, data.getGreenHeight(), 1.0f - (float)Math.pow(t, 3.0f));
     }
 
-    private float calculateHeightNoise(int x, int z, float freq, float undulation, float maxHeight, LevelData.TerrainAlgorithm algorithm) {
-        float worldX = x * SCALE + off1;
-        float worldZ = z * SCALE + off2;
+    private float calculateGreenUndulation(int x, int z) {
+        float total = 0;
+        for (int i = 0; i < 4; i++) {
+            float coord = (x * MathUtils.cos(greenWaveAngles[i]) + z * MathUtils.sin(greenWaveAngles[i])) * 0.32f;
+            total += MathUtils.sin(coord + greenWaveOffsets[i]);
+        }
+        return total / 4.0f;
+    }
 
-        return switch (algorithm) {
-            case MULTI_WAVE -> generateMultiWaveNoise(worldX, worldZ, freq) * undulation * maxHeight * 2.5f;
-            case TERRACED -> {
-                float base = generateMultiWaveNoise(worldX, worldZ, freq);
-                yield Math.signum(base) * (float)Math.pow(Math.abs(base), 0.4f) * undulation * maxHeight * 2.5f;
-            }
-            case MOUNDS -> (float)Math.pow(Math.abs(generateMultiWaveNoise(worldX, worldZ, freq)), 1.5f) * undulation * maxHeight * 4.0f;
-            default -> (MathUtils.sin(worldX * freq) * 2.0f + MathUtils.cos(worldZ * freq * 0.6f) * 1.7f) * undulation * maxHeight;
+    private float calculateHeightNoise(int x, int z, float freq, float und, float maxH, LevelData.TerrainAlgorithm algo) {
+        float wX = x * SCALE + off1;
+        float wZ = z * SCALE + off2;
+        return switch (algo) {
+            case MULTI_WAVE -> generateMultiWaveNoise(wX, wZ, freq) * und * maxH * 2.5f;
+            case TERRACED -> Math.signum(generateMultiWaveNoise(wX, wZ, freq)) * (float)Math.pow(Math.abs(generateMultiWaveNoise(wX, wZ, freq)), 0.4f) * und * maxH * 2.5f;
+            case MOUNDS -> (float)Math.pow(Math.abs(generateMultiWaveNoise(wX, wZ, freq)), 1.5f) * und * maxH * 4.0f;
+            default -> (MathUtils.sin(wX * freq) * 2.0f + MathUtils.cos(wZ * freq * 0.6f) * 1.7f) * und * maxH;
         };
     }
 
-    private float generateMultiWaveNoise(float x, float z, float baseFreq) {
-        float total = 0;
-        float totalAmp = 0;
+    private float generateMultiWaveNoise(float x, float z, float bF) {
+        float total = 0, totalA = 0;
         for (int i = 0; i < 10; i++) {
-            float angle = waveAngles[i];
-            float cosA = MathUtils.cos(angle);
-            float sinA = MathUtils.sin(angle);
-            float rotatedCoord = (x * cosA + z * sinA) * (baseFreq * waveFreqs[i]);
-            total += MathUtils.sin(rotatedCoord + waveOffsets[i]) * waveAmps[i];
-            totalAmp += waveAmps[i];
+            float coord = (x * MathUtils.cos(waveAngles[i]) + z * MathUtils.sin(waveAngles[i])) * (bF * waveFreqs[i]);
+            total += MathUtils.sin(coord + waveOffsets[i]) * waveAmps[i];
+            totalA += waveAmps[i];
         }
-        return total / totalAmp;
+        return total / totalA;
     }
 }

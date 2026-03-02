@@ -19,6 +19,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
 import org.example.ball.ShotController;
+import org.example.ball.ShotDifficulty;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
 import org.example.terrain.*;
@@ -191,20 +192,20 @@ public class GolfGame extends ApplicationAdapter {
         if ((currentState == GameState.PLAYING || currentState == GameState.PRACTICE) && !isVictory) {
             float effDelta = delta * gameSpeed;
 
-            // Determine active wind vector
             Vector3 currentWind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
-
-            // Update visual wind particles
             windManager.update(effDelta, currentWind, camera.position);
 
-            if (shotController.update(delta, ball, camera.direction, currentClub, hud)) {
+            // --- ADDED CANCEL CHECK HERE ---
+            if (hud.wasMinigameCanceled()) {
+                shotController.reset(); // You may need to add this method to ShotController
+            }
+
+            if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain)) {
                 hud.incrementShots();
                 hasCurrentBallBeenHit = true;
             }
 
-            // Update ball physics with height-aware wind
             ball.update(effDelta, terrain, currentWind);
-
             cameraController.update(ball.getPosition());
             particleManager.handleBallInteraction(ball, terrain);
 
@@ -212,7 +213,7 @@ public class GolfGame extends ApplicationAdapter {
                 if (hasCurrentBallBeenHit && ball.getState() == Ball.State.STATIONARY) {
                     practiceResetTimer += delta;
                     if (practiceResetTimer >= RESET_DELAY) {
-                        ball.setGhostColor(new Color(0.7f, 0.7f, 0.7f, 0.5f));
+                        ball.setGhostColor(new Color(0.7f, 0.7f, 0.5f, 0.5f));
                         shotHistory.add(ball);
                         if (shotHistory.size() > MAX_GHOSTS) {
                             Ball oldest = shotHistory.remove(0);
@@ -269,7 +270,7 @@ public class GolfGame extends ApplicationAdapter {
         if (isVictory) hud.renderVictory(hud.getShotCount());
         else if (currentState == GameState.PAUSED) hud.renderPauseMenu(isPractice, currentLevelData.getSeed());
         else {
-            hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice, currentLevelData, camera);
+            hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice, currentLevelData, camera, terrain);
         }
     }
 
