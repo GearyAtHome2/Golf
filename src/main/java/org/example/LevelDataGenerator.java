@@ -33,7 +33,7 @@ public class LevelDataGenerator {
                 break;
             case BUSH_WORLD:
             case BUNKER_ISLANDS:
-                algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
+                algo = LevelData.TerrainAlgorithm.SMOOTH_SINE;
                 break;
             default:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
@@ -127,7 +127,7 @@ public class LevelDataGenerator {
                 maxH = 12.0f;
                 treeDensity = 0.10f;
                 fairwayWidth = 20.0f;
-                undulation = 0.8f;
+                undulation = 0.25f;
                 bunkerCount = 25 + r.nextInt(15);
                 break;
 
@@ -148,7 +148,8 @@ public class LevelDataGenerator {
         data.setFairwayWidth(fairwayWidth);
         data.setUndulation(undulation);
         data.setHoleSize(0.6f);
-        data.setnBunkers(bunkerCount); // Using the variable that might have been overridden
+        data.setnBunkers(bunkerCount);
+
 
         float lowerBound = Math.min(teeH, greenH);
         data.setWaterLevel(lowerBound - (3.0f + r.nextFloat() * 2.0f));

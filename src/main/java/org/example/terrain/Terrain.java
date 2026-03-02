@@ -301,7 +301,7 @@ public class Terrain {
         TEE(0.40f, 2.0f, 1.1f, 0.8f),
         FAIRWAY(0.6f, 0.2f, 1.05f, 1.0f),
         ROUGH(1.70f, 4.5f, 1.5f, 1.4f),
-        BUNKER(1.2f, 12.0f, 2.5f, 1.8f),
+        BUNKER(4.2f, 12.0f, 2.5f, 1.8f),
         GREEN(0.2f, 0.1f, 1.05f, 0.9f);
 
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty;

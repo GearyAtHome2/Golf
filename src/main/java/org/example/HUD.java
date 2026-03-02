@@ -72,7 +72,7 @@ public class HUD {
 
     // --- Settings ---
     public AnimSpeed animSetting = AnimSpeed.SLOW;
-    public GameDifficulty currentDifficulty = GameDifficulty.HARD;
+    public GameDifficulty currentDifficulty = GameDifficulty.EASY;
 
     // --- Minigame Variables ---
     private boolean minigameActive = false;
