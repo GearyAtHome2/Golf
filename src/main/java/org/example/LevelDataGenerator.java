@@ -22,7 +22,7 @@ public class LevelDataGenerator {
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
 
 //         Manual override for testing if needed
-//         selectedType = ISLAND_COAST;
+         selectedType = ISLAND_COAST;
 
         data.setArchetype(selectedType);
 
@@ -84,7 +84,7 @@ public class LevelDataGenerator {
                 treeDensity = 0.03f;
                 maxFairwayWidth = 38.0f;
                 minFairwayWidth = 6.0f;
-                undulation = 0.6f;
+                undulation = 0.4f;
                 fairwayWiggle = 0.3f;
                 islands = 0f;
                 break;
