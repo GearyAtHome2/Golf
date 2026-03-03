@@ -2,8 +2,10 @@ package org.example;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
-
 import java.util.Random;
+
+import static org.example.LevelData.Archetype.ISLAND_COAST;
+import static org.example.LevelData.Archetype.RAZORBACK_RIDGE;
 
 public class LevelDataGenerator {
 
@@ -18,6 +20,10 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
+
+//         Manual override for testing if needed
+//         selectedType = ISLAND_COAST;
+
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm based on Archetype ---
@@ -36,7 +42,10 @@ public class LevelDataGenerator {
             case BUNKER_ISLANDS:
                 algo = LevelData.TerrainAlgorithm.SMOOTH_SINE;
                 break;
-            case FLOATING_PLATEAUS:
+            case SHADOW_CANYON:
+                algo = LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
+                break;
+            case RAZORBACK_RIDGE:
                 algo = LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
                 break;
             default:
@@ -55,11 +64,14 @@ public class LevelDataGenerator {
         float hillFreq = 0.035f;
         float maxH = 7.0f;
         float treeDensity = 0.15f;
-        float fairwayWidth = 45.0f;
+        float maxFairwayWidth = 45.0f;
+        float minFairwayWidth = 0f;
         float undulation = r.nextFloat() * 0.4f + 0.2f;
-
-        // Default bunker count logic (can be overridden in switch)
         int bunkerCount = r.nextInt(10) + 5;
+
+        // Fairway variation defaults
+        float fairwayWiggle = 0.3f;
+        float islands = 0.1f;
 
         // --- 2. Archetype Specific Tuning ---
         switch (selectedType) {
@@ -70,8 +82,11 @@ public class LevelDataGenerator {
                 hillFreq = 0.02f;
                 maxH = 15.0f;
                 treeDensity = 0.03f;
-                fairwayWidth = 38.0f;
+                maxFairwayWidth = 38.0f;
+                minFairwayWidth = 6.0f;
                 undulation = 0.6f;
+                fairwayWiggle = 0.3f;
+                islands = 0f;
                 break;
 
             case CLIFFSIDE_BLUFF:
@@ -83,8 +98,10 @@ public class LevelDataGenerator {
                 foliageR = 8.0f;
                 trunkR = 1.2f;
                 treeDensity = 0.25f;
-                fairwayWidth = 30.0f;
+                maxFairwayWidth = 40.0f;
                 undulation = 0.4f;
+                fairwayWiggle = 0.25f;
+                islands = 0.05f;
                 break;
 
             case REDWOOD_VALLEY:
@@ -97,7 +114,9 @@ public class LevelDataGenerator {
                 hillFreq = 0.025f;
                 maxH = 5.0f;
                 treeDensity = 0.35f;
-                fairwayWidth = 24.0f;
+                maxFairwayWidth = 32.0f;
+                fairwayWiggle = 0.35f;
+                islands = 0.0f;
                 break;
 
             case MOGUL_HIGHLANDS:
@@ -107,8 +126,10 @@ public class LevelDataGenerator {
                 hillFreq = 0.08f;
                 maxH = 18.0f;
                 treeDensity = 0.05f;
-                fairwayWidth = 55.0f;
+                maxFairwayWidth = 55.0f;
                 undulation = 0.2f;
+                fairwayWiggle = 0.42f;
+                islands = 0.3f;
                 break;
 
             case BUSH_WORLD:
@@ -116,8 +137,10 @@ public class LevelDataGenerator {
                 foliageR = 3.5f;
                 trunkR = 0.5f;
                 hillFreq = 0.045f;
-                treeDensity = 0.65f;
-                fairwayWidth = 25.0f;
+                treeDensity = 0.85f;
+                maxFairwayWidth = 35.0f;
+                fairwayWiggle = 0.55f;
+                islands = 0.7f;
                 break;
 
             case BUNKER_ISLANDS:
@@ -130,13 +153,53 @@ public class LevelDataGenerator {
                 hillFreq = 0.06f;
                 maxH = 12.0f;
                 treeDensity = 0.10f;
-                fairwayWidth = 20.0f;
+                maxFairwayWidth = 40.0f;
                 undulation = 0.25f;
                 bunkerCount = 25 + r.nextInt(15);
+                fairwayWiggle = 0.37f;
+                islands = 0.4f;
+                break;
+
+            case SHADOW_CANYON:
+                teeH = 11.0f;
+                greenH = 35.0f + r.nextFloat() * 15.0f;
+                maxWindSpeed = 6.0f;
+                treeH = 4.0f + r.nextFloat() * 2.0f;
+                treeDensity = 0.06f;
+                foliageR = 3.0f;
+                trunkR = 0.5f;
+                hillFreq = 0.02f;
+                maxH = 4.0f;
+                maxFairwayWidth = 32.0f;
+                minFairwayWidth = 5f;
+                undulation = 0.5f;
+                bunkerCount = 0;
+                fairwayWiggle = 0.35f;
+                islands = 0.0f;
+                break;
+
+            case RAZORBACK_RIDGE:
+                teeH = 11.0f;
+                greenH = 35.0f + r.nextFloat() * 15.0f;
+                maxWindSpeed = 35.0f;
+                treeH = 12.0f + r.nextFloat() * 8.0f;
+                treeDensity = 0.18f;
+                foliageR = 5.0f;
+                trunkR = 0.8f;
+                hillFreq = 0.02f;
+                maxH = 5.0f;
+                maxFairwayWidth = 35.0f;
+                minFairwayWidth = 5f;
+                undulation = 0.6f;
+                bunkerCount = 12 + r.nextInt(10);
+                fairwayWiggle = 0.25f;
+                islands = 0.1f;
                 break;
 
             case STANDARD_LINKS:
             default:
+                fairwayWiggle = 0.1f;
+                islands = 0.05f;
                 break;
         }
 
@@ -149,14 +212,21 @@ public class LevelDataGenerator {
         data.setHillFrequency(hillFreq);
         data.setMaxHeight(maxH);
         data.setTreeDensity(treeDensity);
-        data.setFairwayWidth(fairwayWidth);
+        data.setMaxFairwayWidth(maxFairwayWidth);
+        data.setMinFairwayWidth(minFairwayWidth);
         data.setUndulation(undulation);
         data.setHoleSize(0.6f);
         data.setnBunkers(bunkerCount);
 
+        // New fairway parameters
+        data.setFairwayWiggle(fairwayWiggle);
+        data.setFairwayRoughIslands(islands);
+
+        // Water logic
         float lowerBound = Math.min(teeH, greenH);
         data.setWaterLevel(lowerBound - (3.0f + r.nextFloat() * 2.0f));
 
+        // Wind logic
         float angle = r.nextFloat() * MathUtils.PI2;
         float strength = r.nextFloat() * maxWindSpeed;
         data.setWind(new Vector3(MathUtils.cos(angle) * strength, 0, MathUtils.sin(angle) * strength));

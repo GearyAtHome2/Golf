@@ -71,7 +71,7 @@ public class HUD {
     private final Vector3 camRight = new Vector3();
 
     // --- Settings ---
-    public AnimSpeed animSetting = AnimSpeed.SLOW;
+    public AnimSpeed animSetting = AnimSpeed.NONE;
     public GameDifficulty currentDifficulty = GameDifficulty.EASY;
 
     // --- Minigame Variables ---
