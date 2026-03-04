@@ -10,17 +10,15 @@ public class TerrainMeshHelper {
     private static final Vector3 LIGHT_DIR = new Vector3(-0.5f, 1.0f, -0.5f).nor();
     private static final Color ROCK_COLOR = new Color(0.4f, 0.42f, 0.45f, 1f);
 
-    public static void buildTriangle(MeshPartBuilder builder, Vector3 v1, Vector3 v2, Vector3 v3, 
-                                   Terrain.TerrainType type, float minH, float maxH) {
-        
+    public static void buildTriangle(MeshPartBuilder builder, Vector3 v1, Vector3 v2, Vector3 v3,
+                                     Terrain.TerrainType type, float minH, float maxH) {
+
         Vector3 normal = new Vector3(v3).sub(v1).crs(new Vector3(v2).sub(v1)).nor();
         float slope = 1f - normal.y;
         Color color = new Color();
 
         // Slope-based Rock Logic (70% steepness threshold)
-        if (slope > 0.35f) {
-            color.set(ROCK_COLOR);
-        } else if (type == Terrain.TerrainType.GREEN) {
+        if (type == Terrain.TerrainType.GREEN) {
             float avgY = (v1.y + v2.y + v3.y) / 3.0f;
             float range = maxH - minH;
             float t = (range > 0.01f) ? MathUtils.clamp((avgY - minH) / range, 0f, 1f) : 0.5f;

@@ -4,7 +4,6 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import java.util.Random;
 
-import static org.example.LevelData.Archetype.*;
 
 public class LevelDataGenerator {
 
@@ -19,6 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
+        selectedType = LevelData.Archetype.RAZORBACK_RIDGE;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm based on Archetype ---
@@ -34,7 +34,7 @@ public class LevelDataGenerator {
             case ISLAND_COAST:
                 algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.SMOOTH_SINE : LevelData.TerrainAlgorithm.MULTI_WAVE;
                 break;
-            case BUNKER_ISLANDS:
+            case CRATER_FIELDS:
                 algo = LevelData.TerrainAlgorithm.SMOOTH_SINE;
                 break;
             case SHADOW_CANYON:
@@ -144,15 +144,15 @@ public class LevelDataGenerator {
                 foliageR = 3.5f;
                 trunkR = 0.5f;
                 hillFreq = 0.045f;
-                treeDensity = 0.85f;
+                treeDensity = 0.95f;
                 maxFairwayWidth = 35.0f;
                 fairwayWiggle = 0.55f;
                 islands = 0.7f;
-                cohesion = 0.2f;     // Very fragmented "stepping stones"
+                cohesion = 0.4f;     // Very fragmented "stepping stones"
                 breakDensity = 0.8f;
                 break;
 
-            case BUNKER_ISLANDS:
+            case CRATER_FIELDS:
                 teeH = 8.0f;
                 greenH = 12.0f;
                 maxWindSpeed = 20.0f;
@@ -165,15 +165,15 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 40.0f;
                 undulation = 0.25f;
                 bunkerCount = 25 + r.nextInt(15);
-                fairwayWiggle = 0.5f;
+                fairwayWiggle = 0.1f;
                 islands = 0.4f;
-                cohesion = 0.3f;
+                cohesion = 0.9f;
                 breakDensity = 0.7f;
                 break;
 
             case SHADOW_CANYON:
-                teeH = 11.0f;
-                greenH = 35.0f + r.nextFloat() * 15.0f;
+                teeH = 0f;
+                greenH = 10.0f + r.nextFloat() * 5.0f;
                 maxWindSpeed = 6.0f;
                 treeH = 4.0f + r.nextFloat() * 2.0f;
                 treeDensity = 0.06f;
@@ -216,7 +216,7 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.1f;
                 islands = 0.25f;
                 maxFairwayWidth = 49f;
-                cohesion = 1f;
+                cohesion = 1.3f;
                 breakDensity = 0.25f;
                 break;
         }

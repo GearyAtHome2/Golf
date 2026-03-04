@@ -85,6 +85,7 @@ public class ParticleManager {
             case FAIRWAY -> 0.4f;
             case ROUGH -> 0.8f;
             case BUNKER -> 1.2f;
+            case STONE -> 0.8f;
             default -> 0.5f;
         };
     }
@@ -96,6 +97,7 @@ public class ParticleManager {
             case GREEN -> new Color(0.2f, 0.8f, 0.2f, 1f);
             case FAIRWAY -> new Color(0.1f, 0.6f, 0.1f, 1f);
             case ROUGH -> new Color(0.05f, 0.4f, 0.05f, 1f);
+            case STONE -> new Color(0.85f, 0.85f, 0.85f, 1f);
             default -> Color.GREEN;
         };
 

@@ -10,7 +10,7 @@ public class LevelData {
         REDWOOD_VALLEY,
         MOGUL_HIGHLANDS,
         BUSH_WORLD,
-        BUNKER_ISLANDS,
+        CRATER_FIELDS,
         SHADOW_CANYON,    // The Sunken Valley
         RAZORBACK_RIDGE   // The Raised Peak
     }
