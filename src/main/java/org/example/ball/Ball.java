@@ -17,7 +17,7 @@ public class Ball {
     public enum State { AIR, CONTACT, ROLLING, STATIONARY }
     public enum Interaction { NONE, LEAVES, WATER, TERRAIN }
 
-    private static final float RADIUS = 0.2f;
+    public static final float BALL_RADIUS = 0.2f;
     private static final float GRAVITY = -9.81f;
     private static final float AIR_DRAG_COEFF = 0.006f;
     private static final float LIFT_COEFF = 0.015f;
@@ -52,7 +52,6 @@ public class Ball {
     private State state = State.STATIONARY;
     private Interaction lastInteraction = Interaction.NONE;
     private float hitCooldown = 0f;
-    private boolean wasInFoliageLastFrame = false;
 
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
@@ -61,7 +60,7 @@ public class Ball {
 
     public Ball(Vector3 startPosition) {
         ModelBuilder builder = new ModelBuilder();
-        model = builder.createSphere(RADIUS, RADIUS, RADIUS, 20, 20,
+        model = builder.createSphere(BALL_RADIUS, BALL_RADIUS, BALL_RADIUS, 20, 20,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         instance = new ModelInstance(model);
@@ -88,21 +87,29 @@ public class Ball {
 
         float subDelta = delta / SUB_STEPS;
         for (int i = 0; i < SUB_STEPS; i++) {
-            processPhysicsStep(subDelta, terrain, baseWind, i);
+            processPhysicsStep(subDelta, terrain, baseWind);
             if (state == State.STATIONARY) break;
         }
 
         updateVisuals();
     }
 
-    private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind, int stepIndex) {
+    private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind) {
         float preStepY = position.y;
-        handleWater(delta, terrain);
+        float waterLevel = terrain.getWaterLevel();
 
-        float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
+        // PARTICLE HOOK: Water Entry
+        if (preStepY >= waterLevel && (position.y + velocity.y * delta) < waterLevel) {
+            lastInteraction = Interaction.WATER;
+        }
 
-        // RE-FIXED: Use ROLLING state to determine if we are locked to terrain.
-        // Don't auto-capture AIR state balls unless they are severely tunneling.
+        // Apply Water Physics (Meniscus + Hydrodynamics)
+        if (position.y < waterLevel + BALL_RADIUS) {
+            BallPhysics.applyWaterPhysics(position, velocity, spin, waterLevel, delta);
+        }
+
+        float terrainHeight = terrain.getHeightAt(position.x, position.z) + BALL_RADIUS / 3;
+
         boolean touchingTerrain = (state == State.ROLLING && position.y <= terrainHeight + 0.1f)
                 || (position.y < terrainHeight - 0.2f);
 
@@ -110,7 +117,7 @@ public class Ball {
             handleTerrainPhysics(delta, terrain, terrainHeight);
             position.add(tempV1.set(velocity).scl(delta));
         } else {
-            handleAirPhysicsWithSweep(delta, terrain, baseWind, stepIndex);
+            handleAirPhysicsWithSweep(delta, terrain, baseWind);
         }
 
         handleTreeCollisions(terrain, delta);
@@ -121,7 +128,7 @@ public class Ball {
         }
     }
 
-    private void handleAirPhysicsWithSweep(float delta, Terrain terrain, Vector3 baseWind, int stepIndex) {
+    private void handleAirPhysicsWithSweep(float delta, Terrain terrain, Vector3 baseWind) {
         state = State.AIR;
         Vector3 windAtHeight = BallPhysics.getWindAtHeight(baseWind, position.y);
 
@@ -136,12 +143,11 @@ public class Ball {
         boolean collisionFound = false;
         Vector3 bestNormal = new Vector3();
 
-        // 3-Point Sweep to catch cliffs before we "teleport" inside
         for (float t = 0.33f; t <= 1.0f; t += 0.33f) {
             float checkX = position.x + (tempV2.x * t);
             float checkZ = position.z + (tempV2.z * t);
             float checkY = position.y + (tempV2.y * t);
-            float hAtPoint = terrain.getHeightAt(checkX, checkZ) + RADIUS / 3;
+            float hAtPoint = terrain.getHeightAt(checkX, checkZ) + BALL_RADIUS / 3;
 
             if (checkY < hAtPoint) {
                 Vector3 nAtPoint = terrain.getNormalAt(checkX, checkZ);
@@ -163,12 +169,10 @@ public class Ball {
             velocity.set(BallPhysics.calculateBounce(velocity, wallNormal, BOUNCE_RESTITUTION));
             position.add(tempV1.set(wallNormal).scl(0.15f));
             hitCooldown = 0.05f;
+            lastInteraction = Interaction.TERRAIN;
         } else {
-            float nextHeight = terrain.getHeightAt(position.x + tempV2.x, position.z + tempV2.z) + RADIUS / 3;
-            // Standard Ground Landing
+            float nextHeight = terrain.getHeightAt(position.x + tempV2.x, position.z + tempV2.z) + BALL_RADIUS / 3;
             if (position.y + tempV2.y < nextHeight && hitCooldown <= 0f) {
-                // Determine normal at landing point for the bounce
-                Vector3 landNormal = terrain.getNormalAt(position.x + tempV2.x, position.z + tempV2.z);
                 handleTerrainPhysics(delta, terrain, nextHeight);
                 position.add(tempV1.set(velocity).scl(delta));
             } else {
@@ -187,7 +191,6 @@ public class Ball {
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
         float slope = MathUtils.acos(normal.y) * MathUtils.radiansToDegrees;
 
-        // EMERGENCY TUNNEL ESCAPE
         if (terrainHeight - position.y > MAX_STEP_UP) {
             tempV1.set(normal.x, 0, normal.z).nor();
             if (tempV1.len() < 0.1f) {
@@ -215,7 +218,6 @@ public class Ball {
             vTangent.set(velocity).sub(vNormal);
         }
 
-        // Only transition to ROLLING if vertical impact is low
         if (state != State.ROLLING && Math.abs(vDotN) > MIN_BOUNCE_VY) {
             applyBounce(normal, type);
         } else {
@@ -265,17 +267,7 @@ public class Ball {
         }
     }
 
-    private void handleWater(float delta, Terrain terrain) {
-        if (position.y < terrain.getWaterLevel()) {
-            lastInteraction = Interaction.WATER;
-            velocity.scl(0.9f);
-            velocity.y += -4f * GRAVITY * delta;
-            spin.scl(0.5f);
-        }
-    }
-
     private void handleTreeCollisions(Terrain terrain, float delta) {
-        boolean currentlyInFoliage = false;
         for (Terrain.Tree tree : terrain.getTrees()) {
             Vector3 treePos = tree.getPosition();
             float trunkRad = tree.getTrunkRadius();
@@ -284,7 +276,7 @@ public class Ball {
             float dz = position.z - treePos.z;
             float distXZ = (float) Math.sqrt(dx * dx + dz * dz);
 
-            if (distXZ < RADIUS + trunkRad && position.y < treePos.y + trunkHeight && position.y > treePos.y) {
+            if (distXZ < BALL_RADIUS + trunkRad && position.y < treePos.y + trunkHeight && position.y > treePos.y) {
                 tempV1.set(dx, 0, dz).nor();
                 float speedXZ = tempV2.set(velocity.x, 0, velocity.z).len();
                 velocity.x = tempV1.x * speedXZ;
@@ -298,12 +290,10 @@ public class Ball {
             }
 
             float fY = treePos.y + trunkHeight + tree.getFoliageRadius();
-            if (position.dst(treePos.x, fY, treePos.z) < tree.getFoliageRadius() + RADIUS) {
-                currentlyInFoliage = true;
+            if (position.dst(treePos.x, fY, treePos.z) < tree.getFoliageRadius() + BALL_RADIUS) {
                 applyFoliagePhysics(delta);
             }
         }
-        wasInFoliageLastFrame = currentlyInFoliage;
     }
 
     private void applyFoliagePhysics(float delta) {
@@ -350,7 +340,7 @@ public class Ball {
         float distToHole = position.dst(holePos);
         if (distToHole < holeRadius) {
             if (state == State.ROLLING || state == State.CONTACT) return velocity.len() < 12f;
-            if (state == State.AIR && (position.y - RADIUS - holePos.y) < 0f) return true;
+            if (state == State.AIR && (position.y - BALL_RADIUS - holePos.y) < 0f) return true;
         }
         return false;
     }
@@ -369,7 +359,7 @@ public class Ball {
     public void setGhostColor(Color color) {
         for (Material m : instance.materials) {
             m.set(ColorAttribute.createDiffuse(color));
-            m.set(new BlendingAttribute(0.7f));
+            m.set(new BlendingAttribute(color.a));
         }
     }
 
@@ -378,7 +368,6 @@ public class Ball {
     public void renderTrail(ModelBatch batch, Environment env) {
         for (TrailPoint p : trail) {
             float lifeRatio = MathUtils.clamp(p.life / 4.0f, 0f, 1f);
-            trailInstance.transform.setToTranslation(p.pos).getScale(tempV1);
             float scale = 0.2f + (lifeRatio * 0.8f);
             trailInstance.transform.setToTranslation(p.pos).scale(scale, scale, scale);
             ((BlendingAttribute)trailInstance.materials.get(0).get(BlendingAttribute.Type)).opacity = lifeRatio * 0.7f;
@@ -408,6 +397,6 @@ public class Ball {
 
     public void dispose() {
         model.dispose();
-        if (trailPointModel != null) trailPointModel.dispose();
+        trailPointModel.dispose();
     }
 }

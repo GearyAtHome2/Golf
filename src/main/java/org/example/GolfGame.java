@@ -226,7 +226,7 @@ public class GolfGame extends ApplicationAdapter {
                 if (hasCurrentBallBeenHit && ball.getState() == Ball.State.STATIONARY) {
                     practiceResetTimer += delta;
                     if (practiceResetTimer >= RESET_DELAY) {
-                        ball.setGhostColor(new Color(0.7f, 0.7f, 0.5f, 0.5f));
+//                        ball.setGhostColor(new Color(0.7f, 0.7f, 0.5f, 0.5f));
                         shotHistory.add(ball);
                         if (shotHistory.size() > MAX_GHOSTS) {
                             Ball oldest = shotHistory.remove(0);

@@ -15,7 +15,6 @@ public class ParticleManager {
     private final Array<GameParticle> particles = new Array<>();
     private final Model boxModel;
 
-    // Configuration Constants
     private static final float PARTICLE_SIZE = 0.12f;
     private static final float DEFAULT_GRAVITY = 9.81f;
     private static final float BOUNCE_RESTITUTION = 0.4f;
@@ -28,9 +27,6 @@ public class ParticleManager {
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
     }
 
-    /**
-     * Translates high-level ball interactions into specific particle bursts.
-     */
     public void handleBallInteraction(Ball ball, Terrain terrain) {
         Ball.Interaction interaction = ball.getLastInteraction();
         if (interaction == Ball.Interaction.NONE) return;
@@ -41,27 +37,72 @@ public class ParticleManager {
             return;
         }
 
-        // Determine particle traits based on interaction type
         ParticleParams params = getInteractionParams(interaction, ball, terrain, speed);
 
         if (params.count > 0) {
-            // Calculate splash direction (opposite of ball travel + upward bias)
-            Vector3 splashDir = ball.getVelocity().cpy().nor().scl(-1).add(0, 0.5f, 0).nor();
-            spawnDirectional(ball.getPosition(), splashDir, params.color, params.count, speed * params.forceMult, params.life);
+            if (interaction == Ball.Interaction.WATER) {
+                float verticalSpeed = Math.abs(ball.getVelocity().y);
+                boolean isSkimming = verticalSpeed < speed * 0.35f;
+
+                if (isSkimming) {
+                    // Rooster tail: Particles spray backwards and up
+                    Vector3 skimDir = ball.getVelocity().cpy().nor().scl(-0.4f).add(0, 0.7f, 0).nor();
+                    spawnDirectional(ball.getPosition(), skimDir, params.color, params.count / 2, speed * 0.25f, 0.7f);
+                } else {
+                    // Impact splash: Circular crown
+                    spawnSplash(ball.getPosition(), params.color, params.count, speed * params.forceMult);
+                }
+            } else {
+                // Default directional burst (Grass, Sand, etc)
+                Vector3 splashDir = ball.getVelocity().cpy().nor().scl(-1).add(0, 0.5f, 0).nor();
+                spawnDirectional(ball.getPosition(), splashDir, params.color, params.count, speed * params.forceMult, params.life);
+            }
         }
 
         ball.clearInteraction();
     }
 
+    /**
+     * Restored generic spawn method for external calls or internal shorthand.
+     */
+    public void spawn(Vector3 pos, Color color, int count, float force, float lifeBase, float gravity) {
+        for (int i = 0; i < count; i++) {
+            particles.add(new GameParticle(pos, color, boxModel, force, lifeBase, gravity));
+        }
+    }
+
+    private void spawnSplash(Vector3 pos, Color color, int count, float force) {
+        for (int i = 0; i < count; i++) {
+            GameParticle p = new GameParticle(pos, color, boxModel, 0, 1.2f, DEFAULT_GRAVITY);
+            float angle = MathUtils.random(0, MathUtils.PI2);
+            float ringWidth = 0.45f;
+            p.velocity.set(MathUtils.cos(angle) * ringWidth, 1.0f, MathUtils.sin(angle) * ringWidth)
+                    .nor()
+                    .scl(MathUtils.random(0.6f, 1.4f) * force);
+            particles.add(p);
+        }
+    }
+
+    public void spawnDirectional(Vector3 pos, Vector3 direction, Color color, int count, float force, float life) {
+        for (int i = 0; i < count; i++) {
+            GameParticle p = new GameParticle(pos, color, boxModel, 0, life, DEFAULT_GRAVITY);
+            float spread = 0.5f;
+            p.velocity.set(direction)
+                    .add(MathUtils.random(-spread, spread), MathUtils.random(-spread, spread), MathUtils.random(-spread, spread))
+                    .nor()
+                    .scl(MathUtils.random(0.5f, 1.5f) * force);
+            particles.add(p);
+        }
+    }
+
     private ParticleParams getInteractionParams(Ball.Interaction interaction, Ball ball, Terrain terrain, float speed) {
         ParticleParams p = new ParticleParams();
-
         switch (interaction) {
             case WATER -> {
-                p.color = Color.CYAN;
-                p.count = (int) (speed * 3);
-                p.forceMult = 0.4f;
-                p.life = 1.2f;
+                p.color = new Color(0.85f, 0.92f, 1.0f, 0.6f);
+                p.count = (int) (speed * 4);
+                p.forceMult = 0.45f;
+                p.life = 1.4f;
             }
             case LEAVES -> {
                 p.color = Color.FOREST;
@@ -92,7 +133,6 @@ public class ParticleManager {
 
     private Color getTerrainColor(Terrain.TerrainType type, Ball.State state) {
         if (type == Terrain.TerrainType.SAND) return Color.TAN;
-
         Color surfaceGreen = switch (type) {
             case GREEN -> new Color(0.2f, 0.8f, 0.2f, 1f);
             case FAIRWAY -> new Color(0.1f, 0.6f, 0.1f, 1f);
@@ -100,28 +140,8 @@ public class ParticleManager {
             case STONE -> new Color(0.85f, 0.85f, 0.85f, 1f);
             default -> Color.GREEN;
         };
-
-        // If rolling, just grass colors. If hitting, mix in some dirt (brown).
         if (state == Ball.State.ROLLING) return surfaceGreen;
         return (MathUtils.random() < 0.8f) ? surfaceGreen : new Color(0.4f, 0.25f, 0.15f, 1f);
-    }
-
-    public void spawn(Vector3 pos, Color color, int count, float force, float lifeBase, float gravity) {
-        for (int i = 0; i < count; i++) {
-            particles.add(new GameParticle(pos, color, boxModel, force, lifeBase, gravity));
-        }
-    }
-
-    public void spawnDirectional(Vector3 pos, Vector3 direction, Color color, int count, float force, float life) {
-        for (int i = 0; i < count; i++) {
-            GameParticle p = new GameParticle(pos, color, boxModel, 0, life, DEFAULT_GRAVITY);
-            float spread = 0.5f;
-            p.velocity.set(direction)
-                    .add(MathUtils.random(-spread, spread), MathUtils.random(-spread, spread), MathUtils.random(-spread, spread))
-                    .nor()
-                    .scl(MathUtils.random(0.5f, 1.5f) * force);
-            particles.add(p);
-        }
     }
 
     public void update(float delta, Terrain terrain) {
@@ -139,12 +159,8 @@ public class ParticleManager {
     }
 
     public void clear() { particles.clear(); }
-
     public void dispose() { boxModel.dispose(); }
 
-    /**
-     * Internal data structure to clean up the switch-case logic.
-     */
     private static class ParticleParams {
         Color color = Color.WHITE;
         int count = 0;
@@ -170,7 +186,6 @@ public class ParticleManager {
                 velocity.set(MathUtils.random(-1f, 1f), MathUtils.random(0.5f, 2f), MathUtils.random(-1f, 1f))
                         .nor().scl(MathUtils.random(0.5f, force));
             }
-
             this.maxLife = lifeBase + MathUtils.random(0f, 0.5f);
             this.lifeTime = maxLife;
         }
@@ -178,11 +193,8 @@ public class ParticleManager {
         public boolean update(float delta, Terrain terrain) {
             lifeTime -= delta;
             if (lifeTime <= 0) return false;
-
             velocity.y -= gravity * delta;
             pos.add(velocity.x * delta, velocity.y * delta, velocity.z * delta);
-
-            // Terrain Collision
             float terrainHeight = terrain.getHeightAt(pos.x, pos.z);
             if (pos.y < terrainHeight + PARTICLE_SIZE) {
                 pos.y = terrainHeight + PARTICLE_SIZE;
@@ -190,12 +202,9 @@ public class ParticleManager {
                 velocity.x *= GROUND_FRICTION;
                 velocity.z *= GROUND_FRICTION;
             }
-
-            // Update transform: Translation + Shrinking over time
             float scale = Math.max(0, lifeTime / maxLife);
             instance.transform.setToTranslation(pos);
             instance.transform.scale(scale, scale, scale);
-
             return true;
         }
     }

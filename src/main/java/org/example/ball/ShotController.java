@@ -187,8 +187,6 @@ public class ShotController {
         float finalSpinX = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor);
         float sideSpinFromAccuracy = accuracy * totalSpeed * 45.0f;
 
-        // Also apply a bit of hook/slice spin based on terrain kick
-//        float sideSpinFromSlope = sidePush * totalSpeed * 20.0f;
         float finalSpinY = (quadOffset.x * totalSpeed * -10.0f) + sideSpinFromAccuracy;
 
         ball.getSpin().x = finalSpinX;

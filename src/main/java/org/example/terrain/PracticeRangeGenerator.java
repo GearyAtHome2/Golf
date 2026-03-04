@@ -23,13 +23,18 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
         float halfDepth = depth / 2f;
 
         float teeZ = 25f - halfDepth;
-        // The tee box area (e.g., 10 units deep)
         float teeAreaZLimit = teeZ + 10f;
-
-        // Final 10% of the course
         int greenZoneStartIdx = (int)(depth * 0.9f);
 
-        teePos.set(0, 0.2f, teeZ);
+        // Define radial strip widths (distance from the center line)
+        float waterHalfWidth = width * 0.10f;
+        float stoneMaxDist = waterHalfWidth + (width * 0.08f);
+        float greenMaxDist = stoneMaxDist + (width * 0.08f);
+        float fairwayMaxDist = greenMaxDist + (width * 0.08f);
+        float roughMaxDist = fairwayMaxDist + (width * 0.08f);
+
+        // Tee is back in the center (x=0), but we'll ensure height is above water
+        teePos.set(0, 0.38f, teeZ);
         holePos.set(0, 0, (depth - 50f) - halfDepth);
 
         signPositions.clear();
@@ -40,37 +45,50 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
             float distFromTee = worldZ - teeZ;
 
             for (int x = 0; x < width; x++) {
-                int distFromCenter = Math.abs(x - (width / 2));
+                float distFromCenter = Math.abs(x - (width / 2f));
                 Terrain.TerrainType type;
+                float h = 0.0f;
 
+                // Priority 1: The final 10% target area
                 if (z >= greenZoneStartIdx) {
                     type = Terrain.TerrainType.GREEN;
+                    h = 0.0f;
                 }
-                else if (distFromCenter < 12 && worldZ < teeAreaZLimit && worldZ > teeZ - 5f) {
+                // Priority 2: The hitting Tee Box (Raised platform over the water)
+                else if (distFromCenter < 10 && worldZ < teeAreaZLimit && worldZ > teeZ - 5f) {
                     type = Terrain.TerrainType.TEE;
+                    h = 0.2f; // Above the water level
                 }
-                else if (distFromCenter < 8) {
-                    type = Terrain.TerrainType.FAIRWAY; // Exact centre
-                } else if (distFromCenter < 15) {
-                    type = Terrain.TerrainType.SAND;    // Strips either side
-                } else if (distFromCenter < 35) {
-                    type = Terrain.TerrainType.STONE;   // Replace Green with Stone
-                } else {
-                    type = Terrain.TerrainType.ROUGH;   // Edges
+                // Priority 3: Radial Layout (Center-Out)
+                else {
+                    if (distFromCenter < waterHalfWidth) {
+                        type = Terrain.TerrainType.SAND;
+                        h = -2.0f; // Central Water Zone
+                    } else if (distFromCenter < stoneMaxDist) {
+                        type = Terrain.TerrainType.STONE;
+                    } else if (distFromCenter < greenMaxDist) {
+                        type = Terrain.TerrainType.GREEN;
+                    } else if (distFromCenter < fairwayMaxDist) {
+                        type = Terrain.TerrainType.FAIRWAY;
+                    } else if (distFromCenter < roughMaxDist) {
+                        type = Terrain.TerrainType.ROUGH;
+                    } else {
+                        type = Terrain.TerrainType.SAND; // Edge Sand
+                    }
                 }
 
                 map[x][z] = type;
-                heights[x][z] = 0;
+                heights[x][z] = h;
             }
 
             if (distFromTee > 10 && distFromTee % 50 < 0.5f) {
                 markerZPositions.add(worldZ);
             }
 
-            // Mark position for signs
             if (distFromTee > 40 && (int)distFromTee % 50 == 0) {
-                signPositions.add(new SignData(new Vector3(16, 0, worldZ), (int)distFromTee));
-                signPositions.add(new SignData(new Vector3(-16, 0, worldZ), (int)distFromTee));
+                // Signs on the outer edge of the stone strip
+                signPositions.add(new SignData(new Vector3(stoneMaxDist, 0, worldZ), (int)distFromTee));
+                signPositions.add(new SignData(new Vector3(-stoneMaxDist, 0, worldZ), (int)distFromTee));
             }
         }
     }

@@ -31,6 +31,7 @@ public class Terrain {
     private Vector3 holePosition;
     private ModelInstance flagInstance;
     private ModelInstance holeMarker;
+    private ModelInstance teeInstance;
     private float holeSize = 0.6f;
     private float waterLevel;
     private float greenMinH = Float.MAX_VALUE, greenMaxH = -Float.MAX_VALUE;
@@ -44,6 +45,8 @@ public class Terrain {
 
         if (generator instanceof ClassicGenerator) {
             this.waterLevel = ((ClassicGenerator) generator).getData().getWaterLevel();
+        } else {
+            this.waterLevel = -1;
         }
 
         calculateGreenBounds();
@@ -55,6 +58,7 @@ public class Terrain {
 
         createHoleMarker(holePosition);
         createFlag(holePosition);
+        createTee(teeCenter);
     }
 
     private void calculateGreenBounds() {
@@ -105,6 +109,7 @@ public class Terrain {
         for (Tree t : trees) t.render(batch, env);
         if (holeMarker != null) batch.render(holeMarker, env);
         if (flagInstance != null) batch.render(flagInstance, env);
+        if (teeInstance != null) batch.render(teeInstance, env);
     }
 
     public float getHeightAt(float worldX, float worldZ) {
@@ -165,6 +170,17 @@ public class Terrain {
         flagInstance.transform.setToTranslation(pos.x, pos.y + 2.5f, pos.z);
     }
 
+    private void createTee(Vector3 pos) {
+        ModelBuilder mb = new ModelBuilder();
+        // A simple white cylinder, very thin and short
+        Model teeModel = mb.createCylinder(0.03f, 0.15f, 0.03f, 8,
+                new Material(ColorAttribute.createDiffuse(Color.WHITE)),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+        teeInstance = new ModelInstance(teeModel);
+        // We set the translation so it sits halfway into the ground for stability
+        teeInstance.transform.setToTranslation(pos.x, pos.y - 0.15f, pos.z);
+    }
+
     public void updateFlag(Vector3 cameraPosition) {
         if (flagInstance == null) return;
         float dist = cameraPosition.dst(holePosition);
@@ -202,6 +218,7 @@ public class Terrain {
         for (Tree t : trees) t.dispose();
         if (holeMarker != null) holeMarker.model.dispose();
         if (flagInstance != null) flagInstance.model.dispose();
+        if (teeInstance != null) teeInstance.model.dispose();
     }
 
     public TerrainType getTerrainTypeAt(float worldX, float worldZ) {
