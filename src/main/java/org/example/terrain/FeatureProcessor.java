@@ -26,89 +26,115 @@ public class FeatureProcessor {
         this.waveOffsets = waveOffsets;
     }
 
-    public float getFairwayRounding(float zNorm, boolean isIsland, float islandCutoff, int SIZE_Z) {
-        if (isIsland && zNorm > islandCutoff) {
-            float distPast = zNorm - islandCutoff;
-            float radiusNorm = 15f / SIZE_Z;
-            if (distPast > radiusNorm) {
-                return 0f;
-            }
-            float ratio = distPast / radiusNorm;
-            return (float) Math.sqrt(1.0f - (ratio * ratio));
-        }
-        return 1.0f;
-    }
-
-    public float getCanyonGapMask(int z, int SIZE_Z) {
-        float maskFreq = 0.015f;
-        float maskThreshold = -0.2f;
-        float noise = generateMultiWaveNoise(z * maskFreq, off1 + 500f, 1.0f);
-
-        if (noise <= maskThreshold) return 0f;
-
-        float closestGapDist = 1.0f;
-        int window = 15;
-        for (int offset = -window; offset <= window; offset++) {
-            int checkZ = MathUtils.clamp(z + offset, 0, SIZE_Z - 1);
-            float checkNoise = generateMultiWaveNoise(checkZ * maskFreq, off1 + 500f, 1.0f);
-            if (checkNoise <= maskThreshold) {
-                closestGapDist = Math.min(closestGapDist, Math.abs(offset) / (float) window);
-            }
-        }
-        return (float) Math.sqrt(closestGapDist);
-    }
-
-    public void generateBunkerIslands(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ) {
+    public void generateSegmentedFairway(Terrain.TerrainType[][] map, int gX, int gZ, float fWidth) {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
-        int attempts = data.getnBunkers();
-        int placed = 0;
-        int maxIslands = data.getnBunkers() / 3;
+        float wiggle = data.getFairwayWiggle();
 
-        for (int i = 0; i < attempts && placed < maxIslands; i++) {
-            float zP = 0.2f + rng.nextFloat() * 0.65f;
-            int cz = (int) (SIZE_Z * zP);
-            float centerlineX = MathUtils.lerp(SIZE_X / 2f, (float) gX, zP);
-            int cx = (int) (centerlineX + (rng.nextFloat() - 0.5f) * 60f);
-            cx = MathUtils.clamp(cx, 20, SIZE_X - 20);
+        float cohesion = data.getFairwayCohesion();
+        float breakDensity = data.getFairwayBreakDensity();
 
-            if (Math.abs(heights[cx + 1][cz] - heights[cx - 1][cz]) > 0.8f) continue;
+        float widthNoiseFreq = 0.015f + (breakDensity * 0.065f);
 
-            placed++;
-            float baseH = heights[cx][cz];
-            float islandRadiusOuter = 8.0f + rng.nextFloat() * 6.0f;
-            float islandRadiusInner = islandRadiusOuter * 0.6f;
-            float moatWidth = 4.0f + rng.nextFloat() * 2.0f;
-            float flattenRadius = islandRadiusOuter + moatWidth + 5.0f;
+        float breakageThreshold = 0.2f - (cohesion * 1.5f) + (wiggle * 0.2f);
 
-            for (int x = cx - 25; x <= cx + 25; x++) {
-                for (int z = cz - 25; z <= cz + 25; z++) {
-                    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) continue;
-                    float dx = x - cx;
-                    float dz = z - cz;
-                    float angle = (float) Math.atan2(dz, dx);
-                    float wobble = MathUtils.sin(angle * 3 + i) * 1.5f + MathUtils.cos(angle * 5 - i) * 1.0f;
-                    float dist = (float) Math.sqrt(dx * dx + dz * dz);
-                    float effectiveDist = dist + wobble;
+        boolean wasLastRowEmpty = true;
 
-                    if (dist < flattenRadius) {
-                        float fT = 1.0f - MathUtils.clamp(dist / flattenRadius, 0, 1);
-                        heights[x][z] = MathUtils.lerp(heights[x][z], baseH, Interpolation.pow2In.apply(fT) * 0.8f);
-                    }
+        for (int z = 0; z < SIZE_Z; z++) {
+            float zNorm = z / (float) (SIZE_Z - 1);
 
-                    if (effectiveDist < islandRadiusOuter) {
+            float baseFreq = 0.015f + (wiggle * 0.02f);
+            float amplitude = (SIZE_X * 0.05f) + (wiggle * SIZE_X * 0.12f);
+            float wiggleOffset = (MathUtils.sin(z * baseFreq + off1) + MathUtils.sin(z * baseFreq * 2.1f + off2) * 0.5f) * amplitude;
+            float cx = MathUtils.lerp(SIZE_X / 2f, (float) gX, zNorm) + wiggleOffset;
+
+            // The raw noise oscillates between approx -1.5 and 1.5
+            float widthNoise = (MathUtils.sin(z * widthNoiseFreq + off2 * 0.5f) +
+                    MathUtils.sin(z * widthNoiseFreq * 1.8f + off1 * 0.3f) * 0.5f);
+
+            // TWEAK 3: Applied your 0.4f slope.
+            // This ensures the soft organic "grow" effect remains.
+            float blobT = MathUtils.clamp((widthNoise - breakageThreshold) * 0.4f, 0f, 1f);
+
+            // TWEAK 4: Added a slight width boost if blobT > 0 to compensate for the soft slope
+            float finalWidth = fWidth * (float) Math.sqrt(1.0f - (1.0f - blobT) * (1.0f - blobT));
+
+            if (finalWidth > 0.1f && wasLastRowEmpty) {
+                System.out.println("FAIRWAY_LOG: Segment START at Z=" + z + " (Norm:" + zNorm + ")");
+                wasLastRowEmpty = false;
+            } else if (finalWidth <= 0.1f && !wasLastRowEmpty) {
+                System.out.println("FAIRWAY_LOG: Segment END at Z=" + z + " (Norm:" + zNorm + ")");
+                wasLastRowEmpty = true;
+            }
+
+            if (finalWidth <= 1.0f) continue;
+
+            int xExtent = (int) (finalWidth / 2f);
+            for (int x = (int)cx - xExtent; x <= (int)cx + xExtent; x++) {
+                if (x < 0 || x >= SIZE_X) continue;
+
+                float dx = (x - cx) / (finalWidth / 2f);
+                if (dx * dx < 0.95f) {
+                    if (map[x][z] == Terrain.TerrainType.ROUGH) {
                         map[x][z] = Terrain.TerrainType.FAIRWAY;
-                        float lift = 2.2f;
-                        if (effectiveDist > islandRadiusInner) {
-                            float t = (effectiveDist - islandRadiusInner) / (islandRadiusOuter - islandRadiusInner);
-                            lift *= Interpolation.pow2Out.apply(1.0f - t);
-                        }
-                        heights[x][z] += lift;
-                    } else if (effectiveDist < islandRadiusOuter + moatWidth) {
-                        map[x][z] = Terrain.TerrainType.BUNKER;
-                        float dipT = 1.0f - Math.abs((islandRadiusOuter + moatWidth / 2f) - effectiveDist) / (moatWidth / 2f);
-                        heights[x][z] -= MathUtils.sin(dipT * MathUtils.PI / 2f) * 1.5f;
                     }
+                }
+            }
+        }
+    }
+
+    public void generateContinuousFairway(Terrain.TerrainType[][] map, int gX, int gZ, float maxFairwayWidth, float minFairwayWidth, float wiggleMult, boolean isIsland) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+
+        float widthBaseFreq = 0.015f + (rng.nextFloat() * 0.02f);
+        float widthFreq = widthBaseFreq * (40.0f / Math.max(20.0f, maxFairwayWidth));
+        float[] rawWidths = new float[SIZE_Z];
+        float[] centerlines = new float[SIZE_Z];
+
+        float GAP_START = 0.65f;
+        float GAP_END = 0.88f;
+        float ROUNDING_RANGE = 0.06f;
+
+        // First pass: Calculate centerlines and widths for every Z row
+        for (int z = 0; z < SIZE_Z; z++) {
+            float zNorm = z / (float) (SIZE_Z - 1);
+            float baseFreq = 0.02f + (wiggleMult * 0.03f);
+            float amplitude = (SIZE_X * 0.08f) + (wiggleMult * SIZE_X * 0.15f);
+
+            // Use the offsets passed in or stored in the processor
+            float wiggle = (MathUtils.sin(z * baseFreq + off1) + MathUtils.sin(z * baseFreq * 2.33f + off2) * 0.5f) * amplitude;
+            centerlines[z] = MathUtils.lerp(SIZE_X / 2f, (float) gX, zNorm) + wiggle;
+
+            float wNoise = (MathUtils.sin(z * widthFreq + off2) + MathUtils.sin(z * widthFreq * 1.77f + off1) * 0.4f);
+            float targetWidth = MathUtils.lerp(-15f, maxFairwayWidth, (wNoise + 1.2f) / 2.4f);
+
+            float roundMult = 1.0f;
+
+            if (isIsland) {
+                if (zNorm >= GAP_START && zNorm <= GAP_END) {
+                    roundMult = 0;
+                } else if (zNorm > GAP_START - ROUNDING_RANGE && zNorm < GAP_START) {
+                    float t = (GAP_START - zNorm) / ROUNDING_RANGE;
+                    roundMult = (float) Math.sqrt(1.0f - (1.0f - t) * (1.0f - t));
+                } else if (zNorm > GAP_END && zNorm < GAP_END + ROUNDING_RANGE) {
+                    float t = (zNorm - GAP_END) / ROUNDING_RANGE;
+                    roundMult = (float) Math.sqrt(1.0f - (1.0f - t) * (1.0f - t));
+                }
+            }
+
+            if (roundMult < 0.05f) roundMult = 0;
+
+            float finalMin = minFairwayWidth * roundMult;
+            rawWidths[z] = Math.max(finalMin, targetWidth * roundMult);
+        }
+
+        // Second pass: Map to the terrain grid
+        for (int z = 0; z < SIZE_Z; z++) {
+            for (int x = 0; x < SIZE_X; x++) {
+                if (map[x][z] != Terrain.TerrainType.ROUGH) continue;
+                if (rawWidths[z] > 0 && Math.abs(x - centerlines[z]) < rawWidths[z] / 2f) {
+                    map[x][z] = Terrain.TerrainType.FAIRWAY;
                 }
             }
         }

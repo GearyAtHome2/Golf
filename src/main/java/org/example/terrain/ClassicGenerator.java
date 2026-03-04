@@ -1,6 +1,5 @@
 package org.example.terrain;
 
-import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.LevelData;
@@ -50,7 +49,6 @@ public class ClassicGenerator implements ITerrainGenerator {
 
     @Override
     public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, Vector3 teePos, Vector3 holePos) {
-        // --- COASTAL CONFIGURATION ---
         float COAST_Z_THRESHOLD = 0.45f;
         float COAST_CURVINESS = 0.04f;
         float COAST_JAGGEDNESS = 0.01f;
@@ -78,7 +76,6 @@ public class ClassicGenerator implements ITerrainGenerator {
         float greenOffset = (rng.nextFloat() - 0.5f) * (SIZE_X * 0.5f);
         int greenCenterX = MathUtils.clamp((int) (SIZE_X / 2 + greenOffset), 20, SIZE_X - 20);
 
-        // 1. INITIALIZE MAP & BASE HEIGHTS
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 map[x][z] = Terrain.TerrainType.ROUGH;
@@ -107,13 +104,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
 
-        // 2. FEATURE MAPPING
         mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, waterLevel, maxFairwayWidth, isIslandMap);
-        if (isBunkerIslands) {
-            processor.generateBunkerIslands(map, heights, greenCenterX, greenCenterZ);
-        }
 
-        // 3. ISLAND DROP & GREEN PROTECTION PASS
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 float zNorm = z / (float) (SIZE_Z - 1);
@@ -135,10 +127,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                         }
                     }
 
-                    if (isPlayable) {
-                        if (currentHeight < waterLevel + 1.0f) {
-                            currentHeight = waterLevel + 1.0f;
-                        }
+                    if (isPlayable && currentHeight < waterLevel + 1.0f) {
+                        currentHeight = waterLevel + 1.0f;
                     }
                 }
 
@@ -157,7 +147,6 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
 
-        // 4. POST-PROCESSING
         smoothGreenBorders(map, heights);
 
         float offsetAmount = 25.0f;
@@ -171,7 +160,58 @@ public class ClassicGenerator implements ITerrainGenerator {
             waterLevel = newWater;
         }
 
+        applyFairwayWaterBuffer(map, heights, waterLevel, 3.0f);
+
         finalizePositionsAndTrees(map, heights, teePos, holePos, trees, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
+    }
+
+    private void applyFairwayWaterBuffer(Terrain.TerrainType[][] map, float[][] heights, float waterLevel, float tileDistance) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+
+        // Use a distance squared check for better performance than Math.sqrt
+        float distSqThreshold = tileDistance * tileDistance;
+
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                // We only care about cleaning up the Fairway
+                if (map[x][z] == Terrain.TerrainType.FAIRWAY) {
+
+                    // 1. Immediate height check: If it's literally underwater or too close to it
+                    if (heights[x][z] <= waterLevel + 0.5f) {
+                        map[x][z] = Terrain.TerrainType.ROUGH;
+                        continue;
+                    }
+
+                    // 2. Proximity check: Look for nearby water in the horizontal plane
+                    boolean nearWater = false;
+                    int range = (int) Math.ceil(tileDistance);
+
+                    for (int dx = -range; dx <= range; dx++) {
+                        for (int dz = -range; dz <= range; dz++) {
+                            int nx = x + dx;
+                            int nz = z + dz;
+
+                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
+                                // If any neighbor is below the water line
+                                if (heights[nx][nz] < waterLevel) {
+                                    float currentDistSq = dx * dx + dz * dz;
+                                    if (currentDistSq <= distSqThreshold) {
+                                        nearWater = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (nearWater) break;
+                    }
+
+                    if (nearWater) {
+                        map[x][z] = Terrain.TerrainType.ROUGH;
+                    }
+                }
+            }
+        }
     }
 
     private void smoothGreenBorders(Terrain.TerrainType[][] map, float[][] heights) {
@@ -183,7 +223,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 buffer[x][z] = heights[x][z];
-                if ((map[x][z] == Terrain.TerrainType.GREEN || (data.getArchetype() == LevelData.Archetype.ISLAND_COAST)) && isBorderTile(x, z, map)) {
+                if ((map[x][z] == Terrain.TerrainType.GREEN || (data.getArchetype() == LevelData.Archetype.ISLAND_COAST && map[x][z] == Terrain.TerrainType.ROUGH)) && isBorderTile(x, z, map)) {
                     float avg = 0;
                     int kIdx = 0;
                     for (int dx = -1; dx <= 1; dx++) {
@@ -269,49 +309,38 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_Z = map[0].length;
         int teeCenterX = SIZE_X / 2;
         int teeCenterZ = (int) (SIZE_Z * 0.05f);
+        float minFWidth = data.getMinFairwayWidth();
 
-        // Terminating Fairway Config
-        float gapStartNorm = 0.65f;
-        float roundingRadius = fWidth * 0.6f; // Adjust for "bluntness" of the end
-
-        for (int x = teeCenterX - 7; x < teeCenterX + 7; x++) {
-            for (int z = teeCenterZ - 6; z < teeCenterZ + 6; z++) {
-                if (x >= 0 && x < SIZE_X && z >= 0 && z < SIZE_Z) {
+        // 1. Map Tee and Green (Keep this logic here as it's "Standard")
+        for (int z = 0; z < SIZE_Z; z++) {
+            for (int x = 0; x < SIZE_X; x++) {
+                if (Math.abs(x - teeCenterX) < 7 && Math.abs(z - teeCenterZ) < 6) {
                     map[x][z] = Terrain.TerrainType.TEE;
+                } else {
+                    float dxG = (x - gX);
+                    float dzG = (z - gZ);
+                    float distToGreenCenter = (float) Math.sqrt(dxG * dxG + dzG * dzG);
+                    float angle = MathUtils.atan2(dzG, dxG);
+                    float dynamicRadius = 20f + (MathUtils.sin(angle * 3 + off1) * 3.1f + MathUtils.cos(angle * 5 + off2) * 1.5f);
+                    if (distToGreenCenter <= dynamicRadius) {
+                        map[x][z] = Terrain.TerrainType.GREEN;
+                    }
                 }
             }
         }
 
-        float greenRX = 12f, greenRZ = 18f;
-        for (int z = 0; z < SIZE_Z; z++) {
-            float zNorm = z / (float) (SIZE_Z - 1);
-            float centerlineX = MathUtils.lerp(SIZE_X / 2f, (float) gX, zNorm) + MathUtils.sin(z * 0.02f + off1) * (SIZE_X * 0.1f);
-            float currentWidth = fWidth * (0.8f + (MathUtils.sin(z * 0.03f + off2) + 1f) * 0.2f);
-
-            // FAIRWAY TERMINATION LOGIC
-            boolean pastTermination = false;
-            if (isIsland) {
-                float distToEdge = (gapStartNorm - zNorm) * SIZE_Z;
-
-                if (zNorm > gapStartNorm) {
-                    pastTermination = true; // Fairway stops existing for good here
-                } else if (distToEdge < roundingRadius) {
-                    // We are approaching the end from the south - taper the width down
-                    float t = MathUtils.clamp(distToEdge / roundingRadius, 0f, 1f);
-                    currentWidth *= Math.sqrt(1.0f - (1.0f - t) * (1.0f - t)); // Circular tip
-                }
-            }
-
-            for (int x = 0; x < SIZE_X; x++) {
-                float dxG = (x - gX) * SCALE;
-                float dzG = (z - gZ) * SCALE;
-
-                if ((dxG * dxG) / (greenRX * greenRX) + (dzG * dzG) / (greenRZ * greenRZ) <= 1.0f) {
-                    map[x][z] = Terrain.TerrainType.GREEN;
-                } else if (!pastTermination && Math.abs(x - centerlineX) < currentWidth / 2f && map[x][z] == Terrain.TerrainType.ROUGH) {
-                    map[x][z] = Terrain.TerrainType.FAIRWAY;
-                }
-            }
+        if (minFWidth <= 0) {
+            processor.generateSegmentedFairway(map, gX, gZ, fWidth);
+        } else {
+            processor.generateContinuousFairway(
+                    map,
+                    gX,
+                    gZ,
+                    fWidth,
+                    minFWidth,
+                    data.getFairwayWiggle(),
+                    isIsland
+            );
         }
     }
 
@@ -319,11 +348,13 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
         teeP.set((SIZE_X / 2f * SCALE) - (SIZE_X * SCALE / 2f), heights[SIZE_X / 2][(int)(SIZE_Z * 0.05f)] + 0.2f, ((SIZE_Z * 0.05f) * SCALE) - (SIZE_Z * SCALE / 2f));
-        holeP.set((gX * SCALE) - (SIZE_X * SCALE / 2f), heights[gX][gZ], (gZ * SCALE) - (SIZE_Z * SCALE / 2f));
-
+        float randomAngle = rng.nextFloat() * MathUtils.PI * 2;
+        float randomDist = rng.nextFloat() * 8f;
+        int flagX = MathUtils.clamp(gX + (int)(MathUtils.cos(randomAngle) * randomDist), 0, SIZE_X - 1);
+        int flagZ = MathUtils.clamp(gZ + (int)(MathUtils.sin(randomAngle) * randomDist), 0, SIZE_Z - 1);
+        holeP.set((flagX * SCALE) - (SIZE_X * SCALE / 2f), heights[flagX][flagZ], (flagZ * SCALE) - (SIZE_Z * SCALE / 2f));
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
         int treeCount = (int) (SIZE_Z * data.getTreeDensity());
-
         for (int i = 0; i < treeCount; i++) {
             int tx = rng.nextInt(SIZE_X - 1), tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
@@ -331,7 +362,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             float slope = (float) Math.sqrt(Math.pow(heights[tx + 1][tz] - worldY, 2) + Math.pow(heights[tx][tz + 1] - worldY, 2));
             if (slope > 1.2f) continue;
             float tH = isCliff ? cliffDelta * (0.8f + rng.nextFloat() * 0.2f) : data.getTreeHeight();
-            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tx * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius()));
+            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius()));
         }
     }
 

@@ -40,12 +40,8 @@ public class Terrain {
         this.terrainMap = new TerrainType[SIZE_X][SIZE_Z];
         this.heightMap = new float[SIZE_X][SIZE_Z];
 
-        // 1. Run the generation. This may call data.setWaterLevel() internally.
         generator.generate(terrainMap, heightMap, trees, teeCenter = new Vector3(), holePosition = new Vector3());
 
-        // 2. Sync the waterLevel.
-        // Since we know ClassicGenerator updates the LevelData it was constructed with,
-        // we cast to access that updated data and refresh our local waterLevel.
         if (generator instanceof ClassicGenerator) {
             this.waterLevel = ((ClassicGenerator) generator).getData().getWaterLevel();
         }
@@ -187,8 +183,6 @@ public class Terrain {
         float w = SIZE_X * SCALE;
         float h = SIZE_Z * SCALE;
 
-        // Corrected ModelBuilder.createRect parameters:
-        // x1,y1,z1, x2,y2,z2, x3,y3,z3, x4,y4,z4, nx,ny,nz, material, usage
         Model water = builder.createRect(
                 0, waterLevel, h,
                 w, waterLevel, h,
@@ -236,7 +230,8 @@ public class Terrain {
         FAIRWAY(0.6f, 0.2f, 1.05f, 1.0f, new Color(0.1f, 0.4f, 0.1f, 1f)),
         ROUGH(1.70f, 4.5f, 1.5f, 1.4f, new Color(0.02f, 0.15f, 0.02f, 1f)),
         BUNKER(4.2f, 12.0f, 2.5f, 1.8f, new Color(0.85f, 0.8f, 0.5f, 1f)),
-        GREEN(0.2f, 0.1f, 1.05f, 0.9f, new Color(0.1f, 0.6f, 0.1f, 1f));
+        GREEN(0.2f, 0.1f, 1.05f, 0.9f, new Color(0.1f, 0.6f, 0.1f, 1f)),
+        STONE(0.1f, 0.1f, 1.05f, 1.5f, new Color(0.2f, 0.2f, 0.23f, 1f));
 
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty;
         public final Color color;

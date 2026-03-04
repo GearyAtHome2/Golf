@@ -43,9 +43,11 @@ public class LevelData {
     private int nBunkers;
     private Vector3 wind;
 
-    // New parameters for fairway control
+    // Parameters for fairway control
     private float fairwayWiggle;
     private float fairwayRoughIslands;
+    private float fairwayCohesion;
+    private float fairwayBreakDensity;
 
     // Getters and Setters
     public long getSeed() { return seed; }
@@ -90,4 +92,9 @@ public class LevelData {
     public void setFairwayWiggle(float fairwayWiggle) { this.fairwayWiggle = fairwayWiggle; }
     public float getFairwayRoughIslands() { return fairwayRoughIslands; }
     public void setFairwayRoughIslands(float fairwayRoughIslands) { this.fairwayRoughIslands = fairwayRoughIslands; }
+
+    public float getFairwayCohesion() { return fairwayCohesion; }
+    public void setFairwayCohesion(float fairwayCohesion) { this.fairwayCohesion = fairwayCohesion; }
+    public float getFairwayBreakDensity() { return fairwayBreakDensity; }
+    public void setFairwayBreakDensity(float fairwayBreakDensity) { this.fairwayBreakDensity = fairwayBreakDensity; }
 }

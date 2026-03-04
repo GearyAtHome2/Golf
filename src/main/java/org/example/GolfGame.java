@@ -267,7 +267,9 @@ public class GolfGame extends ApplicationAdapter {
     private void renderUI() {
         boolean isPractice = (currentState == GameState.PRACTICE);
         if (isVictory) hud.renderVictory(hud.getShotCount());
-        else if (currentState == GameState.PAUSED) hud.renderPauseMenu(isPractice, currentLevelData.getSeed());
+        else if (currentState == GameState.PAUSED) {
+            hud.renderPauseMenu(isPractice, currentLevelData);
+        }
         else {
             hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice, currentLevelData, camera, terrain);
         }

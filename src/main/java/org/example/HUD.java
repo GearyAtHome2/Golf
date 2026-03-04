@@ -148,7 +148,7 @@ public class HUD {
         batch.end();
     }
 
-    public void renderPauseMenu(boolean isPractice, long seed) {
+    public void renderPauseMenu(boolean isPractice, LevelData levelData) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.A)) {
@@ -178,20 +178,24 @@ public class HUD {
         font.setColor(Color.GRAY);
         font.draw(batch, "----------------", centerX - 80, centerY - 60);
         font.setColor(Color.WHITE);
+
         String menuText = "[R] RESET BALL  |  [N] NEW LEVEL  |  [ESC] RESUME";
-        if (!isPractice) {
+
+        // Only handle Seed logic if we aren't in practice and have valid data
+        if (!isPractice && levelData != null) {
             menuText += "  |  [C] COPY SEED";
             if (Gdx.input.isKeyJustPressed(Input.Keys.C)) {
-                Gdx.app.getClipboard().setContents(String.valueOf(seed));
+                Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
                 seedFeedbackTimer = 2.0f;
             }
         }
+
         font.draw(batch, menuText, 50, 100);
 
-        if (seedFeedbackTimer > 0) {
+        if (seedFeedbackTimer > 0 && levelData != null) {
             seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
             font.setColor(Color.GREEN);
-            font.draw(batch, "SEED COPIED TO CLIPBOARD: " + seed, 50, 150);
+            font.draw(batch, "SEED COPIED TO CLIPBOARD: " + levelData.getSeed(), 50, 150);
         }
         batch.end();
     }
