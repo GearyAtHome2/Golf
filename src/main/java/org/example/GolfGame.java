@@ -63,7 +63,6 @@ public class GolfGame extends ApplicationAdapter {
     private Model markerLineModel;
     private final List<ModelInstance> yardageMarkers = new ArrayList<>();
 
-    // Fallback for practice mode or zero-wind levels
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
 
     @Override
@@ -87,7 +86,10 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void createYardageMarkers(PracticeRangeGenerator gen) {
-        if (markerLineModel != null) markerLineModel.dispose();
+        if (markerLineModel != null) {
+            markerLineModel.dispose();
+            markerLineModel = null;
+        }
         yardageMarkers.clear();
         ModelBuilder mb = new ModelBuilder();
         markerLineModel = mb.createBox(70f, 0.05f, 0.3f,
@@ -103,11 +105,24 @@ public class GolfGame extends ApplicationAdapter {
     private void initLevel() { initLevel(-1); }
 
     private void initLevel(long manualSeed) {
-        if (terrain != null) terrain.dispose();
-        if (ball != null) ball.dispose();
+        // --- SAFE CLEANUP SEQUENCE ---
+        if (terrain != null) {
+            terrain.dispose();
+            terrain = null;
+        }
+        if (ball != null) {
+            ball.dispose();
+            ball = null;
+        }
         for (DistanceSign s : rangeSigns) s.dispose();
         rangeSigns.clear();
+
         yardageMarkers.clear();
+        if (markerLineModel != null) {
+            markerLineModel.dispose();
+            markerLineModel = null;
+        }
+
         for (Ball ghost : shotHistory) ghost.dispose();
         shotHistory.clear();
 
@@ -121,7 +136,7 @@ public class GolfGame extends ApplicationAdapter {
             generator = new ClassicGenerator(currentLevelData);
         }
 
-        float waterLevel =  currentLevelData == null ? -1 : currentLevelData.getWaterLevel();
+        float waterLevel = currentLevelData == null ? -1 : currentLevelData.getWaterLevel();
         terrain = new Terrain(generator, waterLevel);
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
@@ -194,9 +209,8 @@ public class GolfGame extends ApplicationAdapter {
             Vector3 currentWind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
             windManager.update(effDelta, currentWind, camera.position);
 
-            // --- ADDED CANCEL CHECK HERE ---
             if (hud.wasMinigameCanceled()) {
-                shotController.reset(); // You may need to add this method to ShotController
+                shotController.reset();
             }
 
             if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain)) {
@@ -258,7 +272,6 @@ public class GolfGame extends ApplicationAdapter {
         particleManager.render(modelBatch, environment);
         modelBatch.end();
 
-        // Render wind particles if level has wind and not in victory screen
         if (currentLevelData != null && !isVictory) {
             windManager.render(camera, currentLevelData.getWind());
         }
@@ -276,6 +289,18 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void handleInput() {
+        if (hud.wasMainMenuRequested()) {
+            currentState = GameState.START;
+            if (terrain != null) { terrain.dispose(); terrain = null; }
+            if (ball != null) { ball.dispose(); ball = null; }
+            for (Ball ghost : shotHistory) ghost.dispose();
+            shotHistory.clear();
+            for (DistanceSign s : rangeSigns) s.dispose();
+            rangeSigns.clear();
+            if (markerLineModel != null) { markerLineModel.dispose(); markerLineModel = null; }
+            return;
+        }
+
         if (currentState == GameState.START) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) menuSelection = (menuSelection - 1 + 3) % 3;
             if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) menuSelection = (menuSelection + 1) % 3;
@@ -307,6 +332,7 @@ public class GolfGame extends ApplicationAdapter {
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.UP)) gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
+
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             if (currentState == GameState.PAUSED) currentState = previousState;
             resetBallToLastShot();
@@ -322,10 +348,12 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void resetBallToLastShot() {
-        ball.resetToLastPosition();
-        hasCurrentBallBeenHit = false;
-        isVictory = false;
-        practiceResetTimer = 0f;
+        if (ball != null) {
+            ball.resetToLastPosition();
+            hasCurrentBallBeenHit = false;
+            isVictory = false;
+            practiceResetTimer = 0f;
+        }
     }
 
     private void setupEnvironment() {

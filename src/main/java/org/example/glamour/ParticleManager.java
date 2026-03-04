@@ -84,14 +84,14 @@ public class ParticleManager {
             case GREEN -> 0.15f;
             case FAIRWAY -> 0.4f;
             case ROUGH -> 0.8f;
-            case BUNKER -> 1.2f;
+            case SAND -> 1.2f;
             case STONE -> 0.8f;
             default -> 0.5f;
         };
     }
 
     private Color getTerrainColor(Terrain.TerrainType type, Ball.State state) {
-        if (type == Terrain.TerrainType.BUNKER) return Color.TAN;
+        if (type == Terrain.TerrainType.SAND) return Color.TAN;
 
         Color surfaceGreen = switch (type) {
             case GREEN -> new Color(0.2f, 0.8f, 0.2f, 1f);

@@ -1,6 +1,5 @@
 package org.example.terrain;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.LevelData;
@@ -264,7 +263,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         if (zNorm > coastThreshold && !isPlayable) {
             if (type == Terrain.TerrainType.ROUGH) currentHeight -= 20.0f;
-            else if (type == Terrain.TerrainType.BUNKER) {
+            else if (type == Terrain.TerrainType.SAND) {
                 float beachT = MathUtils.clamp((currentHeight - waterLevel) / 5.0f, 0f, 1f);
                 currentHeight = MathUtils.lerp(waterLevel - 1.5f, currentHeight, beachT);
             }

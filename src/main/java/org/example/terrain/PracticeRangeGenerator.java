@@ -23,10 +23,17 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
         float halfDepth = depth / 2f;
 
         float teeZ = 25f - halfDepth;
+        // The tee box area (e.g., 10 units deep)
+        float teeAreaZLimit = teeZ + 10f;
+
+        // Final 10% of the course
+        int greenZoneStartIdx = (int)(depth * 0.9f);
+
         teePos.set(0, 0.2f, teeZ);
         holePos.set(0, 0, (depth - 50f) - halfDepth);
 
         signPositions.clear();
+        markerZPositions.clear();
 
         for (int z = 0; z < depth; z++) {
             float worldZ = z - halfDepth;
@@ -36,9 +43,21 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
                 int distFromCenter = Math.abs(x - (width / 2));
                 Terrain.TerrainType type;
 
-                if (distFromCenter < 12) type = Terrain.TerrainType.TEE;
-                else if (distFromCenter < 35) type = Terrain.TerrainType.FAIRWAY;
-                else type = Terrain.TerrainType.ROUGH;
+                if (z >= greenZoneStartIdx) {
+                    type = Terrain.TerrainType.GREEN;
+                }
+                else if (distFromCenter < 12 && worldZ < teeAreaZLimit && worldZ > teeZ - 5f) {
+                    type = Terrain.TerrainType.TEE;
+                }
+                else if (distFromCenter < 8) {
+                    type = Terrain.TerrainType.FAIRWAY; // Exact centre
+                } else if (distFromCenter < 15) {
+                    type = Terrain.TerrainType.SAND;    // Strips either side
+                } else if (distFromCenter < 35) {
+                    type = Terrain.TerrainType.STONE;   // Replace Green with Stone
+                } else {
+                    type = Terrain.TerrainType.ROUGH;   // Edges
+                }
 
                 map[x][z] = type;
                 heights[x][z] = 0;
@@ -50,8 +69,8 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
 
             // Mark position for signs
             if (distFromTee > 40 && (int)distFromTee % 50 == 0) {
-                signPositions.add(new SignData(new Vector3(14, 0, worldZ), (int)distFromTee));
-                signPositions.add(new SignData(new Vector3(-14, 0, worldZ), (int)distFromTee));
+                signPositions.add(new SignData(new Vector3(16, 0, worldZ), (int)distFromTee));
+                signPositions.add(new SignData(new Vector3(-16, 0, worldZ), (int)distFromTee));
             }
         }
     }

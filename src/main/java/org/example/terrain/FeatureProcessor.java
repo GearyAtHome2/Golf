@@ -1,6 +1,5 @@
 package org.example.terrain;
 
-import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import org.example.LevelData;
@@ -280,7 +279,7 @@ public class FeatureProcessor {
                 if (dist < radius) {
                     float normDist = dist / radius;
                     finalHeightMod = -depth * (1.0f - (normDist * normDist));
-                    typeOverride = Terrain.TerrainType.BUNKER;
+                    typeOverride = Terrain.TerrainType.SAND;
                     if (dist < peakRadius) {
                         float peakNorm = dist / peakRadius;
                         float peakShape = (float) Math.cos(peakNorm * MathUtils.PI / 2);

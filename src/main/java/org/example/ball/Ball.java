@@ -30,6 +30,9 @@ public class Ball {
     private static final float DEFLECTION_CHANCE_PER_METER = 0.6f;
     private static final float DEFLECTION_MAGNITUDE = 10f;
 
+    private static final float MAX_STEP_UP = 1.0f;
+    private static final int SUB_STEPS = 4;
+
     private final Model model;
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
@@ -74,34 +77,51 @@ public class Ball {
     }
 
     public void update(float delta, Terrain terrain, Vector3 baseWind) {
-        if (hitCooldown > 0) hitCooldown -= delta;
-        updateTrail(delta);
-
         if (state == State.STATIONARY) {
             updateVisuals();
             return;
         }
 
+        if (hitCooldown > 0) hitCooldown -= delta;
+        updateTrail(delta);
         recordTrailPoint();
-        handleWater(delta, terrain);
 
-        float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
-        float stickiness = (state == State.ROLLING) ? 0.15f : 0.02f;
-        boolean touchingTerrain = hitCooldown <= 0f && position.y <= (terrainHeight + stickiness);
-
-        if (touchingTerrain) {
-            handleTerrainPhysics(delta, terrain, terrainHeight);
-        } else {
-            handleAirPhysics(delta, baseWind);
+        float subDelta = delta / SUB_STEPS;
+        for (int i = 0; i < SUB_STEPS; i++) {
+            processPhysicsStep(subDelta, terrain, baseWind, i);
+            if (state == State.STATIONARY) break;
         }
-
-        handleTreeCollisions(terrain, delta);
-        position.add(tempV1.set(velocity).scl(delta));
 
         updateVisuals();
     }
 
-    private void handleAirPhysics(float delta, Vector3 baseWind) {
+    private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind, int stepIndex) {
+        float preStepY = position.y;
+        handleWater(delta, terrain);
+
+        float terrainHeight = terrain.getHeightAt(position.x, position.z) + RADIUS / 3;
+
+        // RE-FIXED: Use ROLLING state to determine if we are locked to terrain.
+        // Don't auto-capture AIR state balls unless they are severely tunneling.
+        boolean touchingTerrain = (state == State.ROLLING && position.y <= terrainHeight + 0.1f)
+                || (position.y < terrainHeight - 0.2f);
+
+        if (touchingTerrain) {
+            handleTerrainPhysics(delta, terrain, terrainHeight);
+            position.add(tempV1.set(velocity).scl(delta));
+        } else {
+            handleAirPhysicsWithSweep(delta, terrain, baseWind, stepIndex);
+        }
+
+        handleTreeCollisions(terrain, delta);
+
+        float stepYDelta = position.y - preStepY;
+        if (Math.abs(stepYDelta) > 2.0f && hitCooldown <= 0f) {
+            position.y = preStepY + MathUtils.clamp(stepYDelta, -1f, 1f);
+        }
+    }
+
+    private void handleAirPhysicsWithSweep(float delta, Terrain terrain, Vector3 baseWind, int stepIndex) {
         state = State.AIR;
         Vector3 windAtHeight = BallPhysics.getWindAtHeight(baseWind, position.y);
 
@@ -111,6 +131,50 @@ public class Ball {
         tempV1.add(BallPhysics.getMagnusForce(velocity, windAtHeight, spin, LIFT_COEFF, SIDE_COEFF));
 
         velocity.add(tempV1.scl(delta));
+        tempV2.set(velocity).scl(delta);
+
+        boolean collisionFound = false;
+        Vector3 bestNormal = new Vector3();
+
+        // 3-Point Sweep to catch cliffs before we "teleport" inside
+        for (float t = 0.33f; t <= 1.0f; t += 0.33f) {
+            float checkX = position.x + (tempV2.x * t);
+            float checkZ = position.z + (tempV2.z * t);
+            float checkY = position.y + (tempV2.y * t);
+            float hAtPoint = terrain.getHeightAt(checkX, checkZ) + RADIUS / 3;
+
+            if (checkY < hAtPoint) {
+                Vector3 nAtPoint = terrain.getNormalAt(checkX, checkZ);
+                float angle = MathUtils.acos(nAtPoint.y) * MathUtils.radiansToDegrees;
+                float hDelta = hAtPoint - checkY;
+
+                if (angle > 45f || hDelta > MAX_STEP_UP) {
+                    collisionFound = true;
+                    bestNormal.set(nAtPoint);
+                    break;
+                }
+            }
+        }
+
+        if (collisionFound && hitCooldown <= 0f) {
+            Vector3 wallNormal = new Vector3(bestNormal.x, 0, bestNormal.z).nor();
+            if (wallNormal.len() < 0.1f) wallNormal.set(-velocity.x, 0, -velocity.z).nor();
+
+            velocity.set(BallPhysics.calculateBounce(velocity, wallNormal, BOUNCE_RESTITUTION));
+            position.add(tempV1.set(wallNormal).scl(0.15f));
+            hitCooldown = 0.05f;
+        } else {
+            float nextHeight = terrain.getHeightAt(position.x + tempV2.x, position.z + tempV2.z) + RADIUS / 3;
+            // Standard Ground Landing
+            if (position.y + tempV2.y < nextHeight && hitCooldown <= 0f) {
+                // Determine normal at landing point for the bounce
+                Vector3 landNormal = terrain.getNormalAt(position.x + tempV2.x, position.z + tempV2.z);
+                handleTerrainPhysics(delta, terrain, nextHeight);
+                position.add(tempV1.set(velocity).scl(delta));
+            } else {
+                position.add(tempV2);
+            }
+        }
 
         if (velocity.len() > 0.1f) {
             float spinDrag = 0.05f + (velocity.len() * velocity.len() * 0.0002f);
@@ -121,14 +185,25 @@ public class Ball {
     private void handleTerrainPhysics(float delta, Terrain terrain, float terrainHeight) {
         Vector3 normal = terrain.getNormalAt(position.x, position.z).nor();
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
-        boolean isGreen = (type == Terrain.TerrainType.GREEN);
+        float slope = MathUtils.acos(normal.y) * MathUtils.radiansToDegrees;
 
-        if (position.y < terrainHeight) position.y = terrainHeight;
-        float vDotN = velocity.dot(normal);
-
-        if (isGreen) {
-            Gdx.app.log("PUTT_LOG", "--- COLLISION START --- Pre-Vel: " + velocity.len() + " vDotN: " + vDotN);
+        // EMERGENCY TUNNEL ESCAPE
+        if (terrainHeight - position.y > MAX_STEP_UP) {
+            tempV1.set(normal.x, 0, normal.z).nor();
+            if (tempV1.len() < 0.1f) {
+                position.y = terrainHeight;
+            } else {
+                position.add(tempV1.scl(0.4f));
+                velocity.set(BallPhysics.calculateBounce(velocity, tempV1, 0.3f));
+            }
+            return;
         }
+
+        if (position.y < terrainHeight && slope < 45f) {
+            position.y = terrainHeight;
+        }
+
+        float vDotN = velocity.dot(normal);
 
         if (state == State.ROLLING) {
             vNormal.set(normal).scl(vDotN);
@@ -140,6 +215,7 @@ public class Ball {
             vTangent.set(velocity).sub(vNormal);
         }
 
+        // Only transition to ROLLING if vertical impact is low
         if (state != State.ROLLING && Math.abs(vDotN) > MIN_BOUNCE_VY) {
             applyBounce(normal, type);
         } else {
@@ -154,7 +230,6 @@ public class Ball {
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
         float frictionImpact = (type.kineticFriction - 0.2f) * 0.08f;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - frictionImpact, 0.05f, BOUNCE_RESTITUTION);
-
         velocity.set(BallPhysics.calculateBounce(velocity, normal, localRestitution));
 
         float vDotN = velocity.dot(normal);
@@ -167,7 +242,6 @@ public class Ball {
         }
 
         velocity.set(vTangent).add(vNormal);
-
         state = State.CONTACT;
         lastInteraction = Interaction.TERRAIN;
         spin.scl(0.4f);
@@ -176,11 +250,6 @@ public class Ball {
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, Terrain.TerrainType type, float delta) {
         Vector3 slopeForce = BallPhysics.getSlopeForce(BallPhysics.getGravityForce(GRAVITY), normal);
         Vector3 friction = BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY);
-
-        if (type == Terrain.TerrainType.GREEN) {
-            Gdx.app.log("PUTT_LOG", "Slope: " + slopeForce.len() + " Friction: " + friction.len());
-        }
-
         tangentVel.add(slopeForce.scl(delta));
         tangentVel.add(friction.scl(delta));
         spin.setZero();
@@ -189,7 +258,6 @@ public class Ball {
     private void checkStationaryCondition(Terrain.TerrainType type, Vector3 normal) {
         float slopeMag = BallPhysics.getSlopeForce(BallPhysics.getGravityForce(GRAVITY), normal).len();
         float staticFriction = type.kineticFriction * Math.abs(normal.y * GRAVITY) * type.staticMultiplier;
-
         if (velocity.len() < STOP_SPEED && slopeMag < staticFriction) {
             velocity.setZero();
             spin.setZero();
@@ -223,8 +291,8 @@ public class Ball {
                 velocity.z = tempV1.z * speedXZ;
                 velocity.scl(0.8f);
                 spin.scl(0.2f);
-                position.x += tempV1.x * 0.01f;
-                position.z += tempV1.z * 0.01f;
+                position.x += tempV1.x * 0.05f;
+                position.z += tempV1.z * 0.05f;
                 lastInteraction = Interaction.TERRAIN;
                 continue;
             }
@@ -263,7 +331,6 @@ public class Ball {
         float hLen = MathUtils.cos(angleRad);
         velocity.x *= hLen; velocity.z *= hLen;
         velocity.scl(finalSpeed);
-
         state = (loft < 1.0f) ? State.ROLLING : State.AIR;
         hitCooldown = (state == State.ROLLING) ? 0.02f : 0.1f;
         trail.clear();

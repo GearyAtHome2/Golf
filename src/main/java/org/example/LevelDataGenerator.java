@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.RAZORBACK_RIDGE;
+//        selectedType = LevelData.Archetype.SHADOW_CANYON;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm based on Archetype ---

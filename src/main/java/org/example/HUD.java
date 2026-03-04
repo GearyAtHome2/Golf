@@ -74,6 +74,9 @@ public class HUD {
     public AnimSpeed animSetting = AnimSpeed.NONE;
     public GameDifficulty currentDifficulty = GameDifficulty.EASY;
 
+    // --- State Management ---
+    private boolean mainMenuRequested = false;
+
     // --- Minigame Variables ---
     private boolean minigameActive = false;
     private boolean needleStopped = false;
@@ -84,7 +87,6 @@ public class HUD {
     private float barWidthMult = 1.0f;
     private float targetBarWidthMult = 1.0f;
 
-    // Centers are stored as 0.0 to 1.0 (screen width percentage)
     private float greenCenter = 0.5f;
     private float targetGreenCenter = 0.5f;
     private float amberCenter = 0.5f;
@@ -93,7 +95,6 @@ public class HUD {
 
     private float shotRandomness = 0f;
 
-    // Smooth Swell Logic
     private float barSwellTimer = 0f;
     private final float SWELL_DURATION = 0.3f;
 
@@ -151,13 +152,16 @@ public class HUD {
     public void renderPauseMenu(boolean isPractice, LevelData levelData) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.A)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.COMMA)) {
             int next = (animSetting.ordinal() + 1) % AnimSpeed.values().length;
             animSetting = AnimSpeed.values()[next];
         }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.D)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.PERIOD)) {
             int next = (currentDifficulty.ordinal() + 1) % GameDifficulty.values().length;
             currentDifficulty = GameDifficulty.values()[next];
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.M)) {
+            mainMenuRequested = true;
         }
 
         batch.begin();
@@ -172,16 +176,15 @@ public class HUD {
         font.setColor(Color.YELLOW);
         font.draw(batch, "--- SETTINGS ---", centerX - 80, centerY + 60);
         font.setColor(Color.WHITE);
-        font.draw(batch, "[A] ANIMATION: " + animSetting.name(), centerX - 120, centerY + 20);
-        font.draw(batch, "[D] DIFFICULTY: " + currentDifficulty.name(), centerX - 120, centerY - 20);
+        font.draw(batch, "[,] ANIMATION: " + animSetting.name(), centerX - 120, centerY + 20);
+        font.draw(batch, "[.] DIFFICULTY: " + currentDifficulty.name(), centerX - 120, centerY - 20);
 
         font.setColor(Color.GRAY);
         font.draw(batch, "----------------", centerX - 80, centerY - 60);
         font.setColor(Color.WHITE);
 
-        String menuText = "[R] RESET BALL  |  [N] NEW LEVEL  |  [ESC] RESUME";
+        String menuText = "[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [ESC] RESUME";
 
-        // Only handle Seed logic if we aren't in practice and have valid data
         if (!isPractice && levelData != null) {
             menuText += "  |  [C] COPY SEED";
             if (Gdx.input.isKeyJustPressed(Input.Keys.C)) {
@@ -207,7 +210,6 @@ public class HUD {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
-        // Spin UI
         float spinX = 80;
         float spinY = 80;
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -313,7 +315,6 @@ public class HUD {
             minigameTimer += delta;
             float stepDuration = (animSetting == AnimSpeed.NONE) ? 0.01f : (0.7f / animSetting.mult);
 
-            // 1. Terrain Slope pushes the GREEN zone
             Vector3 normal = terrain.getNormalAt(activeBallPos.x, activeBallPos.z);
             Vector3 rightOfAim = new Vector3(camera.direction).crs(Vector3.Y).nor();
             float sidePush = normal.dot(rightOfAim);
@@ -323,24 +324,18 @@ public class HUD {
             targetGreenCenter = MathUtils.clamp(targetGreenCenter, greenHalfW, 1.0f - greenHalfW);
             greenCenter = MathUtils.lerp(greenCenter, targetGreenCenter, delta * 6f);
 
-            // 2. Side Spin + Randomness pushes the Nested Children
-            // We define the widths here for calculation
             float amberHalfW = greenHalfW * 0.6f;
             float goldHalfW = greenHalfW * 0.15f;
             float purpleHalfW = goldHalfW * 0.20f;
 
             float rawSpinForce = (spinDot.x * 0.8f + shotRandomness) * 0.1f;
 
-            // Nested Constraint Logic:
-            // Amber follows spin but capped by Green bounds
             float targetAmber = greenCenter + rawSpinForce;
             amberCenter = MathUtils.lerp(amberCenter, MathUtils.clamp(targetAmber, greenCenter - (greenHalfW - amberHalfW), greenCenter + (greenHalfW - amberHalfW)), delta * 6f);
 
-            // Gold follows spin but capped by Amber bounds
-            float targetGold = amberCenter + rawSpinForce * 1.5f; // Extra sensitivity for inner zones
+            float targetGold = amberCenter + rawSpinForce * 1.5f;
             goldCenter = MathUtils.lerp(goldCenter, MathUtils.clamp(targetGold, amberCenter - (amberHalfW - goldHalfW), amberCenter + (amberHalfW - goldHalfW)), delta * 6f);
 
-            // Purple follows spin but capped by Gold bounds
             float targetPurple = goldCenter + rawSpinForce * 2.0f;
             purpleCenter = MathUtils.lerp(purpleCenter, MathUtils.clamp(targetPurple, goldCenter - (goldHalfW - purpleHalfW), goldCenter + (goldHalfW - purpleHalfW)), delta * 6f);
 
@@ -455,17 +450,16 @@ public class HUD {
         float goldHalfW = greenHalfW * 0.15f;
         float purpleHalfW = goldHalfW * 0.20f;
 
-        // Draw layers using their specific centers
-        shapeRenderer.setColor(0.1f, 0.8f, 0.1f, 0.7f); // GREEN
+        shapeRenderer.setColor(0.1f, 0.8f, 0.1f, 0.7f);
         shapeRenderer.rect(x + (greenCenter * width) - (greenHalfW * width), y, greenHalfW * 2 * width, height);
 
-        shapeRenderer.setColor(1f, 0.6f, 0f, 0.8f); // AMBER
+        shapeRenderer.setColor(1f, 0.6f, 0f, 0.8f);
         shapeRenderer.rect(x + (amberCenter * width) - (amberHalfW * width), y, amberHalfW * 2 * width, height);
 
-        shapeRenderer.setColor(1f, 0.9f, 0f, 1f); // GOLD
+        shapeRenderer.setColor(1f, 0.9f, 0f, 1f);
         shapeRenderer.rect(x + (goldCenter * width) - (goldHalfW * width), y, goldHalfW * 2 * width, height);
 
-        shapeRenderer.setColor(0.6f, 0.1f, 0.9f, 1f); // PURPLE
+        shapeRenderer.setColor(0.6f, 0.1f, 0.9f, 1f);
         shapeRenderer.rect(x + (purpleCenter * width) - (purpleHalfW * width), y, purpleHalfW * 2 * width, height);
 
         if (needleStopped && glowTimer > 0) {
@@ -550,6 +544,14 @@ public class HUD {
     public boolean wasMinigameCanceled() {
         if (minigameCanceled) {
             minigameCanceled = false;
+            return true;
+        }
+        return false;
+    }
+
+    public boolean wasMainMenuRequested() {
+        if (mainMenuRequested) {
+            mainMenuRequested = false;
             return true;
         }
         return false;
