@@ -42,8 +42,7 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
 
         // Move the building to 30 units directly in front of the tee box, 10 units up
         // x = 0 (direct line), y = tee height + 10, z = tee position + 30
-        Terrain.Monolith monolith = new Terrain.Monolith(teePos.x, teePos.y + 10.0f, teePos.z + 30.0f, 10.0f, 10.0f, 10.0f);
-        monolith.setRotation(45);
+        Terrain.Monolith monolith = new Terrain.Monolith(teePos.x, teePos.y + 10.0f, teePos.z + 30.0f, 10.0f, 10.0f, 10.0f, 45);
         monoliths.add(monolith);
 
         markerZPositions.clear();

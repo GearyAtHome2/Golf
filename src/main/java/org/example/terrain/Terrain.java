@@ -315,21 +315,18 @@ public class Terrain {
         private final ModelInstance instance;
         private final Vector3 pos;
         private final float width, height, depth;
-        private float rotationY = 0;
+        private float rotationY;
 
-        Monolith(float x, float y, float z, float w, float h, float d) {
-            // Logic check: if using default 10s, override with Monolith ratio (1:4:9) scaled to game units
-            if (w == 10 && h == 10 && d == 10) {
-                w = 2.0f; h = 18.0f; d = 8.0f;
-            }
-
+        public Monolith(float x, float y, float z, float w, float h, float d, float rotation) {
             this.pos = new Vector3(x, y, z);
-            this.width = w; this.height = h; this.depth = d;
+            this.width = w;
+            this.height = h;
+            this.depth = d;
+            this.rotationY = rotation;
 
             ModelBuilder mb = new ModelBuilder();
-
-            // Matte black material for the Monolith
-            Material monolithMaterial = new Material(ColorAttribute.createDiffuse(new Color(0.4f, 0.4f, 0.4f, 1f)));
+            // Darker, matte gray for that "ancient" look
+            Material monolithMaterial = new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f)));
 
             Model boxModel = mb.createBox(w, h, d,
                     monolithMaterial,
@@ -339,21 +336,15 @@ public class Terrain {
             updateTransform();
         }
 
-        /**
-         * Sets the rotation of the monolith around the Y-axis.
-         * @param degrees Rotation in degrees.
-         */
-        public void setRotation(float degrees) {
-            this.rotationY = degrees;
-            updateTransform();
-        }
-
         private void updateTransform() {
+            // Set translation first, then apply rotation
             instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z);
             instance.transform.rotate(Vector3.Y, rotationY);
         }
 
-        public void render(ModelBatch b, Environment e) { b.render(instance, e); }
+        public void render(ModelBatch b, Environment e) {
+            b.render(instance, e);
+        }
 
         public void dispose() {
             if (instance.model != null) instance.model.dispose();

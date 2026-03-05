@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.MOGUL_HIGHLANDS;
+//        selectedType = LevelData.Archetype.ISLAND_COAST;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm based on Archetype ---
@@ -209,6 +209,20 @@ public class LevelDataGenerator {
                 breakDensity = 0.4f;
                 break;
 
+            case MONOLITH_PLAINS:
+                teeH = 20f;
+                greenH = 15.0f + r.nextFloat() * 10.0f;
+                fairwayWiggle = 0.1f;
+                islands = 0.25f;
+                maxFairwayWidth = 60f;
+                cohesion = 1.3f;
+                undulation = 0.9f;
+                breakDensity = 0.25f;
+                bunkerCount = 1 + r.nextInt(4);
+                hillFreq = 0.008f;
+                maxH = 15f;
+                break;
+
             case STANDARD_LINKS:
             default:
                 fairwayWiggle = 0.1f;
@@ -218,6 +232,7 @@ public class LevelDataGenerator {
                 breakDensity = 0.25f;
                 bunkerCount = 1 + r.nextInt(4);
                 break;
+
         }
 
         // --- 3. Apply variables to LevelData ---

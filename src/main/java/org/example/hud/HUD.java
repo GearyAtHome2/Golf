@@ -267,21 +267,11 @@ public class HUD {
         needleStopped = true;
         glowTimer = 1.0f;
         lastResult = engine.calculateResult(engine.needlePos);
-        glowColor = getResultColor(lastResult.rating);
+        glowColor = lastResult.rating.color;
         shotFeedbackTimer = 1.5f;
         shotFeedbackColor = glowColor.cpy();
         shotFeedbackText = lastResult.rating.getRandomPhrase() + " (" + (int) (lastResult.powerMod * 100) + "%)";
         minigameStep++;
-    }
-
-    private Color getResultColor(MinigameResult.Rating rating) {
-        return switch (rating) {
-            case SUPER -> Color.PURPLE.cpy();
-            case PERFECTION -> Color.GOLD.cpy();
-            case GREAT -> Color.ORANGE.cpy();
-            case GOOD -> Color.GREEN.cpy();
-            default -> Color.RED.cpy();
-        };
     }
 
     private void cancelMinigame() {

@@ -20,9 +20,16 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final float SMOOTH_FAIRWAY_BUFFER = 6.0f;
     private final float SMOOTH_STRENGTH = 0.9f;
 
+    // --- Monolith Configuration ---
+    private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
+    /** * Base spawn probability scalar.
+     * 0.033f represents a ~30x reduction from the original 1.0f probability curve.
+     */
+    private final float MONOLITH_SPAWN_CHANCE = 0.033f;
+
     // --- Mogul Configuration ---
-    private final float MOGUL_BASE_DAMPING = 0.3f; // 0.0 = perfectly flat, 1.0 = full moguls on fairway
-    private final float MOGUL_FADE_DISTANCE = 18.0f; // Distance over which moguls reach full strength
+    private final float MOGUL_BASE_DAMPING = 0.3f;
+    private final float MOGUL_FADE_DISTANCE = 18.0f;
 
     private final float off1, off2;
     private final float[] waveAngles = new float[10];
@@ -81,6 +88,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         boolean isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
         boolean isCraterFields = data.getArchetype() == LevelData.Archetype.CRATER_FIELDS;
         boolean isMogulHighlands = data.getArchetype() == LevelData.Archetype.MOGUL_HIGHLANDS;
+        boolean isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
 
         boolean isRaisedFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
         boolean isSunkenFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
@@ -138,10 +146,9 @@ public class ClassicGenerator implements ITerrainGenerator {
                     float wX = x * SCALE + off1, wZ = z * SCALE + off2;
                     float rawMogul = (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, hillFreq)), 1.2f) * undulation * maxHeight * 6.0f;
 
-                    // Calculate soft fade using smoothstep
                     float dist = getDistanceToPath(x, z, isPathMask, MOGUL_FADE_DISTANCE);
                     float t = MathUtils.clamp(dist / MOGUL_FADE_DISTANCE, 0f, 1f);
-                    float smoothT = t * t * (3 - 2 * t); // Smoothstep curve
+                    float smoothT = t * t * (3 - 2 * t);
 
                     float mogulIntensity = MathUtils.lerp(MOGUL_BASE_DAMPING, 1.0f, smoothT);
                     noise = rawMogul * mogulIntensity;
@@ -162,8 +169,11 @@ public class ClassicGenerator implements ITerrainGenerator {
 
                 float protectedHeight = ((isRaisedFairway || isSunkenFairway) && !isElevated) ? currentHeight : getFinalRaw(distGreen, protectionRadius, currentHeight);
 
-                float greenEffectMask = 1.0f - MathUtils.clamp(distGreen / (protectionRadius * 0.7f), 0f, 1f);
-                protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask * greenEffectMask * (3 - 2 * greenEffectMask));
+                float t = MathUtils.clamp(distGreen / protectionRadius, 0f, 1f);
+                float greenEffectMask = 1.0f - (t * t * (3 - 2 * t));
+                greenEffectMask *= greenEffectMask;
+
+                protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask);
 
                 float teeT = MathUtils.clamp(zNorm / 0.15f, 0f, 1f);
                 float smoothT = teeT * teeT * (3 - 2 * teeT);
@@ -198,6 +208,45 @@ public class ClassicGenerator implements ITerrainGenerator {
         applyFairwayWaterBuffer(map, heights, waterLevel, 3.0f);
         applySlopeBasedStone(map, heights, 0.35f);
         finalizePositionsAndTrees(map, heights, teePos, holePos, trees, monoliths, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
+
+        if (isMonolithPlains) {
+            generateMonolithPlains(map, heights, monoliths, greenCenterX, greenCenterZ, (int) (SIZE_X * 0.5f), (int) (SIZE_Z * 0.05f));
+        }
+    }
+
+    private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Monolith> monoliths, int gX, int gZ, int tX, int tZ) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+
+        int spawnAttempts = (int) (SIZE_Z * 2.5f);
+        float maxDist = (float) Math.sqrt(Math.pow(SIZE_X, 2) + Math.pow(SIZE_Z, 2));
+
+        for (int i = 0; i < spawnAttempts; i++) {
+            int x = rng.nextInt(SIZE_X);
+            int z = rng.nextInt(SIZE_Z);
+
+            Terrain.TerrainType type = map[x][z];
+            if (type == Terrain.TerrainType.GREEN || type == Terrain.TerrainType.TEE) continue;
+
+            float dx = x - gX;
+            float dz = z - gZ;
+            float distToGreen = (float) Math.sqrt(dx * dx + dz * dz);
+
+            // Base probability curve (higher near green)
+            float p = MathUtils.clamp(1.0f - (distToGreen / maxDist), 0f, 1f);
+            float baseProbability = p * p * (3 - 2 * p);
+
+            // Apply the configurable spawn chance scalar (e.g. 0.033 for ~30x reduction)
+            if (rng.nextFloat() < (baseProbability * MONOLITH_SPAWN_CHANCE)) {
+                float worldX = (x * SCALE) - (SIZE_X * SCALE / 2f);
+                float worldZ = (z * SCALE) - (SIZE_Z * SCALE / 2f);
+                float worldY = heights[x][z] - MONOLITH_UNDERGROUND_OFFSET;
+                float rotation = rng.nextFloat() * 360f;
+
+                // 1:4:9 Ratio Monolith
+                monoliths.add(new Terrain.Monolith(worldX, worldY, worldZ, 2.0f, 18.0f, 8.0f, rotation));
+            }
+        }
     }
 
     private void applyFairwayGaussianSmoothing(Terrain.TerrainType[][] map, float[][] heights) {
@@ -285,9 +334,6 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         int teeZ = (int) (SIZE_Z * 0.05f), teeX = SIZE_X / 2;
         teeP.set((teeX * SCALE) - (SIZE_X * SCALE / 2f), heights[teeX][teeZ] + 0.2f, (teeZ * SCALE) - (SIZE_Z * SCALE / 2f));
-
-        // Add a floating building 30 units (representing 30 feet) in front of the tee, 10 units up
-//        buildings.add(new Terrain.Building(teeP.x, teeP.y + 10.0f, teeP.z + 30.0f, 8.0f, 6.0f, 8.0f));
 
         float randomAngle = rng.nextFloat() * MathUtils.PI * 2, randomDist = rng.nextFloat() * 8f;
         int flagX = MathUtils.clamp(gX + (int) (MathUtils.cos(randomAngle) * randomDist), 0, SIZE_X - 1);
@@ -388,7 +434,10 @@ public class ClassicGenerator implements ITerrainGenerator {
 
     private float getFinalRaw(float dG, float pR, float rH) {
         float t = MathUtils.clamp(dG / pR, 0f, 1f);
-        return MathUtils.lerp(rH, data.getGreenHeight(), 1.0f - (float) Math.pow(t, 3.0f));
+        float smoothT = t * t * (3 - 2 * t);
+        float plateauT = smoothT * smoothT;
+
+        return MathUtils.lerp(data.getGreenHeight(), rH, plateauT);
     }
 
     private boolean[][] getPathMask(Terrain.TerrainType[][] map) {

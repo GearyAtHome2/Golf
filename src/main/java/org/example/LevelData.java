@@ -11,8 +11,9 @@ public class LevelData {
         MOGUL_HIGHLANDS,
         BUSH_WORLD,
         CRATER_FIELDS,
-        SHADOW_CANYON,    // The Sunken Valley
-        RAZORBACK_RIDGE   // The Raised Peak
+        SHADOW_CANYON,
+        RAZORBACK_RIDGE,
+        MONOLITH_PLAINS
     }
 
     public enum TerrainAlgorithm {
