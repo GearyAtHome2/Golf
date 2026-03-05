@@ -1,0 +1,35 @@
+name: Build Game for Windows and Mac
+
+on: [push]
+
+jobs:
+  build:
+    # This tells GitHub to run the job on both Windows and Mac servers
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+        if: runner.os == 'macOS'
+
+      - name: Build and Package
+        run: ./gradlew packageGame
+
+      - name: Upload Finished Game
+        uses: actions/upload-artifact@v4
+        with:
+          name: GolfGame-${{ runner.os }}
+          path: build/dist/
