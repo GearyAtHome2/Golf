@@ -1,6 +1,5 @@
 package org.example.ball;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
@@ -15,7 +14,6 @@ import org.example.terrain.Terrain;
 public class Ball {
 
     public enum State {AIR, CONTACT, ROLLING, STATIONARY}
-
     public enum Interaction {NONE, LEAVES, WATER, TERRAIN}
 
     public static final float BALL_RADIUS = 0.2f;
@@ -125,10 +123,29 @@ public class Ball {
         }
 
         handleTreeCollisions(terrain, delta);
+        handleMonolithCollisions(terrain);
 
         float stepYDelta = position.y - preStepY;
         if (Math.abs(stepYDelta) > 2.0f && hitCooldown <= 0f) {
             position.y = preStepY + MathUtils.clamp(stepYDelta, -1f, 1f);
+        }
+    }
+
+    private void handleMonolithCollisions(Terrain terrain) {
+        if (hitCooldown > 0) return;
+
+        for (Terrain.Monolith m : terrain.getMonoliths()) {
+            boolean hit = BallPhysics.handleMonolithCollision(
+                    position, velocity, spin,
+                    m.getPosition(), m.getWidth(), m.getHeight(), m.getDepth(), m.getRotationY()
+            );
+
+            if (hit) {
+                hitCooldown = 0.05f;
+                lastInteraction = Interaction.TERRAIN;
+                activeTrailColor.set(Color.DARK_GRAY);
+                break;
+            }
         }
     }
 
@@ -154,8 +171,7 @@ public class Ball {
 
             if (checkY < hAtPoint) {
                 Vector3 nAtPoint = terrain.getNormalAt(checkX, checkZ);
-                float angle = MathUtils.acos(nAtPoint.y) * MathUtils.radiansToDegrees;
-                if (angle > 45f || (hAtPoint - checkY) > MAX_STEP_UP) {
+                if (BallPhysics.isWallCollision(nAtPoint, 45f) || (hAtPoint - checkY) > MAX_STEP_UP) {
                     collisionFound = true;
                     bestNormal.set(nAtPoint);
                     break;
@@ -167,7 +183,6 @@ public class Ball {
             Vector3 wallNormal = new Vector3(bestNormal.x, 0, bestNormal.z).nor();
             if (wallNormal.len() < 0.1f) wallNormal.set(-velocity.x, 0, -velocity.z).nor();
 
-            // Updated to use Spin-based bounce for wall impacts
             velocity.set(BallPhysics.calculateBounceWithSpin(velocity, wallNormal, spin, BOUNCE_RESTITUTION, 0.4f));
             position.add(tempV1.set(wallNormal).scl(0.15f));
             hitCooldown = 0.05f;
@@ -192,7 +207,7 @@ public class Ball {
     private void handleTerrainPhysics(float delta, Terrain terrain, float terrainHeight) {
         Vector3 normal = terrain.getNormalAt(position.x, position.z).nor();
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
-        float slope = MathUtils.acos(normal.y) * MathUtils.radiansToDegrees;
+        boolean isWall = BallPhysics.isWallCollision(normal, 45f);
 
         if (terrainHeight - position.y > MAX_STEP_UP) {
             tempV1.set(normal.x, 0, normal.z).nor();
@@ -204,7 +219,7 @@ public class Ball {
             return;
         }
 
-        if (position.y < terrainHeight && slope < 45f) position.y = terrainHeight;
+        if (position.y < terrainHeight && !isWall) position.y = terrainHeight;
 
         float vDotN = velocity.dot(normal);
         if (state == State.ROLLING) {
@@ -232,18 +247,15 @@ public class Ball {
         float frictionImpact = (friction - 0.2f) * 0.08f;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - frictionImpact, 0.05f, BOUNCE_RESTITUTION);
 
-        // FULL INTEGRATION: Bounce velocity now accounts for spin kick
         velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction));
 
         float vDotN = velocity.dot(normal);
         vNormal.set(normal).scl(vDotN);
         vTangent.set(velocity).sub(vNormal);
 
-        // Update state and visual feedback
         state = State.CONTACT;
         lastInteraction = Interaction.TERRAIN;
 
-        // Ground friction dampens spin upon impact
         float spinLoss = 0.4f + (friction * 0.3f);
         spin.scl(MathUtils.clamp(1.0f - spinLoss, 0f, 1.0f));
 
@@ -294,24 +306,11 @@ public class Ball {
             }
 
             float fY = treePos.y + tree.getTrunkHeight() + tree.getFoliageRadius();
-            if (position.dst(treePos.x, fY, treePos.z) < tree.getFoliageRadius() + BALL_RADIUS)
-                applyFoliagePhysics(delta);
-        }
-    }
-
-    private void applyFoliagePhysics(float delta) {
-        lastInteraction = Interaction.LEAVES;
-        float speed = velocity.len();
-        if (speed < 0.1f) return;
-        velocity.scl(Math.max(0, 1 - (FOLIAGE_DRAG_LIN + FOLIAGE_DRAG_SQU * speed) * delta));
-        spin.scl(0.8f);
-        activeTrailColor.lerp(Color.FOREST, 0.2f);
-
-        if (MathUtils.random() < (1.0f - (float) Math.pow(1.0f - DEFLECTION_CHANCE_PER_METER, speed * delta))) {
-            velocity.rotate(Vector3.X, MathUtils.random(-DEFLECTION_MAGNITUDE, DEFLECTION_MAGNITUDE));
-            velocity.rotate(Vector3.Y, MathUtils.random(-DEFLECTION_MAGNITUDE, DEFLECTION_MAGNITUDE));
-            velocity.rotate(Vector3.Z, MathUtils.random(-DEFLECTION_MAGNITUDE, DEFLECTION_MAGNITUDE));
-            velocity.scl(0.95f);
+            if (position.dst(treePos.x, fY, treePos.z) < tree.getFoliageRadius() + BALL_RADIUS) {
+                lastInteraction = Interaction.LEAVES;
+                BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE);
+                activeTrailColor.lerp(Color.FOREST, 0.2f);
+            }
         }
     }
 

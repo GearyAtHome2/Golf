@@ -64,10 +64,11 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     @Override
-    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, Vector3 teePos, Vector3 holePos) {
+    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, List<Terrain.Monolith> monoliths, Vector3 teePos, Vector3 holePos) {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
         craters.clear();
+        monoliths.clear();
 
         float hillFreq = data.getHillFrequency();
         float maxHeight = data.getMaxHeight();
@@ -196,7 +197,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         applyFairwayWaterBuffer(map, heights, waterLevel, 3.0f);
         applySlopeBasedStone(map, heights, 0.35f);
-        finalizePositionsAndTrees(map, heights, teePos, holePos, trees, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
+        finalizePositionsAndTrees(map, heights, teePos, holePos, trees, monoliths, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
     }
 
     private void applyFairwayGaussianSmoothing(Terrain.TerrainType[][] map, float[][] heights) {
@@ -280,10 +281,13 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
     }
 
-    private void finalizePositionsAndTrees(Terrain.TerrainType[][] map, float[][] heights, Vector3 teeP, Vector3 holeP, List<Terrain.Tree> trees, int gX, int gZ, float water, boolean isCliff) {
+    private void finalizePositionsAndTrees(Terrain.TerrainType[][] map, float[][] heights, Vector3 teeP, Vector3 holeP, List<Terrain.Tree> trees, List<Terrain.Monolith> monoliths, int gX, int gZ, float water, boolean isCliff) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         int teeZ = (int) (SIZE_Z * 0.05f), teeX = SIZE_X / 2;
         teeP.set((teeX * SCALE) - (SIZE_X * SCALE / 2f), heights[teeX][teeZ] + 0.2f, (teeZ * SCALE) - (SIZE_Z * SCALE / 2f));
+
+        // Add a floating building 30 units (representing 30 feet) in front of the tee, 10 units up
+//        buildings.add(new Terrain.Building(teeP.x, teeP.y + 10.0f, teeP.z + 30.0f, 8.0f, 6.0f, 8.0f));
 
         float randomAngle = rng.nextFloat() * MathUtils.PI * 2, randomDist = rng.nextFloat() * 8f;
         int flagX = MathUtils.clamp(gX + (int) (MathUtils.cos(randomAngle) * randomDist), 0, SIZE_X - 1);

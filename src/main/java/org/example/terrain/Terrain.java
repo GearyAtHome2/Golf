@@ -26,6 +26,7 @@ public class Terrain {
     private TerrainType[][] terrainMap;
     private float[][] heightMap;
     private final List<Tree> trees = new ArrayList<>();
+    private final List<Monolith> monoliths = new ArrayList<>();
 
     private Vector3 teeCenter;
     private Vector3 holePosition;
@@ -41,7 +42,7 @@ public class Terrain {
         this.terrainMap = new TerrainType[SIZE_X][SIZE_Z];
         this.heightMap = new float[SIZE_X][SIZE_Z];
 
-        generator.generate(terrainMap, heightMap, trees, teeCenter = new Vector3(), holePosition = new Vector3());
+        generator.generate(terrainMap, heightMap, trees, monoliths, teeCenter = new Vector3(), holePosition = new Vector3());
 
         if (generator instanceof ClassicGenerator) {
             this.waterLevel = ((ClassicGenerator) generator).getData().getWaterLevel();
@@ -65,7 +66,6 @@ public class Terrain {
         List<Float> greenHeights = new ArrayList<>();
         float sum = 0;
 
-        // First Pass: Find all green tiles and calculate the average
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (terrainMap[x][z] == TerrainType.GREEN) {
@@ -82,7 +82,7 @@ public class Terrain {
         }
 
         float averageHeight = sum / greenHeights.size();
-        float threshold = 5.0f; // Your requirement: >5 tiles height difference
+        float threshold = 5.0f;
 
         greenMinH = Float.MAX_VALUE;
         greenMaxH = -Float.MAX_VALUE;
@@ -90,8 +90,6 @@ public class Terrain {
 
         for (float h : greenHeights) {
             if (Math.abs(h - averageHeight) > threshold) {
-                System.out.println("[Terrain Log] Outlier detected! Height: " + h +
-                        " (Average: " + averageHeight + "). Ignoring for colormap.");
                 continue;
             }
 
@@ -138,6 +136,7 @@ public class Terrain {
         for (ModelInstance chunk : chunks) batch.render(chunk, env);
         if (waterInstance != null) batch.render(waterInstance, env);
         for (Tree t : trees) t.render(batch, env);
+        for (Monolith b : monoliths) b.render(batch, env);
         if (holeMarker != null) batch.render(holeMarker, env);
         if (flagInstance != null) batch.render(flagInstance, env);
         if (teeInstance != null) batch.render(teeInstance, env);
@@ -203,12 +202,10 @@ public class Terrain {
 
     private void createTee(Vector3 pos) {
         ModelBuilder mb = new ModelBuilder();
-        // A simple white cylinder, very thin and short
         Model teeModel = mb.createCylinder(0.03f, 0.15f, 0.03f, 8,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         teeInstance = new ModelInstance(teeModel);
-        // We set the translation so it sits halfway into the ground for stability
         teeInstance.transform.setToTranslation(pos.x, pos.y - 0.15f, pos.z);
     }
 
@@ -247,6 +244,7 @@ public class Terrain {
         for (ModelInstance c : chunks) c.model.dispose();
         if (waterInstance != null) waterInstance.model.dispose();
         for (Tree t : trees) t.dispose();
+        for (Monolith b : monoliths) b.dispose();
         if (holeMarker != null) holeMarker.model.dispose();
         if (flagInstance != null) flagInstance.model.dispose();
         if (teeInstance != null) teeInstance.model.dispose();
@@ -272,6 +270,7 @@ public class Terrain {
     public float getHoleSize() { return holeSize; }
     public float getWaterLevel() { return waterLevel; }
     public List<Tree> getTrees() { return trees; }
+    public List<Monolith> getMonoliths() { return monoliths; }
 
     public enum TerrainType {
         TEE(0.40f, 2.0f, 1.1f, 0.8f, new Color(0.2f, 0.5f, 0.2f, 1f)),
@@ -310,5 +309,60 @@ public class Terrain {
         public float getTrunkHeight() { return tH; }
         public float getTrunkRadius() { return tR; }
         public float getFoliageRadius() { return fR; }
+    }
+
+    public static class Monolith {
+        private final ModelInstance instance;
+        private final Vector3 pos;
+        private final float width, height, depth;
+        private float rotationY = 0;
+
+        Monolith(float x, float y, float z, float w, float h, float d) {
+            // Logic check: if using default 10s, override with Monolith ratio (1:4:9) scaled to game units
+            if (w == 10 && h == 10 && d == 10) {
+                w = 2.0f; h = 18.0f; d = 8.0f;
+            }
+
+            this.pos = new Vector3(x, y, z);
+            this.width = w; this.height = h; this.depth = d;
+
+            ModelBuilder mb = new ModelBuilder();
+
+            // Matte black material for the Monolith
+            Material monolithMaterial = new Material(ColorAttribute.createDiffuse(new Color(0.4f, 0.4f, 0.4f, 1f)));
+
+            Model boxModel = mb.createBox(w, h, d,
+                    monolithMaterial,
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+
+            instance = new ModelInstance(boxModel);
+            updateTransform();
+        }
+
+        /**
+         * Sets the rotation of the monolith around the Y-axis.
+         * @param degrees Rotation in degrees.
+         */
+        public void setRotation(float degrees) {
+            this.rotationY = degrees;
+            updateTransform();
+        }
+
+        private void updateTransform() {
+            instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z);
+            instance.transform.rotate(Vector3.Y, rotationY);
+        }
+
+        public void render(ModelBatch b, Environment e) { b.render(instance, e); }
+
+        public void dispose() {
+            if (instance.model != null) instance.model.dispose();
+        }
+
+        public Vector3 getPosition() { return pos.cpy(); }
+        public float getWidth() { return width; }
+        public float getHeight() { return height; }
+        public float getDepth() { return depth; }
+        public float getRotationY() { return rotationY; }
     }
 }

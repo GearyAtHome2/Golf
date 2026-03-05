@@ -162,4 +162,73 @@ public class BallPhysics {
 
         return vTangent.add(vNormalBounce);
     }
+
+    public static boolean handleMonolithCollision(Vector3 pos, Vector3 vel, Vector3 spin,
+                                                  Vector3 mPos, float mW, float mH, float mD, float mRot) {
+        // 1. Local Space Transform
+        temp.set(pos).sub(mPos);
+        if (mRot != 0) temp.rotate(Vector3.Y, -mRot);
+
+        float halfW = mW / 2f;
+        float halfD = mD / 2f;
+
+        float closestX = MathUtils.clamp(temp.x, -halfW, halfW);
+        float closestY = MathUtils.clamp(temp.y, 0, mH);
+        float closestZ = MathUtils.clamp(temp.z, -halfD, halfD);
+
+        float distSq = temp.dst2(closestX, closestY, closestZ);
+
+        if (distSq < BALL_RADIUS * BALL_RADIUS) {
+            // 2. Local Normal
+            temp2.set(temp.x - closestX, temp.y - closestY, temp.z - closestZ).nor();
+            if (temp2.len() < 0.01f) {
+                temp2.set(vel).rotate(Vector3.Y, -mRot).scl(-1).nor();
+            }
+
+            // 3. World Normal
+            if (mRot != 0) temp2.rotate(Vector3.Y, mRot);
+
+            // 4. Response
+            vel.set(calculateBounceWithSpin(vel, temp2, spin, 0.45f, 0.3f));
+
+            // Push out
+            float dist = (float) Math.sqrt(distSq);
+            pos.add(temp.set(temp2).scl(BALL_RADIUS - dist + 0.01f));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Applies drag and random deflection when passing through foliage.
+     */
+    public static void applyFoliagePhysics(Vector3 vel, Vector3 spin, float delta,
+                                           float dragLin, float dragSqu, float deflectChance, float deflectMag) {
+        float speed = vel.len();
+        if (speed < 0.1f) return;
+
+        // Velocity Drag
+        vel.scl(Math.max(0, 1 - (dragLin + dragSqu * speed) * delta));
+
+        // Spin Decay
+        spin.scl(0.8f);
+
+        // Random Deflection
+        float chance = 1.0f - (float) Math.pow(1.0f - deflectChance, speed * delta);
+        if (MathUtils.random() < chance) {
+            vel.rotate(Vector3.X, MathUtils.random(-deflectMag, deflectMag));
+            vel.rotate(Vector3.Y, MathUtils.random(-deflectMag, deflectMag));
+            vel.rotate(Vector3.Z, MathUtils.random(-deflectMag, deflectMag));
+            vel.scl(0.95f);
+        }
+    }
+
+    /**
+     * Determines if a terrain contact should be treated as a wall bounce
+     * or a ground landing based on the normal angle.
+     */
+    public static boolean isWallCollision(Vector3 normal, float steepnessThreshold) {
+        float angle = MathUtils.acos(normal.y) * MathUtils.radiansToDegrees;
+        return angle > steepnessThreshold;
+    }
 }

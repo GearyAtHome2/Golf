@@ -16,7 +16,7 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
     private final List<Float> markerZPositions = new ArrayList<>();
 
     @Override
-    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, Vector3 teePos, Vector3 holePos) {
+    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, List<Terrain.Monolith> monoliths, Vector3 teePos, Vector3 holePos) {
         int width = map.length;
         int depth = map[0].length;
         float halfWidth = width / 2f;
@@ -38,6 +38,14 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
         holePos.set(0, 0, (depth - 50f) - halfDepth);
 
         signPositions.clear();
+        monoliths.clear(); // Clear existing buildings before adding new ones
+
+        // Move the building to 30 units directly in front of the tee box, 10 units up
+        // x = 0 (direct line), y = tee height + 10, z = tee position + 30
+        Terrain.Monolith monolith = new Terrain.Monolith(teePos.x, teePos.y + 10.0f, teePos.z + 30.0f, 10.0f, 10.0f, 10.0f);
+        monolith.setRotation(45);
+        monoliths.add(monolith);
+
         markerZPositions.clear();
 
         for (int z = 0; z < depth; z++) {
