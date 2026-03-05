@@ -19,9 +19,9 @@ public class Ball {
 
     public static final float BALL_RADIUS = 0.2f;
     private static final float GRAVITY = -9.81f;
-    private static final float AIR_DRAG_COEFF = 0.006f;
-    private static final float LIFT_COEFF = 0.010f;
-    private static final float SIDE_COEFF = 0.010f;
+    private static final float AIR_DRAG_COEFF = 0.0048f;
+    private static final float LIFT_COEFF = 4.2f;
+    private static final float SIDE_COEFF = 4.2f;
     private static final float STOP_SPEED = 0.15f;
     private static final float MIN_BOUNCE_VY = 0.3f;
     private static final float BOUNCE_RESTITUTION = 0.35f;
@@ -109,6 +109,7 @@ public class Ball {
         }
 
         if (position.y < waterLevel + BALL_RADIUS) {
+            lastInteraction = Interaction.WATER;
             BallPhysics.applyWaterPhysics(position, velocity, spin, waterLevel, delta);
         }
 

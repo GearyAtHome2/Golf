@@ -1,6 +1,7 @@
 package org.example;
 
 import com.badlogic.gdx.math.Vector3;
+import org.example.terrain.Terrain.TreeScheme;
 
 public class LevelData {
     public enum Archetype {
@@ -28,6 +29,7 @@ public class LevelData {
     private long seed;
     private Archetype archetype;
     private TerrainAlgorithm terrainAlgorithm;
+    private TreeScheme treeScheme; // Added for visual variety
     private float teeHeight;
     private float greenHeight;
     private float treeHeight;
@@ -57,6 +59,8 @@ public class LevelData {
     public void setArchetype(Archetype archetype) { this.archetype = archetype; }
     public TerrainAlgorithm getTerrainAlgorithm() { return terrainAlgorithm; }
     public void setTerrainAlgorithm(TerrainAlgorithm terrainAlgorithm) { this.terrainAlgorithm = terrainAlgorithm; }
+    public TreeScheme getTreeScheme() { return treeScheme; }
+    public void setTreeScheme(TreeScheme treeScheme) { this.treeScheme = treeScheme; }
     public float getTeeHeight() { return teeHeight; }
     public void setTeeHeight(float teeHeight) { this.teeHeight = teeHeight; }
     public float getGreenHeight() { return greenHeight; }

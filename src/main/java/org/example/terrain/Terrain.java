@@ -273,8 +273,6 @@ public class Terrain {
     public List<Monolith> getMonoliths() { return monoliths; }
 
     public enum TerrainType {
-        // kf, rr, sm, diff, softness, color
-        // Lowered Sand KF from 4.2 to 2.5 because Softness will handle the rest of the stopping power.
         TEE(0.40f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
         FAIRWAY(0.5f, 0.2f, 1.05f, 1.0f, 0.4f, new Color(0.1f, 0.4f, 0.1f, 1f)),
         ROUGH(1.2f, 4.5f, 1.5f, 1.4f, 0.7f, new Color(0.02f, 0.15f, 0.02f, 1f)),
@@ -299,14 +297,25 @@ public class Terrain {
         private final ModelInstance trunk, foliage;
         private final Vector3 pos;
         private final float tH, tR, fH, fR;
+        private final TreeScheme scheme;
 
-        Tree(float x, float y, float z, float th, float tr, float fr) {
+        Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme) {
             this.pos = new Vector3(x, y, z);
             this.tH = th; this.tR = tr; this.fH = th; this.fR = fr;
+            this.scheme = scheme;
+
             ModelBuilder mb = new ModelBuilder();
-            trunk = new ModelInstance(mb.createCylinder(tr*2, th, tr*2, 16, new Material(ColorAttribute.createDiffuse(new Color(0.4f, 0.2f, 0.1f, 1f))), VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+
+            // Use random bark color from the scheme
+            trunk = new ModelInstance(mb.createCylinder(tr*2, th, tr*2, 16,
+                    new Material(ColorAttribute.createDiffuse(scheme.getRandomBark())),
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
             trunk.transform.setToTranslation(x, y + th/2, z);
-            foliage = new ModelInstance(mb.createSphere(fr*2, fr*2, fr*2, 16, 16, new Material(ColorAttribute.createDiffuse(Color.GREEN)), VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+
+            // Use random foliage color from the scheme
+            foliage = new ModelInstance(mb.createSphere(fr*2, fr*2, fr*2, 16, 16,
+                    new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage())),
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
             foliage.transform.setToTranslation(x, y + th + fr, z);
         }
 
@@ -316,6 +325,7 @@ public class Terrain {
         public float getTrunkHeight() { return tH; }
         public float getTrunkRadius() { return tR; }
         public float getFoliageRadius() { return fR; }
+        public TreeScheme getScheme() { return scheme; }
     }
 
     public static class Monolith {
@@ -332,7 +342,6 @@ public class Terrain {
             this.rotationY = rotation;
 
             ModelBuilder mb = new ModelBuilder();
-            // Darker, matte gray for that "ancient" look
             Material monolithMaterial = new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f)));
 
             Model boxModel = mb.createBox(w, h, d,
@@ -344,7 +353,6 @@ public class Terrain {
         }
 
         private void updateTransform() {
-            // Set translation first, then apply rotation
             instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z);
             instance.transform.rotate(Vector3.Y, rotationY);
         }
@@ -362,5 +370,47 @@ public class Terrain {
         public float getHeight() { return height; }
         public float getDepth() { return depth; }
         public float getRotationY() { return rotationY; }
+    }
+
+    public enum TreeScheme {
+        OAK(
+                new Color(0.35f, 0.25f, 0.15f, 1f), new Color(0.45f, 0.35f, 0.25f, 1f),
+                new Color(0.1f, 0.4f, 0.1f, 1f),   new Color(0.2f, 0.5f, 0.2f, 1f)
+        ),
+        BIRCH(
+                new Color(0.85f, 0.85f, 0.85f, 1f), new Color(1f, 1f, 1f, 1f),
+                new Color(0.3f, 0.6f, 0.1f, 1f),    new Color(0.5f, 0.8f, 0.2f, 1f)
+        ),
+        REDWOOD(
+                new Color(0.3f, 0.15f, 0.1f, 1f),  new Color(0.5f, 0.2f, 0.15f, 1f),
+                new Color(0.05f, 0.25f, 0.05f, 1f), new Color(0.15f, 0.35f, 0.15f, 1f)
+        ),
+        AUTUMN_MAPLE(
+                new Color(0.25f, 0.2f, 0.15f, 1f), new Color(0.35f, 0.3f, 0.25f, 1f),
+                new Color(0.8f, 0.2f, 0.1f, 1f),   new Color(1f, 0.6f, 0.0f, 1f)
+        ),
+        CHERRY_BLOSSOM(
+                new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f),
+                new Color(1f, 0.7f, 0.75f, 1f),    new Color(1f, 0.85f, 0.9f, 1f)
+        ),
+        DEAD_GRAY(
+                new Color(0.2f, 0.2f, 0.2f, 1f),   new Color(0.4f, 0.4f, 0.4f, 1f),
+                new Color(0.1f, 0.1f, 0.1f, 1f),  new Color(0.3f, 0.3f, 0.3f, 1f)
+        );
+
+        private final Color barkMin, barkMax, leafMin, leafMax;
+
+        TreeScheme(Color bMin, Color bMax, Color lMin, Color lMax) {
+            this.barkMin = bMin; this.barkMax = bMax;
+            this.leafMin = lMin; this.leafMax = lMax;
+        }
+
+        public Color getRandomBark() {
+            return barkMin.cpy().lerp(barkMax, MathUtils.random());
+        }
+
+        public Color getRandomFoliage() {
+            return leafMin.cpy().lerp(leafMax, MathUtils.random());
+        }
     }
 }

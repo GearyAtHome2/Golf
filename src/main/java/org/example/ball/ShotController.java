@@ -39,6 +39,10 @@ public class ShotController {
     private float animationTimer = 0f;
     private ShotDifficulty currentDifficulty;
 
+    // Reuse vectors to avoid GC pressure
+    private final Vector3 tempV1 = new Vector3();
+    private final Vector3 tempV2 = new Vector3();
+
     public ShotController() {
         ModelBuilder mb = new ModelBuilder();
         powerBarModel = mb.createBox(0.5f, 1f, 0.5f,
@@ -69,13 +73,9 @@ public class ShotController {
         if (cancelCooldown > 0) cancelCooldown -= delta;
 
         if (waitingForMinigame) {
-            // If the HUD was canceled (which now only happens BEFORE the needle stop)
             if (hud.wasMinigameCanceled()) {
                 reset();
                 return false;
-            }
-
-            if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             }
 
             if (hud.isMinigameComplete()) {
@@ -159,26 +159,22 @@ public class ShotController {
         float powerPenalty = (float)Math.pow(rawR, 6) * 0.40f;
         float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * accuracyPowerMod;
 
-        // --- PHYSICAL TERRAIN KICK ---
-        // Get the normal of the ground under the ball
         Vector3 terrainNormal = terrain.getNormalAt(ball.getPosition().x, ball.getPosition().z);
         Vector3 aimDir = new Vector3(camDir.x, 0, camDir.z).nor();
         Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
 
-        // Dot product: how much does the ground tilt toward our 'right' vector?
         float sidePush = terrainNormal.dot(rightOfAim);
-        // A side tilt of 0.2 (pretty steep) results in a ~10 degree kick
         float physicalKickDegrees = sidePush * 30.0f;
 
         float accuracySquirt = accuracy * 12.0f;
         Vector3 shotDir = new Vector3(aimDir);
 
-        // Apply: Input rotation + Accuracy error + Physics kick from slope
         shotDir.rotate(Vector3.Y, (quadOffset.x * 2.5f) - accuracySquirt - physicalKickDegrees);
 
         float deloftAbility = MathUtils.clamp(1.2f - (club.loft / 45f), 0.2f, 1.2f);
         float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * MAX_DELOFT * deloftAbility), 0.1f, 85f);
 
+        // This call resets ball.spin to Zero
         ball.hit(shotDir, power, adjustedLoft, finalPowerMult, result.rating);
 
         float totalSpeed = power * finalPowerMult;
@@ -187,15 +183,24 @@ public class ShotController {
         float sForce = (float)Math.sin(spinLoft * MathUtils.degreesToRadians);
         float pinchFactor = 1.0f + (quadOffset.y * PINCH_FACTOR);
 
-        float finalSpinX = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor);
+        // --- RELATIVE SPIN CALCULATION ---
+        float backspinAmount = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor);
         float sideSpinFromAccuracy = accuracy * totalSpeed * 45.0f;
+        float sidespinAmount = (quadOffset.x * totalSpeed * -10.0f) + sideSpinFromAccuracy;
 
-        float finalSpinY = (quadOffset.x * totalSpeed * -10.0f) + sideSpinFromAccuracy;
+        // Apply backspin around the 'Right' axis relative to the shot
+        ball.getSpin().set(rightOfAim).scl(backspinAmount);
 
-        ball.getSpin().x = finalSpinX;
-        ball.getSpin().y = finalSpinY;
+        // Add sidespin around the 'Up' axis (Y)
+        ball.getSpin().add(tempV1.set(Vector3.Y).scl(-sidespinAmount));
 
         Gdx.app.log("SHOT_MASTER", "--- TERRAIN KICK: " + physicalKickDegrees + " deg ---");
+        float headingDegrees = MathUtils.atan2(camDir.x, camDir.z) * MathUtils.radiansToDegrees;
+
+        Gdx.app.log("SPIN_VERIFY", String.format(
+                "Heading: %.2f | Spin Vector: %s | BackspinMag: %.2f",
+                headingDegrees, ball.getSpin().toString(), backspinAmount
+        ));
     }
 
     public ShotDifficulty getCurrentDifficulty() { return currentDifficulty; }

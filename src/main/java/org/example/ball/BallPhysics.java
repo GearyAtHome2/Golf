@@ -34,17 +34,27 @@ public class BallPhysics {
         float airspeed = relativeVelocity.len();
 
         if (airspeed < 1f || spin.len() < 0.1f) return new Vector3(0, 0, 0);
-        float surfaceSpeed = spin.len() * 0.02f; // Assuming 0.02 is ball radius/scale
+
+        float surfaceSpeed = spin.len() * 0.02f;
         float spinRatio = surfaceSpeed / airspeed;
         float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
 
         float speedRef = airspeed / 20.0f;
         float dynamicLift = (speedRef * speedRef) * CL;
 
-        temp.set(spin).crs(relativeVelocity).nor();
+        // Capture cross product
+        temp.set(relativeVelocity).crs(spin).nor();
+        float rawCrsLen = temp.len();
 
-        float totalForce = dynamicLift * (liftCoeff + sideCoeff);
-        return temp.scl(totalForce);
+        // Directional check: This vector should always be perpendicular to airspeed
+        temp.nor();
+
+        float totalForce = -dynamicLift * (liftCoeff + sideCoeff);
+        Vector3 finalForce = temp.scl(totalForce);
+
+        // Get normalized airspeed for directional comparison
+        temp2.set(relativeVelocity).nor();
+        return finalForce;
     }
 
     public static void applyWaterPhysics(Vector3 position, Vector3 velocity, Vector3 spin, float waterLevel, float delta) {
@@ -62,7 +72,7 @@ public class BallPhysics {
                 efficiency = MathUtils.clamp(efficiency, 0, 1);
                 efficiency *= efficiency;
 
-                float upwardImpulse = (speed * speed) * 0.0055f * efficiency;
+                float upwardImpulse = (speed * speed) * 0.0034f * efficiency;
 
                 float oldVy = velocity.y;
                 velocity.y += upwardImpulse;
@@ -118,15 +128,24 @@ public class BallPhysics {
 
         // 2. Spin-to-Velocity Transfer (Mechanical Bite)
         if (vTangent.len() > 0.1f) {
-            Vector3 tanDir = new Vector3(vTangent).nor();
-            Vector3 sideDir = new Vector3(tanDir).crs(normal).nor();
+            Vector3 tanDir = temp.set(vTangent).nor(); // Horizontal direction of travel
+            Vector3 sideDir = temp2.set(tanDir).crs(normal).nor(); // The "Axle" of the bounce
 
-            // Softness dominates grip for spin transfer on grass
-            float grip = MathUtils.clamp(softness * 0.6f + friction * 0.2f, 0.05f, 0.95f);
+            // Project the actual spin vector onto our bounce axes
+            // How much is the ball spinning around the 'axle'? (Backspin/Topspin)
+            float relativeBackspin = spin.dot(sideDir);
 
-            float spinTransferMagnitude = 0.07f;
-            float forwardKick = -spin.x * spinTransferMagnitude * grip;
-            float sideKick = spin.y * spinTransferMagnitude * grip;
+            // How much is it spinning around the ground normal? (Sidespin/Rifling)
+            float relativeSidespin = spin.dot(normal);
+
+            // Grip: Softness (grass depth) makes the ball bite more
+            float grip = MathUtils.clamp(softness * 0.6f + friction * 0.2f, 0.1f, 0.95f);
+            float spinTransferMagnitude = 0.09f; // Increased slightly for visibility
+
+            // Backspin (negative relativeBackspin) pushes the ball forward (check your sign preference here)
+            // If spin.dot(sideDir) is positive (Backspin), it should fight forward momentum
+            float forwardKick = -relativeBackspin * spinTransferMagnitude * grip;
+            float sideKick = relativeSidespin * spinTransferMagnitude * grip;
 
             vTangent.add(tanDir.scl(forwardKick));
             vTangent.add(sideDir.scl(sideKick));

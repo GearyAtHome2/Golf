@@ -2,8 +2,8 @@ package org.example;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import org.example.terrain.Terrain.TreeScheme;
 import java.util.Random;
-
 
 public class LevelDataGenerator {
 
@@ -18,36 +18,56 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = LevelData.Archetype.ISLAND_COAST;
         data.setArchetype(selectedType);
 
-        // --- 1. Select Algorithm based on Archetype ---
+        // --- 1. Select Algorithm and TreeScheme based on Archetype ---
         LevelData.TerrainAlgorithm algo;
+        TreeScheme scheme = TreeScheme.OAK; // Default
+
         switch (selectedType) {
             case CLIFFSIDE_BLUFF:
                 algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.TERRACED : LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = TreeScheme.DEAD_GRAY;
                 break;
             case MOGUL_HIGHLANDS:
                 algo = LevelData.TerrainAlgorithm.MOUNDS;
+                scheme = TreeScheme.BIRCH;
                 break;
             case BUSH_WORLD:
+                algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.SMOOTH_SINE : LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = r.nextBoolean() ? TreeScheme.OAK : TreeScheme.AUTUMN_MAPLE;
+                break;
             case ISLAND_COAST:
                 algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.SMOOTH_SINE : LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = TreeScheme.BIRCH;
                 break;
             case CRATER_FIELDS:
                 algo = LevelData.TerrainAlgorithm.SMOOTH_SINE;
+                scheme = TreeScheme.DEAD_GRAY;
                 break;
             case SHADOW_CANYON:
                 algo = LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
+                scheme = TreeScheme.OAK;
                 break;
             case RAZORBACK_RIDGE:
                 algo = LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
+                scheme = TreeScheme.AUTUMN_MAPLE;
+                break;
+            case REDWOOD_VALLEY:
+                algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = TreeScheme.REDWOOD;
+                break;
+            case MONOLITH_PLAINS:
+                algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = TreeScheme.CHERRY_BLOSSOM;
                 break;
             default:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = r.nextBoolean() ? TreeScheme.OAK : TreeScheme.AUTUMN_MAPLE;
                 break;
         }
         data.setTerrainAlgorithm(algo);
+        data.setTreeScheme(scheme);
 
         // Local defaults
         float teeH = 10.0f;
@@ -67,8 +87,8 @@ public class LevelDataGenerator {
         // Fairway variation defaults
         float fairwayWiggle = 0.3f;
         float islands = 0.1f;
-        float cohesion = 0.5f;     // Default: moderate continuity
-        float breakDensity = 0.3f; // Default: moderate frequency of gaps
+        float cohesion = 0.5f;
+        float breakDensity = 0.3f;
 
         // --- 2. Archetype Specific Tuning ---
         switch (selectedType) {
@@ -84,7 +104,7 @@ public class LevelDataGenerator {
                 undulation = 0.4f;
                 fairwayWiggle = 0.28f;
                 islands = 0f;
-                cohesion = 0.9f;     // Very connected
+                cohesion = 0.9f;
                 breakDensity = 0.1f;
                 break;
 
@@ -119,7 +139,7 @@ public class LevelDataGenerator {
                 minFairwayWidth = 25.0f;
                 fairwayWiggle = 0.35f;
                 islands = 0.0f;
-                cohesion = 0.95f;    // Almost no breaks
+                cohesion = 0.95f;
                 breakDensity = 0.05f;
                 break;
 
@@ -149,7 +169,7 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 35.0f;
                 fairwayWiggle = 0.55f;
                 islands = 0.7f;
-                cohesion = 0.4f;     // Very fragmented "stepping stones"
+                cohesion = 0.4f;
                 breakDensity = 0.8f;
                 break;
 
@@ -268,7 +288,7 @@ public class LevelDataGenerator {
         float strength = r.nextFloat() * maxWindSpeed;
         data.setWind(new Vector3(MathUtils.cos(angle) * strength, 0, MathUtils.sin(angle) * strength));
 
-        System.out.println("Generated " + data.getArchetype() + " | Algo: " + data.getTerrainAlgorithm() + " | Seed: " + data.getSeed() + " | Bunkers: " + bunkerCount);
+        System.out.println("Generated " + data.getArchetype() + " | Algo: " + data.getTerrainAlgorithm() + " | Scheme: " + data.getTreeScheme() + " | Seed: " + data.getSeed());
         return data;
     }
 }

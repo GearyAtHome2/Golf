@@ -22,9 +22,6 @@ public class ClassicGenerator implements ITerrainGenerator {
 
     // --- Monolith Configuration ---
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
-    /** * Base spawn probability scalar.
-     * 0.033f represents a ~30x reduction from the original 1.0f probability curve.
-     */
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
 
     // --- Mogul Configuration ---
@@ -145,11 +142,9 @@ public class ClassicGenerator implements ITerrainGenerator {
                 if (isMogulHighlands) {
                     float wX = x * SCALE + off1, wZ = z * SCALE + off2;
                     float rawMogul = (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, hillFreq)), 1.2f) * undulation * maxHeight * 6.0f;
-
                     float dist = getDistanceToPath(x, z, isPathMask, MOGUL_FADE_DISTANCE);
                     float t = MathUtils.clamp(dist / MOGUL_FADE_DISTANCE, 0f, 1f);
                     float smoothT = t * t * (3 - 2 * t);
-
                     float mogulIntensity = MathUtils.lerp(MOGUL_BASE_DAMPING, 1.0f, smoothT);
                     noise = rawMogul * mogulIntensity;
                 } else {
@@ -166,19 +161,11 @@ public class ClassicGenerator implements ITerrainGenerator {
                 float dzGreen = z - greenCenterZ;
                 float distGreen = (float) Math.sqrt(dxGreen * dxGreen + dzGreen * dzGreen);
                 float protectionRadius = SIZE_Z * 0.22f;
-
                 float protectedHeight = ((isRaisedFairway || isSunkenFairway) && !isElevated) ? currentHeight : getFinalRaw(distGreen, protectionRadius, currentHeight);
 
-// Define the actual edge of the green (around 20-25 units based on mapStandardFeatures)
                 float greenSize = 94.0f;
-
-// Calculate a tighter mask
                 float tGreen = MathUtils.clamp(distGreen / greenSize, 0f, 1f);
-
-// We use a sharper falloff (1-t)^4.
-// This keeps the center bumpy but makes it hit 0 height very quickly as it nears the edge.
-                float greenEffectMask = (float)Math.pow(1.0f - tGreen, 4.0f);
-
+                float greenEffectMask = (float) Math.pow(1.0f - tGreen, 4.0f);
                 protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask);
 
                 float teeT = MathUtils.clamp(zNorm / 0.15f, 0f, 1f);
@@ -205,7 +192,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             tagChasmWalls(map);
             waterLevel = (Math.min(teeSafetyElevation, data.getGreenHeight()) - offsetAmount) - 10.0f;
             data.setWaterLevel(waterLevel);
-        } else if (isMonolithPlains){
+        } else if (isMonolithPlains) {
             waterLevel = -2;
             data.setWaterLevel(-2);
         }
@@ -226,33 +213,26 @@ public class ClassicGenerator implements ITerrainGenerator {
     private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Monolith> monoliths, int gX, int gZ, int tX, int tZ) {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
-
         int spawnAttempts = (int) (SIZE_Z * 2.5f);
         float maxDist = (float) Math.sqrt(Math.pow(SIZE_X, 2) + Math.pow(SIZE_Z, 2));
 
         for (int i = 0; i < spawnAttempts; i++) {
             int x = rng.nextInt(SIZE_X);
             int z = rng.nextInt(SIZE_Z);
-
             Terrain.TerrainType type = map[x][z];
             if (type == Terrain.TerrainType.GREEN || type == Terrain.TerrainType.TEE) continue;
 
             float dx = x - gX;
             float dz = z - gZ;
             float distToGreen = (float) Math.sqrt(dx * dx + dz * dz);
-
-            // Base probability curve (higher near green)
             float p = MathUtils.clamp(1.0f - (distToGreen / maxDist), 0f, 1f);
             float baseProbability = p * p * (3 - 2 * p);
 
-            // Apply the configurable spawn chance scalar (e.g. 0.033 for ~30x reduction)
             if (rng.nextFloat() < (baseProbability * MONOLITH_SPAWN_CHANCE)) {
                 float worldX = (x * SCALE) - (SIZE_X * SCALE / 2f);
                 float worldZ = (z * SCALE) - (SIZE_Z * SCALE / 2f);
                 float worldY = heights[x][z] - MONOLITH_UNDERGROUND_OFFSET;
                 float rotation = rng.nextFloat() * 360f;
-
-                // 1:4:9 Ratio Monolith
                 monoliths.add(new Terrain.Monolith(worldX, worldY, worldZ, 2.0f, 18.0f, 8.0f, rotation));
             }
         }
@@ -299,43 +279,28 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private void tagChasmWalls(Terrain.TerrainType[][] map) {
-        int SIZE_X = map.length;
-        int SIZE_Z = map[0].length;
+        int SIZE_X = map.length, SIZE_Z = map[0].length;
         Terrain.TerrainType[][] nextMap = new Terrain.TerrainType[SIZE_X][SIZE_Z];
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 nextMap[x][z] = map[x][z];
-
-                boolean isPath = (map[x][z] == Terrain.TerrainType.FAIRWAY ||
-                        map[x][z] == Terrain.TerrainType.GREEN ||
-                        map[x][z] == Terrain.TerrainType.TEE);
+                boolean isPath = (map[x][z] == Terrain.TerrainType.FAIRWAY || map[x][z] == Terrain.TerrainType.GREEN || map[x][z] == Terrain.TerrainType.TEE);
                 boolean neighborIsOpposite = false;
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dz = -1; dz <= 1; dz++) {
                         int nx = x + dx, nz = z + dz;
                         if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
                             Terrain.TerrainType t = map[nx][nz];
-                            boolean neighborIsPath = (t == Terrain.TerrainType.FAIRWAY ||
-                                    t == Terrain.TerrainType.GREEN ||
-                                    t == Terrain.TerrainType.TEE);
-
-                            if (isPath != neighborIsPath) {
-                                neighborIsOpposite = true;
-                                break;
-                            }
+                            boolean neighborIsPath = (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE);
+                            if (isPath != neighborIsPath) { neighborIsOpposite = true; break; }
                         }
                     }
                     if (neighborIsOpposite) break;
                 }
-                if (neighborIsOpposite) {
-                    nextMap[x][z] = Terrain.TerrainType.STONE;
-                }
+                if (neighborIsOpposite) nextMap[x][z] = Terrain.TerrainType.STONE;
             }
         }
-
-        for (int x = 0; x < SIZE_X; x++) {
-            System.arraycopy(nextMap[x], 0, map[x], 0, SIZE_Z);
-        }
+        for (int x = 0; x < SIZE_X; x++) System.arraycopy(nextMap[x], 0, map[x], 0, SIZE_Z);
     }
 
     private void applyPathOffset(Terrain.TerrainType[][] map, float[][] heights, float amount, boolean[][] greenBuffer) {
@@ -370,6 +335,9 @@ public class ClassicGenerator implements ITerrainGenerator {
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
         int treeCount = (int) (SIZE_Z * data.getTreeDensity());
 
+        // Get the defined tree scheme for this level
+        Terrain.TreeScheme scheme = data.getTreeScheme();
+
         for (int i = 0; i < treeCount; i++) {
             int tx = rng.nextInt(SIZE_X - 1), tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
@@ -386,7 +354,9 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
             if (rng.nextFloat() > treeChance) continue;
             float tH = isCliff ? cliffDelta * (0.8f + rng.nextFloat() * 0.2f) : data.getTreeHeight();
-            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius()));
+
+            // Pass the level-specific scheme to the Tree constructor
+            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), scheme));
         }
     }
 
@@ -413,9 +383,7 @@ public class ClassicGenerator implements ITerrainGenerator {
                     for (int dx = -range; dx <= range; dx++) {
                         for (int dz = -range; dz <= range; dz++) {
                             int nx = x + dx, nz = z + dz;
-                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
-                                if (heights[nx][nz] < waterLevel && (dx * dx + dz * dz) <= distSqThreshold) { nearWater = true; break; }
-                            }
+                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z && heights[nx][nz] < waterLevel && (dx * dx + dz * dz) <= distSqThreshold) { nearWater = true; break; }
                         }
                         if (nearWater) break;
                     }
@@ -463,7 +431,6 @@ public class ClassicGenerator implements ITerrainGenerator {
         float t = MathUtils.clamp(dG / pR, 0f, 1f);
         float smoothT = t * t * (3 - 2 * t);
         float plateauT = smoothT * smoothT;
-
         return MathUtils.lerp(data.getGreenHeight(), rH, plateauT);
     }
 
