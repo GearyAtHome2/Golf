@@ -75,7 +75,7 @@ public class BallPhysics {
 
                 //configurable
                 //this one is important, can really make or break the skip here.
-                float upwardImpulse = (speed * speed) * 0.0075f * efficiency;
+                float upwardImpulse = (speed * speed) * 0.006f * efficiency;
 
                 float oldVy = velocity.y;
                 velocity.y += upwardImpulse;
@@ -97,8 +97,6 @@ public class BallPhysics {
         if (immersion <= 0) return;
         float speed = velocity.len();
 
-        // 2. CONTINUOUS WATER MAGNUS EFFECT
-        //0.8 was recommended, 0.55 seems valid. Doesn't really do all that mucha fter meniscus effect tbh
         float waterLiftCoeff = 0.8f;
         relativeVelocity.set(velocity);
         float surfaceSpeed = spin.len() * 0.02f;
@@ -106,7 +104,6 @@ public class BallPhysics {
         float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
         float dynamicLift = ((speed / 20.0f) * (speed / 20.0f)) * CL;
 
-        // Upward Lift (Backspin)
         temp.set(relativeVelocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * waterLiftCoeff * immersion);
         velocity.add(temp.scl(delta));
 
