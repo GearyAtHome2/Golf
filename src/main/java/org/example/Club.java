@@ -16,7 +16,7 @@ public enum Club {
     GWEDGE("Gap Wedge", 50.0f, 14.0f, 0.85f, 0.0f),
     SWEDGE("Sand Wedge", 54.0f, 12.5f, 0.8f, 0.0f),
     LWEDGE("Lob Wedge", 58.0f, 11.0f, 0.9f, 0.0f), // Slightly harder than SW due to precision needed
-    PUTTER("Putter", 0.9f, 8.0f, 0.4f, 0.0f);
+    PUTTER("Putter", 0f, 8.0f, 0.4f, 0.0f);
 
     public final String name;
     public final float loft;

@@ -273,18 +273,25 @@ public class Terrain {
     public List<Monolith> getMonoliths() { return monoliths; }
 
     public enum TerrainType {
-        TEE(0.40f, 2.0f, 1.1f, 0.8f, new Color(0.2f, 0.5f, 0.2f, 1f)),
-        FAIRWAY(0.6f, 0.2f, 1.05f, 1.0f, new Color(0.1f, 0.4f, 0.1f, 1f)),
-        ROUGH(1.70f, 4.5f, 1.5f, 1.4f, new Color(0.02f, 0.15f, 0.02f, 1f)),
-        SAND(4.2f, 12.0f, 2.5f, 1.8f, new Color(0.85f, 0.8f, 0.5f, 1f)),
-        GREEN(0.2f, 0.1f, 1.05f, 0.9f, new Color(0.1f, 0.6f, 0.1f, 1f)),
-        STONE(0.1f, 0.1f, 1.05f, 1.5f, new Color(0.2f, 0.2f, 0.23f, 1f));
+        // kf, rr, sm, diff, softness, color
+        // Lowered Sand KF from 4.2 to 2.5 because Softness will handle the rest of the stopping power.
+        TEE(0.40f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
+        FAIRWAY(0.5f, 0.2f, 1.05f, 1.0f, 0.4f, new Color(0.1f, 0.4f, 0.1f, 1f)),
+        ROUGH(1.2f, 4.5f, 1.5f, 1.4f, 0.7f, new Color(0.02f, 0.15f, 0.02f, 1f)),
+        SAND(2.5f, 12.0f, 2.5f, 1.8f, 0.9f, new Color(0.85f, 0.8f, 0.5f, 1f)),
+        GREEN(0.2f, 0.1f, 1.05f, 0.9f, 0.6f, new Color(0.1f, 0.6f, 0.1f, 1f)),
+        STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.02f, new Color(0.18f, 0.18f, 0.2f, 1f));
 
-        public final float kineticFriction, rollingResistance, staticMultiplier, difficulty;
+        public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
         public final Color color;
-        TerrainType(float kf, float rr, float sm, float diff, Color col) {
-            this.kineticFriction = kf; this.rollingResistance = rr;
-            this.staticMultiplier = sm; this.difficulty = diff; this.color = col;
+
+        TerrainType(float kf, float rr, float sm, float diff, float softness, Color col) {
+            this.kineticFriction = kf;
+            this.rollingResistance = rr;
+            this.staticMultiplier = sm;
+            this.difficulty = diff;
+            this.softness = softness;
+            this.color = col;
         }
     }
 

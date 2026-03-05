@@ -169,9 +169,15 @@ public class ClassicGenerator implements ITerrainGenerator {
 
                 float protectedHeight = ((isRaisedFairway || isSunkenFairway) && !isElevated) ? currentHeight : getFinalRaw(distGreen, protectionRadius, currentHeight);
 
-                float t = MathUtils.clamp(distGreen / protectionRadius, 0f, 1f);
-                float greenEffectMask = 1.0f - (t * t * (3 - 2 * t));
-                greenEffectMask *= greenEffectMask;
+// Define the actual edge of the green (around 20-25 units based on mapStandardFeatures)
+                float greenSize = 94.0f;
+
+// Calculate a tighter mask
+                float tGreen = MathUtils.clamp(distGreen / greenSize, 0f, 1f);
+
+// We use a sharper falloff (1-t)^4.
+// This keeps the center bumpy but makes it hit 0 height very quickly as it nears the edge.
+                float greenEffectMask = (float)Math.pow(1.0f - tGreen, 4.0f);
 
                 protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask);
 
@@ -199,6 +205,9 @@ public class ClassicGenerator implements ITerrainGenerator {
             tagChasmWalls(map);
             waterLevel = (Math.min(teeSafetyElevation, data.getGreenHeight()) - offsetAmount) - 10.0f;
             data.setWaterLevel(waterLevel);
+        } else if (isMonolithPlains){
+            waterLevel = -2;
+            data.setWaterLevel(-2);
         }
 
         if (isMogulHighlands) {
@@ -290,24 +299,42 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private void tagChasmWalls(Terrain.TerrainType[][] map) {
-        int SIZE_X = map.length, SIZE_Z = map[0].length;
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+        Terrain.TerrainType[][] nextMap = new Terrain.TerrainType[SIZE_X][SIZE_Z];
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
-                if (map[x][z] == Terrain.TerrainType.ROUGH) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        for (int dz = -1; dz <= 1; dz++) {
-                            int nx = x + dx, nz = z + dz;
-                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
-                                Terrain.TerrainType t = map[nx][nz];
-                                if (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE) {
-                                    map[x][z] = Terrain.TerrainType.STONE;
-                                    break;
-                                }
+                nextMap[x][z] = map[x][z];
+
+                boolean isPath = (map[x][z] == Terrain.TerrainType.FAIRWAY ||
+                        map[x][z] == Terrain.TerrainType.GREEN ||
+                        map[x][z] == Terrain.TerrainType.TEE);
+                boolean neighborIsOpposite = false;
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        int nx = x + dx, nz = z + dz;
+                        if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
+                            Terrain.TerrainType t = map[nx][nz];
+                            boolean neighborIsPath = (t == Terrain.TerrainType.FAIRWAY ||
+                                    t == Terrain.TerrainType.GREEN ||
+                                    t == Terrain.TerrainType.TEE);
+
+                            if (isPath != neighborIsPath) {
+                                neighborIsOpposite = true;
+                                break;
                             }
                         }
                     }
+                    if (neighborIsOpposite) break;
+                }
+                if (neighborIsOpposite) {
+                    nextMap[x][z] = Terrain.TerrainType.STONE;
                 }
             }
+        }
+
+        for (int x = 0; x < SIZE_X; x++) {
+            System.arraycopy(nextMap[x], 0, map[x], 0, SIZE_Z);
         }
     }
 

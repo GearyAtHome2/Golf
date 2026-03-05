@@ -69,10 +69,15 @@ public class ShotController {
         if (cancelCooldown > 0) cancelCooldown -= delta;
 
         if (waitingForMinigame) {
-            if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+            // If the HUD was canceled (which now only happens BEFORE the needle stop)
+            if (hud.wasMinigameCanceled()) {
                 reset();
                 return false;
             }
+
+            if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+            }
+
             if (hud.isMinigameComplete()) {
                 waitingForMinigame = false;
                 executeShot(ball, camDir, club, lockedPower, hud, terrain, hud.getMinigameResult());
@@ -85,8 +90,6 @@ public class ShotController {
         currentDifficulty.clubDifficulty = MathUtils.clamp(club.powerMult / 20f, 1.0f, 2.0f);
         Vector2 spinOffset = hud.getSpinOffset();
         currentDifficulty.swingDifficulty = 1.0f + (spinOffset.len() * 0.75f);
-
-        float finalSpeedMult = currentDifficulty.getCombinedValue();
 
         if (isPowerLocked) {
             lockTimer += delta;
@@ -119,7 +122,7 @@ public class ShotController {
         if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
                 isCharging = true;
-                spaceHoldTime = Math.min(spaceHoldTime + (delta * finalSpeedMult), MAX_POWER);
+                spaceHoldTime = Math.min(spaceHoldTime + (delta * 2f), MAX_POWER);
             }
             return false;
         } else if (isCharging) {

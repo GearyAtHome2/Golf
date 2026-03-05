@@ -1,5 +1,6 @@
 package org.example.ball;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
@@ -183,7 +184,7 @@ public class Ball {
             Vector3 wallNormal = new Vector3(bestNormal.x, 0, bestNormal.z).nor();
             if (wallNormal.len() < 0.1f) wallNormal.set(-velocity.x, 0, -velocity.z).nor();
 
-            velocity.set(BallPhysics.calculateBounceWithSpin(velocity, wallNormal, spin, BOUNCE_RESTITUTION, 0.4f));
+            velocity.set(BallPhysics.calculateBounceWithSpin(velocity, wallNormal, spin, BOUNCE_RESTITUTION, 0.4f, 0f));
             position.add(tempV1.set(wallNormal).scl(0.15f));
             hitCooldown = 0.05f;
             lastInteraction = Interaction.TERRAIN;
@@ -209,12 +210,16 @@ public class Ball {
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
         boolean isWall = BallPhysics.isWallCollision(normal, 45f);
 
+        // LOGGING: State of entry
+        float horizSpeedPre = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+        Gdx.app.log("BOUNCE_LOG", String.format("--- Terrain Impact --- State: %s | HorizSpeed: %.4f | Vy: %.4f", state, horizSpeedPre, velocity.y));
+
         if (terrainHeight - position.y > MAX_STEP_UP) {
             tempV1.set(normal.x, 0, normal.z).nor();
             if (tempV1.len() < 0.1f) position.y = terrainHeight;
             else {
                 position.add(tempV1.scl(0.4f));
-                velocity.set(BallPhysics.calculateBounceWithSpin(velocity, tempV1, spin, 0.3f, type.kineticFriction));
+                velocity.set(BallPhysics.calculateBounceWithSpin(velocity, tempV1, spin, 0.3f, type.kineticFriction, type.softness));
             }
             return;
         }
@@ -232,22 +237,28 @@ public class Ball {
             vTangent.set(velocity).sub(vNormal);
         }
 
-        if (state != State.ROLLING && Math.abs(vDotN) > MIN_BOUNCE_VY) applyBounce(normal, type);
-        else {
+        if (state != State.ROLLING && Math.abs(vDotN) > MIN_BOUNCE_VY) {
+            applyBounce(normal, type);
+        } else {
             state = State.ROLLING;
             applyRollingPhysics(vTangent, normal, type, delta);
         }
 
         velocity.set(vTangent).add(vNormal);
         checkStationaryCondition(type, normal);
+
+        float horizSpeedPost = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+        Gdx.app.log("BOUNCE_LOG", String.format("--- Post Terrain --- HorizSpeed: %.4f | Vy: %.4f", horizSpeedPost, velocity.y));
     }
 
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
+        float horizSpeedBeforeBounce = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+
         float friction = type.kineticFriction;
         float frictionImpact = (friction - 0.2f) * 0.08f;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - frictionImpact, 0.05f, BOUNCE_RESTITUTION);
 
-        velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction));
+        velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction ,type.softness ));
 
         float vDotN = velocity.dot(normal);
         vNormal.set(normal).scl(vDotN);
@@ -261,17 +272,26 @@ public class Ball {
 
         if (isGoodShot) spawnBurst(5, 2.0f);
         activeTrailColor.lerp(Color.GRAY, 0.25f);
+
+        float horizSpeedAfterBounce = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+        Gdx.app.log("BOUNCE_LOG", String.format("   ApplyBounce DONE | Horiz Change: %.4f -> %.4f | Normal: %s", horizSpeedBeforeBounce, horizSpeedAfterBounce, normal.toString()));
     }
 
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, Terrain.TerrainType type, float delta) {
         Vector3 slopeForce = BallPhysics.getSlopeForce(BallPhysics.getGravityForce(GRAVITY), normal);
         Vector3 friction = BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY);
+
+        float horizSpeedBeforeRolling = tangentVel.len();
         tangentVel.add(slopeForce.scl(delta)).add(friction.scl(delta));
+        float horizSpeedAfterRolling = tangentVel.len();
+
         spin.setZero();
 
         if (activeTrailColor.r > 0.3f || activeTrailColor.g > 0.3f) {
             activeTrailColor.lerp(new Color(0.2f, 0.2f, 0.2f, 1f), delta * 1.5f);
         }
+
+        Gdx.app.log("BOUNCE_LOG", String.format("   Rolling Step | Tangent Change: %.4f -> %.4f", horizSpeedBeforeRolling, horizSpeedAfterRolling));
     }
 
     private void checkStationaryCondition(Terrain.TerrainType type, Vector3 normal) {
@@ -282,6 +302,7 @@ public class Ball {
             spin.setZero();
             state = State.STATIONARY;
             activeTrailColor.set(Color.WHITE);
+            Gdx.app.log("BOUNCE_LOG", "   STATE: STATIONARY");
         }
     }
 

@@ -58,6 +58,11 @@ public class FreeCameraController {
             updateOverheadMode(ballPos, delta);
             wasOverheadLastFrame = true;
         } else {
+            if (wasOverheadLastFrame) {
+                currentLookAt.set(ballPos);
+                camera.up.set(0, 1, 0);
+            }
+
             updateNormalMode(ballPos, delta);
             wasOverheadLastFrame = false;
         }
@@ -79,7 +84,10 @@ public class FreeCameraController {
         camera.lookAt(overheadCenter);
     }
 
-    public boolean isOverhead() { return isOverhead; }
+    public boolean isOverhead() {
+        introActive = false; // Kill the intro if they check the map
+        return isOverhead;
+    }
 
     private void updateNormalMode(Vector3 ballPos, float delta) {
         float dstToTarget = camera.position.dst(tempTargetPos);

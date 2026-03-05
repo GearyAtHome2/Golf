@@ -97,21 +97,41 @@ public class HUD {
         batch.begin();
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
+
+        // Check if clipboard contains a valid seed
+        String clipboardContent = Gdx.app.getClipboard().getContents();
+        boolean hasValidSeed = false;
+        if (clipboardContent != null && !clipboardContent.isEmpty()) {
+            try {
+                Long.parseLong(clipboardContent.trim());
+                hasValidSeed = true;
+            } catch (NumberFormatException ignored) {}
+        }
+
         font.getData().setScale(3f);
         font.draw(batch, "GEARY GOLF", centerX - 180, centerY + 150);
+
         font.getData().setScale(1.5f);
-        drawOption(selection == 0, "PLAY GAME", centerX - 80, centerY);
-        drawOption(selection == 1, "PRACTICE RANGE", centerX - 80, centerY - 60);
-        drawOption(selection == 2, "PLAY SEED FROM CLIPBOARD", centerX - 80, centerY - 120);
+        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY);
+        drawOption(selection == 1, true, "PRACTICE RANGE", centerX - 80, centerY - 60);
+
+        // Option 2 is only "active" if a seed is found
+        String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
+        drawOption(selection == 2, hasValidSeed, seedText, centerX - 80, centerY - 120);
+
         font.getData().setScale(1f);
         font.setColor(Color.GRAY);
         font.draw(batch, "Use UP/DOWN to select, ENTER to start", centerX - 130, centerY - 210);
         batch.end();
     }
 
-    private void drawOption(boolean selected, String text, float x, float y) {
-        font.setColor(selected ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, (selected ? "> " : "  ") + text, x, y);
+    private void drawOption(boolean selected, boolean enabled, String text, float x, float y) {
+        if (!enabled) {
+            font.setColor(Color.DARK_GRAY);
+        } else {
+            font.setColor(selected ? Color.YELLOW : Color.WHITE);
+        }
+        font.draw(batch, (selected && enabled ? "> " : "  ") + text, x, y);
     }
 
     public void renderPauseMenu(boolean isPractice, LevelData levelData) {
@@ -123,6 +143,12 @@ public class HUD {
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.M)) {
             mainMenuRequested = true;
+        }
+        if (!isPractice && Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
+            String seedString = String.valueOf(levelData.getSeed());
+            Gdx.app.getClipboard().setContents(seedString);
+            seedFeedbackTimer = 1.0f;
+            Gdx.app.log("HUD", "Seed copied to clipboard: " + seedString);
         }
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
@@ -151,7 +177,6 @@ public class HUD {
     }
 
     public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain) {
-        // LOCK SPIN INPUT DURING MINIGAME
         if (!minigameActive) {
             updateSpinInput(Gdx.graphics.getDeltaTime());
         }
@@ -219,7 +244,12 @@ public class HUD {
     }
 
     private void updateMinigame(float delta, Camera camera, Terrain terrain) {
-        if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) { cancelMinigame(); return; }
+        // Only allow cancellation if the needle hasn't been stopped/locked yet
+        if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+            cancelMinigame();
+            return;
+        }
+
         updateAnimations(delta);
 
         if (!needleStopped) {
@@ -241,7 +271,10 @@ public class HUD {
             }
         } else {
             glowTimer -= delta;
-            if (glowTimer <= 0) { minigameActive = false; activeAnims.clear(); }
+            if (glowTimer <= 0) {
+                minigameActive = false;
+                activeAnims.clear();
+            }
         }
     }
 
@@ -312,7 +345,7 @@ public class HUD {
         this.activeDiff = diff; this.activePowerMod = powerMod; this.activeBallPos.set(ballPos);
         this.minigameActive = true; this.needleStopped = false; this.minigameCanceled = false;
         this.lastResult = null; this.minigameStep = 0; this.shotRandomness = MathUtils.random(-0.1f, 0.1f);
-        engine.reset(club.baseDifficulty); // Centers centers and sets width back to 1.0
+        engine.reset(club.baseDifficulty);
         activeAnims.clear();
         if (animSetting == AnimSpeed.NONE) {
             engine.barWidthMult = (1.0f / activeDiff.terrainDifficulty) * (1.0f / activeDiff.clubDifficulty) * (1.0f / activeDiff.swingDifficulty);

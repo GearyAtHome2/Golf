@@ -75,7 +75,7 @@ public class LevelDataGenerator {
             case ISLAND_COAST:
                 teeH = 15.0f + r.nextFloat() * 10.0f;
                 greenH = 15.0f + r.nextFloat() * 5.0f;
-                maxWindSpeed = 30.0f;
+                maxWindSpeed = 22.0f;
                 hillFreq = 0.02f;
                 maxH = 15.0f;
                 treeDensity = 0.03f;
@@ -91,7 +91,7 @@ public class LevelDataGenerator {
             case CLIFFSIDE_BLUFF:
                 teeH = 60.0f + r.nextFloat() * 30.0f;
                 greenH = 5.0f + r.nextFloat() * 10.0f;
-                maxWindSpeed = 22.0f;
+                maxWindSpeed = 21.0f;
                 hillFreq = 0.012f;
                 maxH = 10.0f;
                 foliageR = 8.0f;
@@ -115,8 +115,8 @@ public class LevelDataGenerator {
                 hillFreq = 0.025f;
                 maxH = 5.0f;
                 treeDensity = 0.35f;
-                maxFairwayWidth = 25.0f;
-                minFairwayWidth = 10.0f;
+                maxFairwayWidth = 35.0f;
+                minFairwayWidth = 25.0f;
                 fairwayWiggle = 0.35f;
                 islands = 0.0f;
                 cohesion = 0.95f;    // Almost no breaks
@@ -126,7 +126,7 @@ public class LevelDataGenerator {
             case MOGUL_HIGHLANDS:
                 teeH = 20.0f;
                 greenH = 20.0f;
-                maxWindSpeed = 18.0f;
+                maxWindSpeed = 15.0f;
                 hillFreq = 0.08f;
                 maxH = 18.0f;
                 treeDensity = 0.05f;
@@ -143,6 +143,7 @@ public class LevelDataGenerator {
                 treeH = 4.0f;
                 foliageR = 3.5f;
                 trunkR = 0.5f;
+                maxWindSpeed = 14.0f;
                 hillFreq = 0.045f;
                 treeDensity = 0.95f;
                 maxFairwayWidth = 35.0f;
@@ -155,7 +156,7 @@ public class LevelDataGenerator {
             case CRATER_FIELDS:
                 teeH = 8.0f;
                 greenH = 12.0f;
-                maxWindSpeed = 20.0f;
+                maxWindSpeed = 17.0f;
                 treeH = 5.0f;
                 foliageR = 4.0f;
                 trunkR = 0.6f;
@@ -180,8 +181,8 @@ public class LevelDataGenerator {
                 trunkR = 0.5f;
                 hillFreq = 0.02f;
                 maxH = 4.0f;
-                maxFairwayWidth = 32.0f;
-                minFairwayWidth = 5f;
+                maxFairwayWidth = 40.0f;
+                minFairwayWidth = 10f;
                 undulation = 0.5f;
                 fairwayWiggle = 0.31f;
                 islands = 0.0f;
@@ -192,18 +193,18 @@ public class LevelDataGenerator {
             case RAZORBACK_RIDGE:
                 teeH = 11.0f;
                 greenH = 35.0f + r.nextFloat() * 15.0f;
-                maxWindSpeed = 35.0f;
+                maxWindSpeed = 22.0f;
                 treeH = 12.0f + r.nextFloat() * 8.0f;
                 treeDensity = 0.18f;
                 foliageR = 5.0f;
                 trunkR = 0.8f;
                 hillFreq = 0.02f;
                 maxH = 5.0f;
-                maxFairwayWidth = 35.0f;
+                maxFairwayWidth = 45.0f;
                 minFairwayWidth = 0f;
                 undulation = 0.6f;
                 bunkerCount = 12 + r.nextInt(10);
-                fairwayWiggle = 0.25f;
+                fairwayWiggle = 0.21f;
                 islands = 0.1f;
                 cohesion = 0.6f;
                 breakDensity = 0.4f;
@@ -213,6 +214,7 @@ public class LevelDataGenerator {
                 teeH = 20f;
                 greenH = 15.0f + r.nextFloat() * 10.0f;
                 fairwayWiggle = 0.1f;
+                maxWindSpeed = 10.0f;
                 islands = 0.25f;
                 maxFairwayWidth = 60f;
                 cohesion = 1.3f;
@@ -227,6 +229,7 @@ public class LevelDataGenerator {
             default:
                 fairwayWiggle = 0.1f;
                 islands = 0.25f;
+                maxWindSpeed = 18.0f;
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
                 breakDensity = 0.25f;
