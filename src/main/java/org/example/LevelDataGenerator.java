@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = LevelData.Archetype.SHADOW_CANYON;
+        selectedType = LevelData.Archetype.MOGUL_HIGHLANDS;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm based on Archetype ---
@@ -62,7 +62,7 @@ public class LevelDataGenerator {
         float maxFairwayWidth = 45.0f;
         float minFairwayWidth = 0f;
         float undulation = r.nextFloat() * 0.4f + 0.2f;
-        int bunkerCount = r.nextInt(10) + 5;
+        int bunkerCount = 0;
 
         // Fairway variation defaults
         float fairwayWiggle = 0.3f;
@@ -79,8 +79,8 @@ public class LevelDataGenerator {
                 hillFreq = 0.02f;
                 maxH = 15.0f;
                 treeDensity = 0.03f;
-                maxFairwayWidth = 35.0f;
-                minFairwayWidth = 15.0f;
+                maxFairwayWidth = 45.0f;
+                minFairwayWidth = 28.0f;
                 undulation = 0.4f;
                 fairwayWiggle = 0.28f;
                 islands = 0f;
@@ -164,7 +164,6 @@ public class LevelDataGenerator {
                 treeDensity = 0.10f;
                 maxFairwayWidth = 40.0f;
                 undulation = 0.25f;
-                bunkerCount = 25 + r.nextInt(15);
                 fairwayWiggle = 0.1f;
                 islands = 0.4f;
                 cohesion = 0.9f;
@@ -184,7 +183,6 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 32.0f;
                 minFairwayWidth = 5f;
                 undulation = 0.5f;
-                bunkerCount = 0;
                 fairwayWiggle = 0.31f;
                 islands = 0.0f;
                 cohesion = 0.8f;
@@ -218,6 +216,7 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
                 breakDensity = 0.25f;
+                bunkerCount = 1 + r.nextInt(4);
                 break;
         }
 

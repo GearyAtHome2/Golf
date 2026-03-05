@@ -19,9 +19,9 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
 import org.example.ball.ShotController;
-import org.example.ball.ShotDifficulty;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
+import org.example.hud.HUD;
 import org.example.terrain.*;
 
 import java.util.ArrayList;

@@ -13,7 +13,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import org.example.Club;
-import org.example.HUD;
+import org.example.hud.HUD;
 import org.example.terrain.Terrain;
 
 public class ShotController {
@@ -176,7 +176,7 @@ public class ShotController {
         float deloftAbility = MathUtils.clamp(1.2f - (club.loft / 45f), 0.2f, 1.2f);
         float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * MAX_DELOFT * deloftAbility), 0.1f, 85f);
 
-        ball.hit(shotDir, power, adjustedLoft, finalPowerMult);
+        ball.hit(shotDir, power, adjustedLoft, finalPowerMult, result.rating);
 
         float totalSpeed = power * finalPowerMult;
         float attackAngle = quadOffset.y * -20.0f;

@@ -62,17 +62,48 @@ public class Terrain {
     }
 
     private void calculateGreenBounds() {
-        boolean greenFound = false;
+        List<Float> greenHeights = new ArrayList<>();
+        float sum = 0;
+
+        // First Pass: Find all green tiles and calculate the average
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (terrainMap[x][z] == TerrainType.GREEN) {
-                    greenMinH = Math.min(greenMinH, heightMap[x][z]);
-                    greenMaxH = Math.max(greenMaxH, heightMap[x][z]);
-                    greenFound = true;
+                    float h = heightMap[x][z];
+                    greenHeights.add(h);
+                    sum += h;
                 }
             }
         }
-        if (!greenFound) { greenMinH = 0; greenMaxH = 10; }
+
+        if (greenHeights.isEmpty()) {
+            greenMinH = 0; greenMaxH = 10;
+            return;
+        }
+
+        float averageHeight = sum / greenHeights.size();
+        float threshold = 5.0f; // Your requirement: >5 tiles height difference
+
+        greenMinH = Float.MAX_VALUE;
+        greenMaxH = -Float.MAX_VALUE;
+        boolean validFound = false;
+
+        for (float h : greenHeights) {
+            if (Math.abs(h - averageHeight) > threshold) {
+                System.out.println("[Terrain Log] Outlier detected! Height: " + h +
+                        " (Average: " + averageHeight + "). Ignoring for colormap.");
+                continue;
+            }
+
+            greenMinH = Math.min(greenMinH, h);
+            greenMaxH = Math.max(greenMaxH, h);
+            validFound = true;
+        }
+
+        if (!validFound) {
+            greenMinH = averageHeight - 1;
+            greenMaxH = averageHeight + 1;
+        }
     }
 
     private ModelInstance buildChunk(int zStart, int zEnd) {

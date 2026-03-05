@@ -2,11 +2,11 @@ package org.example;
 
 public enum Club {
     // Name, Loft, Power, BaseDiff, TeeBonus
-    DRIVER("Driver", 10.5f, 35.0f, 1.8f, 0.6f), // Brutal off fairway, okay on tee
-    WOOD_3("3 Wood", 15.0f, 31.0f, 1.6f, 0.4f),
+    DRIVER("Driver", 10.5f, 35.0f, 1.9f, 0.6f), // Brutal off fairway, okay on tee
+    WOOD_3("3 Wood", 15.0f, 31.0f, 1.7f, 0.4f),
     WOOD_5("5 Wood", 18.0f, 28.5f, 1.5f, 0.3f),
     IRON_2("2 Iron", 12.5f, 32.0f, 1.9f, 0.1f), // High skill floor
-    HYBRID_3("3 Hybrid", 21.0f, 26.0f, 1.3f, 0.3f),
+    HYBRID_3("3 Hybrid", 21.0f, 27.2f, 1.3f, 0.3f),
     IRON_5("5 Iron", 26.0f, 23.0f, 1.4f, 0.0f),
     IRON_6("6 Iron", 30.0f, 21.5f, 1.3f, 0.0f),
     IRON_7("7 Iron", 34.0f, 20.0f, 1.2f, 0.0f),

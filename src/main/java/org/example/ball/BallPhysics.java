@@ -133,14 +133,33 @@ public class BallPhysics {
         return new Vector3(gravityForce).sub(temp);
     }
 
-    public static Vector3 calculateBounce(Vector3 velocity, Vector3 normal, float restitution) {
+    public static Vector3 calculateBounceWithSpin(Vector3 velocity, Vector3 normal, Vector3 spin, float restitution, float friction) {
+        // 1. Standard elastic bounce components
         float vDotN = velocity.dot(normal);
-        Vector3 vNormal = new Vector3(normal).scl(vDotN);
-        Vector3 vTangent = new Vector3(velocity).sub(vNormal);
-        vNormal.scl(-restitution);
-        float impactSpeed = Math.abs(vDotN);
-        float frictionScale = MathUtils.clamp(1.0f - (0.2f * impactSpeed), 0.95f, 1.0f);
+        temp.set(normal).scl(vDotN); // vNormal
+        Vector3 vTangent = new Vector3(velocity).sub(temp);
+
+        // Reverse and scale the normal velocity (the actual "bounce")
+        Vector3 vNormalBounce = new Vector3(temp).scl(-restitution);
+
+        // 2. Spin-to-Velocity Transfer
+        // We assume the local 'forward' for the bounce is the tangent velocity direction
+        if (vTangent.len() > 0.1f) {
+            Vector3 tanDir = new Vector3(vTangent).nor();
+            Vector3 sideDir = new Vector3(tanDir).crs(normal).nor();
+
+            float forwardKick = -spin.x * 0.05f * friction;
+
+            // Spin.y is sidespin. It applies force perpendicular to the travel direction.
+            float sideKick = spin.y * 0.05f * friction;
+
+            vTangent.add(tanDir.scl(forwardKick));
+            vTangent.add(sideDir.scl(sideKick));
+        }
+
+        float frictionScale = MathUtils.clamp(1.0f - (friction * 0.5f), 0.6f, 0.98f);
         vTangent.scl(frictionScale);
-        return vTangent.add(vNormal);
+
+        return vTangent.add(vNormalBounce);
     }
 }

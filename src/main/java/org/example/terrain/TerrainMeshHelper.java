@@ -17,7 +17,6 @@ public class TerrainMeshHelper {
         float slope = 1f - normal.y;
         Color color = new Color();
 
-        // Slope-based Rock Logic (70% steepness threshold)
         if (type == Terrain.TerrainType.GREEN) {
             float avgY = (v1.y + v2.y + v3.y) / 3.0f;
             float range = maxH - minH;
