@@ -87,9 +87,9 @@ public class FeatureProcessor {
         float wiggle = data.getFairwayWiggle();
 
         float cohesion = data.getFairwayCohesion();
-        float breakDensity = data.getFairwayBreakDensity();
+//        float breakDensity = data.getFairwayBreakDensity();
 
-        float widthNoiseFreq = 0.015f + (breakDensity * 0.065f);
+        float widthNoiseFreq = 0.015f + 0.035f;
 
         float breakageThreshold = 0.2f - (cohesion * 1.5f) + (wiggle * 0.2f);
 

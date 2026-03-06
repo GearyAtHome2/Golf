@@ -299,8 +299,9 @@ public class Terrain {
         private final Vector3 pos;
         private final float tH, tR, fR;
         private final TreeScheme scheme;
+        private float actualFoliageHeight; // Store this for the hitbox logic
 
-        public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme) {
+        public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng) {
             this.pos = new Vector3(x, y, z);
             this.tH = th; this.tR = tr; this.fR = fr;
             this.scheme = scheme;
@@ -317,20 +318,22 @@ public class Terrain {
 
             // 2. Create Foliage
             if (scheme == TreeScheme.FIR) {
-                // Height is 60% of trunk plus the original foliage head height (fR * 2)
-                float coneHeight = (th * 0.6f) + (fr * 2);
-                Model coneModel = mb.createCone(fr * 2.5f, coneHeight, fr * 2.5f, 16,
+                // Randomize the "skirt" length from 60% to 91% of trunk height
+                float skirtMultiplier = 0.6f + (rng.nextFloat() * (0.91f - 0.6f));
+                this.actualFoliageHeight = (th * skirtMultiplier) + (fr * 2);
+
+                Model coneModel = mb.createCone(fr * 2.5f, actualFoliageHeight, fr * 2.5f, 16,
                         leafMat,
                         VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
 
                 foliage = new ModelInstance(coneModel);
 
-                // The top of the cone is at y + th + fr*2.
-                // The center of the cone is top - (coneHeight / 2).
+                // Top remains at th + fr*2. Center is top minus half the randomized height.
                 float topY = y + th + (fr * 2);
-                float centerY = topY - (coneHeight / 2f);
+                float centerY = topY - (actualFoliageHeight / 2f);
                 foliage.transform.setToTranslation(x, centerY, z);
             } else {
+                this.actualFoliageHeight = fr * 2;
                 Model sphereModel = mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16,
                         leafMat,
                         VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
@@ -341,16 +344,14 @@ public class Terrain {
 
         public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
             if (scheme == TreeScheme.FIR) {
-                float coneHeight = (tH * 0.6f) + (fR * 2);
                 float topY = pos.y + tH + (fR * 2);
-                float baseY = topY - coneHeight;
+                float baseY = topY - actualFoliageHeight;
 
                 // Vertical bounds check
                 if (ballPos.y > topY + ballRadius || ballPos.y < baseY - ballRadius) return false;
 
                 // Taper logic: top is 0, bottom is 1.0
-                float relativeY = MathUtils.clamp((topY - ballPos.y) / coneHeight, 0, 1);
-                // Using 1.25f * fR to match the 2.5f diameter in the constructor
+                float relativeY = MathUtils.clamp((topY - ballPos.y) / actualFoliageHeight, 0, 1);
                 float coneRadiusAtHeight = (relativeY * (fR * 1.25f)) + ballRadius;
 
                 float distXZ = Vector3.dst(ballPos.x, 0, ballPos.z, pos.x, 0, pos.z);

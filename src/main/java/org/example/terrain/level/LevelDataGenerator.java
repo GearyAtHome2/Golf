@@ -5,7 +5,7 @@ import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.Terrain.TreeScheme;
 import java.util.Random;
 
-import static org.example.terrain.level.LevelData.Archetype.CLIFFSIDE_BLUFF;
+import static org.example.terrain.level.LevelData.Archetype.ISLAND_COAST;
 
 public class LevelDataGenerator {
 
@@ -20,7 +20,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = CLIFFSIDE_BLUFF;
+//        selectedType = ISLAND_COAST;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme based on Archetype ---
@@ -82,17 +82,19 @@ public class LevelDataGenerator {
         float hillFreq = 0.035f;
         float maxH = 7.0f;
         float treeDensity = 0.15f;
-        float maxFairwayWidth = 45.0f;
-        float minFairwayWidth = 0f;
+
         float undulation = r.nextFloat() * 0.4f + 0.2f;
         int bunkerCount = 0;
         int distance = 500;
+        int par = 1;
+
 
         // Fairway variation defaults
         float fairwayWiggle = 0.3f;
         float islands = 0.1f;
         float cohesion = 0.5f;
-        float breakDensity = 0.3f;
+        float maxFairwayWidth = 45.0f;
+        float minFairwayWidth = 0f;
 
         // --- 2. Archetype Specific Tuning ---
         switch (selectedType) {
@@ -109,9 +111,13 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.28f;
                 islands = 0f;
                 cohesion = 0.9f;
-                breakDensity = 0.1f;
+                distance = Math.round(400 + r.nextFloat() * 200);
+                par = distance < 490? 4 : distance < 560 ? 5 : 6;
                 break;
 
+
+                //can't change distance here really - causes fairway to cut out before the cliff ends
+            //par 4 as it stands
             case CLIFFSIDE_BLUFF:
                 teeH = 60.0f + r.nextFloat() * 30.0f;
                 greenH = 5.0f + r.nextFloat() * 10.0f;
@@ -126,7 +132,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.25f;
                 islands = 0.05f;
                 cohesion = 0.7f;
-                breakDensity = 0.2f;
+                distance = Math.round(410 + r.nextFloat() * 120);
+                par = distance < 480? 4 : 5 ;
                 break;
 
             case REDWOOD_VALLEY:
@@ -144,7 +151,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.35f;
                 islands = 0.0f;
                 cohesion = 0.95f;
-                breakDensity = 0.05f;
+                distance = Math.round(550 + r.nextFloat() * 200);
+                par = 5;
                 break;
 
             case MOGUL_HIGHLANDS:
@@ -155,12 +163,13 @@ public class LevelDataGenerator {
                 maxH = 18.0f;
                 treeDensity = 0.05f;
                 maxFairwayWidth = 40.0f;
-                minFairwayWidth = 25.0f;
+                minFairwayWidth = 27.0f;
                 undulation = 0.2f;
-                fairwayWiggle = 0.22f;
+                fairwayWiggle = 0.2f;
                 islands = 0.3f;
-                cohesion = 0.4f;
-                breakDensity = 0.5f;
+                cohesion = 0.6f;
+                distance = Math.round(400 + r.nextFloat() * 150);
+                par = distance < 490? 4 : 5 ;
                 break;
 
             case BUSH_WORLD:
@@ -169,12 +178,13 @@ public class LevelDataGenerator {
                 trunkR = 0.5f;
                 maxWindSpeed = 14.0f;
                 hillFreq = 0.045f;
-                treeDensity = 0.95f;
+                treeDensity = 0.9f;
                 maxFairwayWidth = 35.0f;
                 fairwayWiggle = 0.55f;
                 islands = 0.7f;
-                cohesion = 0.4f;
-                breakDensity = 0.8f;
+                cohesion = 0.42f;
+                distance = Math.round(410 + r.nextFloat() * 80);
+                par = 5 ;
                 break;
 
             case CRATER_FIELDS:
@@ -187,12 +197,13 @@ public class LevelDataGenerator {
                 hillFreq = 0.06f;
                 maxH = 12.0f;
                 treeDensity = 0.10f;
-                maxFairwayWidth = 40.0f;
-                undulation = 0.25f;
+                maxFairwayWidth = 50.0f;
+                undulation = 0.15f;
                 fairwayWiggle = 0.1f;
                 islands = 0.4f;
                 cohesion = 0.9f;
-                breakDensity = 0.7f;
+                distance = Math.round(500 + r.nextFloat() * 100);
+                par = 5;
                 break;
 
             case SHADOW_CANYON:
@@ -211,12 +222,13 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.31f;
                 islands = 0.0f;
                 cohesion = 0.8f;
-                breakDensity = 0.15f;
+                distance = Math.round(420 + r.nextFloat() * 120);
+                par = 4;
                 break;
 
             case RAZORBACK_RIDGE:
-                teeH = 11.0f;
-                greenH = 35.0f + r.nextFloat() * 15.0f;
+                teeH = 0f;
+                greenH = 15.0f + r.nextFloat() * 15.0f;
                 maxWindSpeed = 22.0f;
                 treeH = 12.0f + r.nextFloat() * 8.0f;
                 treeDensity = 0.18f;
@@ -224,14 +236,15 @@ public class LevelDataGenerator {
                 trunkR = 0.8f;
                 hillFreq = 0.02f;
                 maxH = 5.0f;
-                maxFairwayWidth = 45.0f;
+                maxFairwayWidth = 48.0f;
                 minFairwayWidth = 0f;
                 undulation = 0.6f;
                 bunkerCount = 12 + r.nextInt(10);
-                fairwayWiggle = 0.21f;
+                fairwayWiggle = 0.19f;
                 islands = 0.1f;
-                cohesion = 0.6f;
-                breakDensity = 0.4f;
+                cohesion = 0.63f;
+                distance = Math.round(450 + r.nextFloat() * 100);
+                par = 6;
                 break;
 
             case MONOLITH_PLAINS:
@@ -243,10 +256,11 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 60f;
                 cohesion = 1.3f;
                 undulation = 0.9f;
-                breakDensity = 0.25f;
                 bunkerCount = 1 + r.nextInt(4);
                 hillFreq = 0.008f;
                 maxH = 15f;
+                distance = Math.round(460 + r.nextFloat() * 120);
+                par = distance < 500? 4 : 5;
                 break;
 
             case STANDARD_LINKS:
@@ -256,8 +270,9 @@ public class LevelDataGenerator {
                 maxWindSpeed = 18.0f;
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
-                breakDensity = 0.25f;
                 bunkerCount = 1 + r.nextInt(4);
+                distance = Math.round(400 + r.nextFloat() * 200);
+                par = distance < 480? 3 : distance < 530 ? 4 : 5;
                 break;
 
         }
@@ -277,12 +292,12 @@ public class LevelDataGenerator {
         data.setHoleSize(0.6f);
         data.setnBunkers(bunkerCount);
         data.setDistance(distance);
+        data.setPar(par);
 
         // New fairway parameters
         data.setFairwayWiggle(fairwayWiggle);
         data.setFairwayRoughIslands(islands);
         data.setFairwayCohesion(cohesion);
-        data.setFairwayBreakDensity(breakDensity);
 
         // Water logic
         float lowerBound = Math.min(teeH, greenH);

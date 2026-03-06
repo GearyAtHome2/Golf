@@ -1,5 +1,6 @@
 package org.example.terrain;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.level.LevelData;
@@ -210,6 +211,8 @@ public class ClassicGenerator implements ITerrainGenerator {
         if (isMonolithPlains) {
             generateMonolithPlains(map, heights, monoliths, greenCenterX, greenCenterZ, (int) (SIZE_X * 0.5f), (int) (SIZE_Z * 0.05f));
         }
+
+        Gdx.app.log("GENERATOR", String.format("Map: %s length: %s par: %s", data.getArchetype().name(), data.getDistance(), data.getPar()));
     }
 
     private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Monolith> monoliths, int gX, int gZ, int tX, int tZ) {
@@ -357,7 +360,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             if (rng.nextFloat() > treeChance) continue;
             float tH = isCliff ? cliffDelta * (0.8f + rng.nextFloat() * 0.2f) : data.getTreeHeight();
 
-            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), scheme));
+            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), scheme, rng
+            ));
         }
     }
 

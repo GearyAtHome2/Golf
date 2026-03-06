@@ -29,7 +29,7 @@ public class LevelData {
     private long seed;
     private Archetype archetype;
     private TerrainAlgorithm terrainAlgorithm;
-    private TreeScheme treeScheme; // Added for visual variety
+    private TreeScheme treeScheme;
     private float teeHeight;
     private float greenHeight;
     private float treeHeight;
@@ -46,12 +46,12 @@ public class LevelData {
     private int nBunkers;
     private Vector3 wind;
     private int distance;
+    private int par; // Added difficulty field
 
     // Parameters for fairway control
     private float fairwayWiggle;
     private float fairwayRoughIslands;
     private float fairwayCohesion;
-    private float fairwayBreakDensity;
 
     // Getters and Setters
     public long getSeed() { return seed; }
@@ -95,6 +95,8 @@ public class LevelData {
     public void setWind(Vector3 wind) { this.wind = wind; }
     public int getDistance() { return distance; }
     public void setDistance(int distance) { this.distance = distance; }
+    public int getPar() { return par; }
+    public void setPar(int par) { this.par = par; }
 
     public float getFairwayWiggle() { return fairwayWiggle; }
     public void setFairwayWiggle(float fairwayWiggle) { this.fairwayWiggle = fairwayWiggle; }
@@ -103,6 +105,4 @@ public class LevelData {
 
     public float getFairwayCohesion() { return fairwayCohesion; }
     public void setFairwayCohesion(float fairwayCohesion) { this.fairwayCohesion = fairwayCohesion; }
-    public float getFairwayBreakDensity() { return fairwayBreakDensity; }
-    public void setFairwayBreakDensity(float fairwayBreakDensity) { this.fairwayBreakDensity = fairwayBreakDensity; }
 }

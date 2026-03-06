@@ -2,9 +2,9 @@ package org.example;
 
 public enum ScoreShout {
     HIO(0, "HOLE IN ONE!!!"),
-    ALBATROSS(-3, "ALBATROSS!!"),
-    EAGLE(-2, "EAGLE!"),
-    BIRDIE(-1, "BIRDIE"),
+    ALBATROSS(-3, "ALBATROSS!?"),
+    EAGLE(-2, "EAGLE!!"),
+    BIRDIE(-1, "BIRDIE!"),
     PAR(0, "PAR"),
     BOGEY(1, "BOGEY"),
     DOUBLE_BOGEY(2, "DOUBLE BOGEY"),

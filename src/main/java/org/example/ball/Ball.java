@@ -211,10 +211,6 @@ public class Ball {
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
         boolean isWall = BallPhysics.isWallCollision(normal, 45f);
 
-        // LOGGING: State of entry
-        float horizSpeedPre = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-        Gdx.app.log("BOUNCE_LOG", String.format("--- Terrain Impact --- State: %s | HorizSpeed: %.4f | Vy: %.4f", state, horizSpeedPre, velocity.y));
-
         if (terrainHeight - position.y > MAX_STEP_UP) {
             tempV1.set(normal.x, 0, normal.z).nor();
             if (tempV1.len() < 0.1f) position.y = terrainHeight;
@@ -249,7 +245,6 @@ public class Ball {
         checkStationaryCondition(type, normal);
 
         float horizSpeedPost = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-        Gdx.app.log("BOUNCE_LOG", String.format("--- Post Terrain --- HorizSpeed: %.4f | Vy: %.4f", horizSpeedPost, velocity.y));
     }
 
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
@@ -273,9 +268,6 @@ public class Ball {
 
         if (isGoodShot) spawnBurst(5, 2.0f);
         activeTrailColor.lerp(Color.GRAY, 0.25f);
-
-        float horizSpeedAfterBounce = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-        Gdx.app.log("BOUNCE_LOG", String.format("   ApplyBounce DONE | Horiz Change: %.4f -> %.4f | Normal: %s", horizSpeedBeforeBounce, horizSpeedAfterBounce, normal.toString()));
     }
 
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, Terrain.TerrainType type, float delta) {
@@ -291,8 +283,6 @@ public class Ball {
         if (activeTrailColor.r > 0.3f || activeTrailColor.g > 0.3f) {
             activeTrailColor.lerp(new Color(0.2f, 0.2f, 0.2f, 1f), delta * 1.5f);
         }
-
-        Gdx.app.log("BOUNCE_LOG", String.format("   Rolling Step | Tangent Change: %.4f -> %.4f", horizSpeedBeforeRolling, horizSpeedAfterRolling));
     }
 
     private void checkStationaryCondition(Terrain.TerrainType type, Vector3 normal) {
@@ -303,7 +293,6 @@ public class Ball {
             spin.setZero();
             state = State.STATIONARY;
             activeTrailColor.set(Color.WHITE);
-            Gdx.app.log("BOUNCE_LOG", "   STATE: STATIONARY");
         }
     }
 

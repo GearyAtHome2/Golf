@@ -15,24 +15,30 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
+import org.example.ScoreShout;
 import org.example.terrain.level.LevelData;
 import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.Terrain;
-import org.example.terrain.level.LevelData;
 
 public class HUD {
     public enum GameDifficulty {
         EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
         public final float speedMult;
-        GameDifficulty(float speed) { this.speedMult = speed; }
+
+        GameDifficulty(float speed) {
+            this.speedMult = speed;
+        }
     }
 
     public enum AnimSpeed {
         NONE(0f), SLOW(0.6f), FAST(1.4f);
         public final float mult;
-        AnimSpeed(float mult) { this.mult = mult; }
+
+        AnimSpeed(float mult) {
+            this.mult = mult;
+        }
     }
 
     public static class ModAnimation {
@@ -88,10 +94,21 @@ public class HUD {
         viewport = new ScreenViewport();
     }
 
-    public void incrementShots() { shotCount++; }
-    public void resetShots() { shotCount = 0; }
-    public int getShotCount() { return shotCount; }
-    public void resize(int width, int height) { viewport.update(width, height, true); }
+    public void incrementShots() {
+        shotCount++;
+    }
+
+    public void resetShots() {
+        shotCount = 0;
+    }
+
+    public int getShotCount() {
+        return shotCount;
+    }
+
+    public void resize(int width, int height) {
+        viewport.update(width, height, true);
+    }
 
     public void renderStartMenu(int selection) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
@@ -99,14 +116,14 @@ public class HUD {
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
 
-        // Check if clipboard contains a valid seed
         String clipboardContent = Gdx.app.getClipboard().getContents();
         boolean hasValidSeed = false;
         if (clipboardContent != null && !clipboardContent.isEmpty()) {
             try {
                 Long.parseLong(clipboardContent.trim());
                 hasValidSeed = true;
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
 
         font.getData().setScale(3f);
@@ -116,7 +133,6 @@ public class HUD {
         drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY);
         drawOption(selection == 1, true, "PRACTICE RANGE", centerX - 80, centerY - 60);
 
-        // Option 2 is only "active" if a seed is found
         String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
         drawOption(selection == 2, hasValidSeed, seedText, centerX - 80, centerY - 120);
 
@@ -192,7 +208,8 @@ public class HUD {
         batch.begin();
         renderFeedbackMessages(delta);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed);
-        if (ball.getState() == Ball.State.STATIONARY && !minigameActive) renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
+        if (ball.getState() == Ball.State.STATIONARY && !minigameActive)
+            renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
         batch.end();
 
         if (minigameActive) {
@@ -228,12 +245,31 @@ public class HUD {
         font.draw(batch, "CONTACT POINT", 35, 20);
 
         font.getData().setScale(1.5f);
-        if (isPractice) { font.setColor(Color.CYAN); font.draw(batch, "PRACTICE RANGE", 40, viewport.getWorldHeight() - 40); }
-        else if (levelData != null) { font.setColor(Color.GOLD); font.draw(batch, levelData.getArchetype().name().replace("_", " "), 40, viewport.getWorldHeight() - 40); }
+        if (isPractice) {
+            font.setColor(Color.CYAN);
+            font.draw(batch, "PRACTICE RANGE", 40, viewport.getWorldHeight() - 40);
+        } else if (levelData != null) {
+            font.setColor(Color.GOLD);
+            font.draw(batch, levelData.getArchetype().name().replace("_", " "), 40, viewport.getWorldHeight() - 40);
+
+            font.setColor(Color.WHITE);
+            // Display Par next to the Archetype
+            font.draw(batch, "Par " + levelData.getPar(), 40, viewport.getWorldHeight() - 80);
+        }
+
+        // Color coding shots based on par performance
+        if (!isPractice && levelData != null) {
+            if (shotCount > levelData.getPar()) font.setColor(Color.RED);
+            else if (shotCount < levelData.getPar() && shotCount > 0) font.setColor(Color.GREEN);
+            else font.setColor(Color.WHITE);
+        } else {
+            font.setColor(Color.WHITE);
+        }
+
+        float shotY = isPractice ? viewport.getWorldHeight() - 80 : viewport.getWorldHeight() - 120;
+        font.draw(batch, "Shots: " + shotCount, 40, shotY);
 
         font.setColor(Color.WHITE);
-        font.draw(batch, "Shots: " + shotCount, 40, viewport.getWorldHeight() - 80);
-
         float rightX = viewport.getWorldWidth() - 250;
         font.draw(batch, "Club: " + club.name(), rightX, 140);
         float currentSpinMag = ball.getSpin().len();
@@ -245,7 +281,6 @@ public class HUD {
     }
 
     private void updateMinigame(float delta, Camera camera, Terrain terrain) {
-        // Only allow cancellation if the needle hasn't been stopped/locked yet
         if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             cancelMinigame();
             return;
@@ -266,8 +301,13 @@ public class HUD {
             if (minigameStep == 4) {
                 float move = delta * needleSpeed;
                 engine.needlePos += (engine.needleMovingRight ? move : -move);
-                if (engine.needlePos >= 1.0f) { engine.needlePos = 1.0f; engine.needleMovingRight = false; }
-                else if (engine.needlePos <= 0f) { engine.needlePos = 0f; engine.needleMovingRight = true; }
+                if (engine.needlePos >= 1.0f) {
+                    engine.needlePos = 1.0f;
+                    engine.needleMovingRight = false;
+                } else if (engine.needlePos <= 0f) {
+                    engine.needlePos = 0f;
+                    engine.needleMovingRight = true;
+                }
                 if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) stopNeedle();
             }
         } else {
@@ -285,10 +325,25 @@ public class HUD {
         String text = "";
         float mult = 1.0f;
         switch (minigameStep) {
-            case 1 -> { mult = activeDiff.terrainDifficulty; text = "TERRAIN x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 2 -> { mult = activeDiff.clubDifficulty; text = "WEIGHT x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 3 -> { mult = activeDiff.swingDifficulty; text = "PRECISION x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 4 -> { text = "GO!"; needleSpeed = activePowerMod * 1.5f * currentDifficulty.speedMult; }
+            case 1 -> {
+                mult = activeDiff.terrainDifficulty;
+                text = "TERRAIN x" + String.format("%.2f", mult);
+                engine.barWidthMult *= (1.0f / mult);
+            }
+            case 2 -> {
+                mult = activeDiff.clubDifficulty;
+                text = "WEIGHT x" + String.format("%.2f", mult);
+                engine.barWidthMult *= (1.0f / mult);
+            }
+            case 3 -> {
+                mult = activeDiff.swingDifficulty;
+                text = "PRECISION x" + String.format("%.2f", mult);
+                engine.barWidthMult *= (1.0f / mult);
+            }
+            case 4 -> {
+                text = "GO!";
+                needleSpeed = activePowerMod * 1.5f * currentDifficulty.speedMult;
+            }
         }
         if (animSetting != AnimSpeed.NONE) {
             Color c = (mult <= 1.05f) ? Color.GREEN : Color.RED;
@@ -309,8 +364,11 @@ public class HUD {
     }
 
     private void cancelMinigame() {
-        minigameActive = false; needleStopped = false; minigameCanceled = true;
-        lastResult = null; activeAnims.clear();
+        minigameActive = false;
+        needleStopped = false;
+        minigameCanceled = true;
+        lastResult = null;
+        activeAnims.clear();
     }
 
     private void updateAnimations(float delta) {
@@ -321,7 +379,10 @@ public class HUD {
             anim.yOffset = MathUtils.lerp(-5f, 45f, Interpolation.swingIn.apply(progress));
             anim.alpha = MathUtils.clamp(anim.life * 5f, 0, 1);
             anim.scale = 0.8f + (progress * 0.4f);
-            if (!anim.hitBar && anim.yOffset > 15f) { anim.hitBar = true; barSwellTimer = SWELL_DURATION; }
+            if (!anim.hitBar && anim.yOffset > 15f) {
+                anim.hitBar = true;
+                barSwellTimer = SWELL_DURATION;
+            }
             if (anim.life <= 0 || anim.hitBar) activeAnims.removeIndex(i);
         }
         if (barSwellTimer > 0) barSwellTimer = Math.max(0, barSwellTimer - delta);
@@ -331,7 +392,8 @@ public class HUD {
         ShotDifficulty diff = terrain.getShotDifficulty(ballPos.x, ballPos.z, aimDir);
         Vector3 normal = terrain.getNormalAt(ballPos.x, ballPos.z);
         float sidePush = normal.dot(new Vector3(aimDir).crs(Vector3.Y).nor());
-        font.getData().setScale(1f); font.setColor(Color.YELLOW);
+        font.getData().setScale(1f);
+        font.setColor(Color.YELLOW);
         float dy = 250;
         font.draw(batch, "--- PRE-SHOT DEBUG ---", 40, dy);
         font.draw(batch, "Terrain: " + terrain.getTerrainTypeAt(ballPos.x, ballPos.z) + " (x" + String.format("%.2f", diff.terrainDifficulty) + ")", 40, dy - 20);
@@ -343,36 +405,74 @@ public class HUD {
     }
 
     public void logShotInitiated(Vector3 ballPos, Club club, Terrain terrain, ShotDifficulty diff, float powerMod) {
-        this.activeDiff = diff; this.activePowerMod = powerMod; this.activeBallPos.set(ballPos);
-        this.minigameActive = true; this.needleStopped = false; this.minigameCanceled = false;
-        this.lastResult = null; this.minigameStep = 0; this.shotRandomness = MathUtils.random(-0.1f, 0.1f);
+        this.activeDiff = diff;
+        this.activePowerMod = powerMod;
+        this.activeBallPos.set(ballPos);
+        this.minigameActive = true;
+        this.needleStopped = false;
+        this.minigameCanceled = false;
+        this.lastResult = null;
+        this.minigameStep = 0;
+        this.shotRandomness = MathUtils.random(-0.1f, 0.1f);
         engine.reset(club.baseDifficulty);
         activeAnims.clear();
         if (animSetting == AnimSpeed.NONE) {
             engine.barWidthMult = (1.0f / activeDiff.terrainDifficulty) * (1.0f / activeDiff.clubDifficulty) * (1.0f / activeDiff.swingDifficulty);
-            minigameStep = 4; needleSpeed = activePowerMod * 1.5f * currentDifficulty.speedMult;
+            minigameStep = 4;
+            needleSpeed = activePowerMod * 1.5f * currentDifficulty.speedMult;
         } else minigameTimer = (0.7f / animSetting.mult);
     }
 
     private void renderWindIndicator(Vector3 worldWind, Camera camera) {
         float uiX = viewport.getWorldWidth() - 80, uiY = viewport.getWorldHeight() - 80, radius = 40f;
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line); shapeRenderer.setColor(Color.WHITE); shapeRenderer.circle(uiX, uiY, radius); shapeRenderer.end();
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(Color.WHITE);
+        shapeRenderer.circle(uiX, uiY, radius);
+        shapeRenderer.end();
         if (worldWind.len() > 0.1f) {
             camForward.set(camera.direction.x, 0, camera.direction.z).nor();
-            camRight.set(camera.direction).crs(camera.up).nor(); camRight.y = 0; camRight.nor();
+            camRight.set(camera.direction).crs(camera.up).nor();
+            camRight.y = 0;
+            camRight.nor();
             float angle = MathUtils.atan2(worldWind.dot(camForward), worldWind.dot(camRight));
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled); shapeRenderer.setColor(Color.YELLOW);
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            shapeRenderer.setColor(Color.YELLOW);
             shapeRenderer.rectLine(uiX - MathUtils.cos(angle) * 30, uiY - MathUtils.sin(angle) * 30, uiX + MathUtils.cos(angle) * 30, uiY + MathUtils.sin(angle) * 30, 3f);
             shapeRenderer.triangle(uiX + MathUtils.cos(angle) * radius, uiY + MathUtils.sin(angle) * radius, uiX + MathUtils.cos(angle + 2.6f) * 15, uiY + MathUtils.sin(angle + 2.6f) * 15, uiX + MathUtils.cos(angle - 2.6f) * 15, uiY + MathUtils.sin(angle - 2.6f) * 15);
             shapeRenderer.end();
         }
-        batch.begin(); font.getData().setScale(1.2f); font.draw(batch, String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10); batch.end();
+        batch.begin();
+        font.getData().setScale(1.2f);
+        font.draw(batch, String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10);
+        batch.end();
     }
 
-    public void renderVictory(int shots) {
-        batch.begin(); font.getData().setScale(4f); font.setColor(Color.GOLD);
-        font.draw(batch, "HOLE IN ONE!", viewport.getWorldWidth() / 2f - 200, viewport.getWorldHeight() / 2f + 100);
-        font.getData().setScale(2f); font.setColor(Color.WHITE); font.draw(batch, "Total Strokes: " + shots, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() / 2f);
+    public void renderVictory(int shots, LevelData levelData) {
+        batch.begin();
+
+        int par = (levelData != null) ? levelData.getPar() : 3;
+        String shout = org.example.ScoreShout.getShout(shots, par);
+        if (shots == 1) shout = ScoreShout.HIO.shout;
+
+        int diff = shots - par;
+
+        Color shoutColor;
+        if (shots == 1 || diff <= -2) shoutColor = Color.GOLD;
+        else if (diff == -1) shoutColor = Color.CYAN;
+        else if (diff == 0) shoutColor = Color.WHITE;
+        else if (diff == 1) shoutColor = Color.ORANGE;
+        else shoutColor = Color.RED;
+
+        font.getData().setScale(4f);
+        font.setColor(shoutColor);
+        float centerX = viewport.getWorldWidth() / 2f;
+        font.draw(batch, shout, centerX - 200, viewport.getWorldHeight() / 2f + 100);
+
+        font.getData().setScale(2f);
+        font.setColor(Color.WHITE);
+        String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
+        font.draw(batch, "Total Strokes: " + shots + " (" + scoreType + ")", centerX - 180, viewport.getWorldHeight() / 2f);
+
         batch.end();
     }
 
@@ -384,10 +484,33 @@ public class HUD {
         if (spinDot.len() > 1f) spinDot.nor();
     }
 
-    public boolean isMinigameComplete() { return !minigameActive && needleStopped && glowTimer <= 0 && lastResult != null; }
-    public boolean wasMinigameCanceled() { boolean c = minigameCanceled; minigameCanceled = false; return c; }
-    public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }
-    public MinigameResult getMinigameResult() { return lastResult; }
-    public Vector2 getSpinOffset() { return spinDot; }
-    public void dispose() { batch.dispose(); shapeRenderer.dispose(); font.dispose(); }
+    public boolean isMinigameComplete() {
+        return !minigameActive && needleStopped && glowTimer <= 0 && lastResult != null;
+    }
+
+    public boolean wasMinigameCanceled() {
+        boolean c = minigameCanceled;
+        minigameCanceled = false;
+        return c;
+    }
+
+    public boolean wasMainMenuRequested() {
+        boolean m = mainMenuRequested;
+        mainMenuRequested = false;
+        return m;
+    }
+
+    public MinigameResult getMinigameResult() {
+        return lastResult;
+    }
+
+    public Vector2 getSpinOffset() {
+        return spinDot;
+    }
+
+    public void dispose() {
+        batch.dispose();
+        shapeRenderer.dispose();
+        font.dispose();
+    }
 }

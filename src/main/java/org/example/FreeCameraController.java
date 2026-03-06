@@ -60,7 +60,7 @@ public class FreeCameraController {
         } else {
             if (wasOverheadLastFrame) {
                 currentLookAt.set(ballPos);
-                camera.up.set(0, 1, 0);
+                camera.up.set(0, 1f, 0);
             }
 
             updateNormalMode(ballPos, delta);
@@ -71,21 +71,65 @@ public class FreeCameraController {
     }
 
     private void updateOverheadMode(Vector3 ballPos, float delta) {
-        if (!wasOverheadLastFrame) overheadCenter.set(ballPos);
-
-        if (Gdx.input.isButtonPressed(Buttons.LEFT) || Gdx.input.isButtonPressed(Buttons.RIGHT)) {
-            float panScale = overheadZoom * 1.4f / Gdx.graphics.getHeight();
-            overheadCenter.x += Gdx.input.getDeltaX() * panScale;
-            overheadCenter.z += Gdx.input.getDeltaY() * panScale;
+        if (!wasOverheadLastFrame) {
+            overheadCenter.set(ballPos);
+            introActive = false;
         }
 
-        camera.position.lerp(new Vector3(overheadCenter.x, overheadCenter.y + overheadZoom, overheadCenter.z), 8f * delta);
-        camera.up.set(0, 0, 1);
+        // 1. Handle Input
+        if (Gdx.input.isButtonPressed(Buttons.LEFT)) {
+            yaw += -Gdx.input.getDeltaX() * mouseSensitivity;
+        } else if (Gdx.input.isButtonPressed(Buttons.RIGHT)) {
+            float panScale = overheadZoom * 1.4f / Gdx.graphics.getHeight();
+
+            float radYaw = -MathUtils.degreesToRadians * yaw;
+            float sinYaw = MathUtils.sin(radYaw);
+            float cosYaw = MathUtils.cos(radYaw);
+
+            // Forward vector (pointing "away" from camera on XZ plane)
+            float forwardX = -sinYaw;
+            float forwardZ = -cosYaw;
+
+            // Right vector (perpendicular to forward)
+            // Corrected signs to ensure screen-right matches world-right relative to view
+            float rightX = -cosYaw;
+            float rightZ = sinYaw;
+
+            float mouseX = Gdx.input.getDeltaX();
+            float mouseY = Gdx.input.getDeltaY();
+
+            // Apply movement
+            overheadCenter.x += (rightX * mouseX * panScale) + (forwardX * mouseY * panScale);
+            overheadCenter.z += (rightZ * mouseX * panScale) + (forwardZ * mouseY * panScale);
+        }
+
+        // 2. Calculate Position (Using your specific 70 degree pitchRad)
+        float pitchRad = 70f * MathUtils.degreesToRadians;
+        float yawRad = -MathUtils.degreesToRadians * yaw;
+
+        float verticalDist = overheadZoom * MathUtils.sin(pitchRad);
+        float horizontalDist = overheadZoom * MathUtils.cos(pitchRad);
+
+        float tx = overheadCenter.x + horizontalDist * MathUtils.sin(yawRad);
+        float ty = overheadCenter.y + verticalDist;
+        float tz = overheadCenter.z + horizontalDist * MathUtils.cos(yawRad);
+
+        tempTargetPos.set(tx, ty, tz);
+
+        // 3. Remove Lerp for active movement to stop the "laggy" feel
+        // We only lerp if we just switched to overhead, otherwise we snap for precision
+        if (camera.position.dst(tempTargetPos) > 50f) {
+            camera.position.lerp(tempTargetPos, 8f * delta);
+        } else {
+            camera.position.set(tempTargetPos);
+        }
+
+        camera.up.set(0, 1, 0);
         camera.lookAt(overheadCenter);
     }
 
     public boolean isOverhead() {
-        introActive = false; // Kill the intro if they check the map
+        introActive = false;
         return isOverhead;
     }
 
