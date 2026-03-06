@@ -1,4 +1,4 @@
-package org.example;
+package org.example.terrain.level;
 
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.Terrain.TreeScheme;
@@ -45,6 +45,7 @@ public class LevelData {
     private float holeSize;
     private int nBunkers;
     private Vector3 wind;
+    private int distance;
 
     // Parameters for fairway control
     private float fairwayWiggle;
@@ -92,6 +93,8 @@ public class LevelData {
     public void setnBunkers(int nBunkers) { this.nBunkers = nBunkers; }
     public Vector3 getWind() { return wind; }
     public void setWind(Vector3 wind) { this.wind = wind; }
+    public int getDistance() { return distance; }
+    public void setDistance(int distance) { this.distance = distance; }
 
     public float getFairwayWiggle() { return fairwayWiggle; }
     public void setFairwayWiggle(float fairwayWiggle) { this.fairwayWiggle = fairwayWiggle; }

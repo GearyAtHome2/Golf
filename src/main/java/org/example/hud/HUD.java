@@ -15,11 +15,12 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
-import org.example.LevelData;
+import org.example.terrain.level.LevelData;
 import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.Terrain;
+import org.example.terrain.level.LevelData;
 
 public class HUD {
     public enum GameDifficulty {

@@ -2,7 +2,7 @@ package org.example.terrain;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
-import org.example.LevelData;
+import org.example.terrain.level.LevelData;
 
 import java.util.ArrayList;
 import java.util.List;

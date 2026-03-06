@@ -23,6 +23,10 @@ import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
 import org.example.hud.HUD;
 import org.example.terrain.*;
+import org.example.terrain.level.LevelData;
+import org.example.terrain.level.LevelDataGenerator;
+import org.example.terrain.practiceRange.DistanceSign;
+import org.example.terrain.practiceRange.PracticeRangeGenerator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -137,7 +141,7 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         float waterLevel = currentLevelData == null ? -1 : currentLevelData.getWaterLevel();
-        terrain = new Terrain(generator, waterLevel);
+        terrain = new Terrain(generator, waterLevel, currentLevelData.getDistance());
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
         ball = new Ball(tee);

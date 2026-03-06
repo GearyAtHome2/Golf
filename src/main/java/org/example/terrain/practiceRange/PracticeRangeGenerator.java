@@ -1,6 +1,9 @@
-package org.example.terrain;
+package org.example.terrain.practiceRange;
 
 import com.badlogic.gdx.math.Vector3;
+import org.example.terrain.ITerrainGenerator;
+import org.example.terrain.Terrain;
+
 import java.util.ArrayList;
 import java.util.List;
 

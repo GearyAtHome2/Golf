@@ -17,7 +17,7 @@ import java.util.List;
 public class Terrain {
 
     private final int SIZE_X = 160;
-    public static final int SIZE_Z = 500;
+    private final int SIZE_Z; // Now dynamic based on LevelData
     private final int CHUNK_Z = 64;
     private final float SCALE = 1f;
 
@@ -37,7 +37,8 @@ public class Terrain {
     private float waterLevel;
     private float greenMinH = Float.MAX_VALUE, greenMaxH = -Float.MAX_VALUE;
 
-    public Terrain(ITerrainGenerator generator, float initialWaterLevel) {
+    public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
+        this.SIZE_Z = dynamicSizeZ;
         this.waterLevel = initialWaterLevel;
         this.terrainMap = new TerrainType[SIZE_X][SIZE_Z];
         this.heightMap = new float[SIZE_X][SIZE_Z];
@@ -296,31 +297,73 @@ public class Terrain {
     public static class Tree {
         private final ModelInstance trunk, foliage;
         private final Vector3 pos;
-        private final float tH, tR, fH, fR;
+        private final float tH, tR, fR;
         private final TreeScheme scheme;
 
-        Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme) {
+        public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme) {
             this.pos = new Vector3(x, y, z);
-            this.tH = th; this.tR = tr; this.fH = th; this.fR = fr;
+            this.tH = th; this.tR = tr; this.fR = fr;
             this.scheme = scheme;
 
             ModelBuilder mb = new ModelBuilder();
+            Material barkMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomBark()));
+            Material leafMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage()));
 
-            // Use random bark color from the scheme
-            trunk = new ModelInstance(mb.createCylinder(tr*2, th, tr*2, 16,
-                    new Material(ColorAttribute.createDiffuse(scheme.getRandomBark())),
+            // 1. Create Trunk
+            trunk = new ModelInstance(mb.createCylinder(tr * 2, th, tr * 2, 16,
+                    barkMat,
                     VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
-            trunk.transform.setToTranslation(x, y + th/2, z);
+            trunk.transform.setToTranslation(x, y + th / 2, z);
 
-            // Use random foliage color from the scheme
-            foliage = new ModelInstance(mb.createSphere(fr*2, fr*2, fr*2, 16, 16,
-                    new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage())),
-                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
-            foliage.transform.setToTranslation(x, y + th + fr, z);
+            // 2. Create Foliage
+            if (scheme == TreeScheme.FIR) {
+                // Height is 60% of trunk plus the original foliage head height (fR * 2)
+                float coneHeight = (th * 0.6f) + (fr * 2);
+                Model coneModel = mb.createCone(fr * 2.5f, coneHeight, fr * 2.5f, 16,
+                        leafMat,
+                        VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+
+                foliage = new ModelInstance(coneModel);
+
+                // The top of the cone is at y + th + fr*2.
+                // The center of the cone is top - (coneHeight / 2).
+                float topY = y + th + (fr * 2);
+                float centerY = topY - (coneHeight / 2f);
+                foliage.transform.setToTranslation(x, centerY, z);
+            } else {
+                Model sphereModel = mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16,
+                        leafMat,
+                        VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+                foliage = new ModelInstance(sphereModel);
+                foliage.transform.setToTranslation(x, y + th + fr, z);
+            }
         }
 
-        void render(ModelBatch b, Environment e) { b.render(trunk, e); b.render(foliage, e); }
-        void dispose() { trunk.model.dispose(); foliage.model.dispose(); }
+        public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
+            if (scheme == TreeScheme.FIR) {
+                float coneHeight = (tH * 0.6f) + (fR * 2);
+                float topY = pos.y + tH + (fR * 2);
+                float baseY = topY - coneHeight;
+
+                // Vertical bounds check
+                if (ballPos.y > topY + ballRadius || ballPos.y < baseY - ballRadius) return false;
+
+                // Taper logic: top is 0, bottom is 1.0
+                float relativeY = MathUtils.clamp((topY - ballPos.y) / coneHeight, 0, 1);
+                // Using 1.25f * fR to match the 2.5f diameter in the constructor
+                float coneRadiusAtHeight = (relativeY * (fR * 1.25f)) + ballRadius;
+
+                float distXZ = Vector3.dst(ballPos.x, 0, ballPos.z, pos.x, 0, pos.z);
+                return distXZ < coneRadiusAtHeight;
+            } else {
+                // Standard Spherical logic
+                float fCenterY = pos.y + tH + fR;
+                return ballPos.dst(pos.x, fCenterY, pos.z) < (fR + ballRadius);
+            }
+        }
+
+        public void render(ModelBatch b, Environment e) { b.render(trunk, e); b.render(foliage, e); }
+        public void dispose() { trunk.model.dispose(); foliage.model.dispose(); }
         public Vector3 getPosition() { return pos.cpy(); }
         public float getTrunkHeight() { return tH; }
         public float getTrunkRadius() { return tR; }
@@ -343,9 +386,7 @@ public class Terrain {
 
             ModelBuilder mb = new ModelBuilder();
             Material monolithMaterial = new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f)));
-
-            Model boxModel = mb.createBox(w, h, d,
-                    monolithMaterial,
+            Model boxModel = mb.createBox(w, h, d, monolithMaterial,
                     VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
 
             instance = new ModelInstance(boxModel);
@@ -357,13 +398,8 @@ public class Terrain {
             instance.transform.rotate(Vector3.Y, rotationY);
         }
 
-        public void render(ModelBatch b, Environment e) {
-            b.render(instance, e);
-        }
-
-        public void dispose() {
-            if (instance.model != null) instance.model.dispose();
-        }
+        public void render(ModelBatch b, Environment e) { b.render(instance, e); }
+        public void dispose() { if (instance.model != null) instance.model.dispose(); }
 
         public Vector3 getPosition() { return pos.cpy(); }
         public float getWidth() { return width; }
@@ -373,30 +409,20 @@ public class Terrain {
     }
 
     public enum TreeScheme {
-        OAK(
-                new Color(0.35f, 0.25f, 0.15f, 1f), new Color(0.45f, 0.35f, 0.25f, 1f),
-                new Color(0.1f, 0.4f, 0.1f, 1f),   new Color(0.2f, 0.5f, 0.2f, 1f)
-        ),
-        BIRCH(
-                new Color(0.85f, 0.85f, 0.85f, 1f), new Color(1f, 1f, 1f, 1f),
-                new Color(0.3f, 0.6f, 0.1f, 1f),    new Color(0.5f, 0.8f, 0.2f, 1f)
-        ),
-        REDWOOD(
-                new Color(0.3f, 0.15f, 0.1f, 1f),  new Color(0.5f, 0.2f, 0.15f, 1f),
-                new Color(0.05f, 0.25f, 0.05f, 1f), new Color(0.15f, 0.35f, 0.15f, 1f)
-        ),
-        AUTUMN_MAPLE(
-                new Color(0.25f, 0.2f, 0.15f, 1f), new Color(0.35f, 0.3f, 0.25f, 1f),
-                new Color(0.8f, 0.2f, 0.1f, 1f),   new Color(1f, 0.6f, 0.0f, 1f)
-        ),
-        CHERRY_BLOSSOM(
-                new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f),
-                new Color(1f, 0.7f, 0.75f, 1f),    new Color(1f, 0.85f, 0.9f, 1f)
-        ),
-        DEAD_GRAY(
-                new Color(0.2f, 0.2f, 0.2f, 1f),   new Color(0.4f, 0.4f, 0.4f, 1f),
-                new Color(0.1f, 0.1f, 0.1f, 1f),  new Color(0.3f, 0.3f, 0.3f, 1f)
-        );
+        OAK(new Color(0.35f, 0.25f, 0.15f, 1f), new Color(0.45f, 0.35f, 0.25f, 1f),
+                new Color(0.1f, 0.4f, 0.1f, 1f),   new Color(0.2f, 0.5f, 0.2f, 1f)),
+        BIRCH(new Color(0.85f, 0.85f, 0.85f, 1f), new Color(1f, 1f, 1f, 1f),
+                new Color(0.3f, 0.6f, 0.1f, 1f),    new Color(0.5f, 0.8f, 0.2f, 1f)),
+        REDWOOD(new Color(0.3f, 0.15f, 0.1f, 1f),  new Color(0.5f, 0.2f, 0.15f, 1f),
+                new Color(0.05f, 0.25f, 0.05f, 1f), new Color(0.15f, 0.35f, 0.15f, 1f)),
+        FIR(new Color(0.2f, 0.15f, 0.1f, 1f), new Color(0.3f, 0.25f, 0.2f, 1f),
+                new Color(0.05f, 0.2f, 0.05f, 1f), new Color(0.1f, 0.3f, 0.1f, 1f)),
+        AUTUMN_MAPLE(new Color(0.25f, 0.2f, 0.15f, 1f), new Color(0.35f, 0.3f, 0.25f, 1f),
+                new Color(0.8f, 0.2f, 0.1f, 1f),   new Color(1f, 0.6f, 0.0f, 1f)),
+        CHERRY_BLOSSOM(new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f),
+                new Color(1f, 0.7f, 0.75f, 1f),    new Color(1f, 0.85f, 0.9f, 1f)),
+        DEAD_GRAY(new Color(0.2f, 0.2f, 0.2f, 1f),   new Color(0.4f, 0.4f, 0.4f, 1f),
+                new Color(0.1f, 0.1f, 0.1f, 1f),  new Color(0.3f, 0.3f, 0.3f, 1f));
 
         private final Color barkMin, barkMax, leafMin, leafMax;
 
@@ -405,12 +431,7 @@ public class Terrain {
             this.leafMin = lMin; this.leafMax = lMax;
         }
 
-        public Color getRandomBark() {
-            return barkMin.cpy().lerp(barkMax, MathUtils.random());
-        }
-
-        public Color getRandomFoliage() {
-            return leafMin.cpy().lerp(leafMax, MathUtils.random());
-        }
+        public Color getRandomBark() { return barkMin.cpy().lerp(barkMax, MathUtils.random()); }
+        public Color getRandomFoliage() { return leafMin.cpy().lerp(leafMax, MathUtils.random()); }
     }
 }

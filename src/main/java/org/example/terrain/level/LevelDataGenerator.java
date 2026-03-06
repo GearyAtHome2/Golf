@@ -1,9 +1,11 @@
-package org.example;
+package org.example.terrain.level;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.Terrain.TreeScheme;
 import java.util.Random;
+
+import static org.example.terrain.level.LevelData.Archetype.CLIFFSIDE_BLUFF;
 
 public class LevelDataGenerator {
 
@@ -18,6 +20,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
+        selectedType = CLIFFSIDE_BLUFF;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme based on Archetype ---
@@ -27,7 +30,7 @@ public class LevelDataGenerator {
         switch (selectedType) {
             case CLIFFSIDE_BLUFF:
                 algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.TERRACED : LevelData.TerrainAlgorithm.MULTI_WAVE;
-                scheme = TreeScheme.DEAD_GRAY;
+                scheme = TreeScheme.FIR;
                 break;
             case MOGUL_HIGHLANDS:
                 algo = LevelData.TerrainAlgorithm.MOUNDS;
@@ -83,6 +86,7 @@ public class LevelDataGenerator {
         float minFairwayWidth = 0f;
         float undulation = r.nextFloat() * 0.4f + 0.2f;
         int bunkerCount = 0;
+        int distance = 500;
 
         // Fairway variation defaults
         float fairwayWiggle = 0.3f;
@@ -272,6 +276,7 @@ public class LevelDataGenerator {
         data.setUndulation(undulation);
         data.setHoleSize(0.6f);
         data.setnBunkers(bunkerCount);
+        data.setDistance(distance);
 
         // New fairway parameters
         data.setFairwayWiggle(fairwayWiggle);

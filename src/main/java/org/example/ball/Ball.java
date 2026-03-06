@@ -328,7 +328,7 @@ public class Ball {
             }
 
             float fY = treePos.y + tree.getTrunkHeight() + tree.getFoliageRadius();
-            if (position.dst(treePos.x, fY, treePos.z) < tree.getFoliageRadius() + BALL_RADIUS) {
+            if (tree.isInsideFoliage(position, BALL_RADIUS)) {
                 lastInteraction = Interaction.LEAVES;
                 BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE);
                 activeTrailColor.lerp(Color.FOREST, 0.2f);

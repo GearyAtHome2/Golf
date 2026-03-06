@@ -2,7 +2,7 @@ package org.example.terrain;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
-import org.example.LevelData;
+import org.example.terrain.level.LevelData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,16 +15,13 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final Random rng;
     private final FeatureProcessor processor;
 
-    // --- Smoothing Configuration ---
     private final int SMOOTH_RADIUS = 2;
     private final float SMOOTH_FAIRWAY_BUFFER = 6.0f;
     private final float SMOOTH_STRENGTH = 0.9f;
 
-    // --- Monolith Configuration ---
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
 
-    // --- Mogul Configuration ---
     private final float MOGUL_BASE_DAMPING = 0.3f;
     private final float MOGUL_FADE_DISTANCE = 18.0f;
 
@@ -90,6 +87,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         boolean isRaisedFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
         boolean isSunkenFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
 
+        // Position green relative to map length
         int greenCenterZ = (int) (SIZE_Z * 0.92f);
         float greenOffset = (rng.nextFloat() - 0.5f) * (SIZE_X * 0.5f);
         int greenCenterX = MathUtils.clamp((int) (SIZE_X / 2 + greenOffset), 20, SIZE_X - 20);
@@ -114,6 +112,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
 
         float cliffSteepness = isCliffMap ? 100.0f : 15.0f;
+        // Tee flat buffer remains normalized
         float teeFlatBufferZ = 0.12f;
 
         for (int x = 0; x < SIZE_X; x++) {
@@ -160,9 +159,12 @@ public class ClassicGenerator implements ITerrainGenerator {
                 float dxGreen = x - greenCenterX;
                 float dzGreen = z - greenCenterZ;
                 float distGreen = (float) Math.sqrt(dxGreen * dxGreen + dzGreen * dzGreen);
+
+                // Keep protection radius relative to distance (prevents hills from eating long fairways)
                 float protectionRadius = SIZE_Z * 0.22f;
                 float protectedHeight = ((isRaisedFairway || isSunkenFairway) && !isElevated) ? currentHeight : getFinalRaw(distGreen, protectionRadius, currentHeight);
 
+                // Green size should remain relatively constant in world units regardless of map length
                 float greenSize = 94.0f;
                 float tGreen = MathUtils.clamp(distGreen / greenSize, 0f, 1f);
                 float greenEffectMask = (float) Math.pow(1.0f - tGreen, 4.0f);
@@ -177,7 +179,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         if (isCraterFields) {
             data.setWaterLevel(-10f);
             waterLevel = -10.0f;
-            int craterCount = 10 + rng.nextInt(15);
+            int craterCount = (int)(SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15);
             this.craters = processor.generateCraterField(map, heights, craterCount);
         }
 
@@ -333,9 +335,9 @@ public class ClassicGenerator implements ITerrainGenerator {
         holeP.set((flagX * SCALE) - (SIZE_X * SCALE / 2f), heights[flagX][flagZ], (flagZ * SCALE) - (SIZE_Z * SCALE / 2f));
 
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
-        int treeCount = (int) (SIZE_Z * data.getTreeDensity());
+        // Tree count now scales with total map area (relative to Z)
+        int treeCount = (int) (SIZE_Z * data.getTreeDensity() * 2.5f);
 
-        // Get the defined tree scheme for this level
         Terrain.TreeScheme scheme = data.getTreeScheme();
 
         for (int i = 0; i < treeCount; i++) {
@@ -355,7 +357,6 @@ public class ClassicGenerator implements ITerrainGenerator {
             if (rng.nextFloat() > treeChance) continue;
             float tH = isCliff ? cliffDelta * (0.8f + rng.nextFloat() * 0.2f) : data.getTreeHeight();
 
-            // Pass the level-specific scheme to the Tree constructor
             trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), scheme));
         }
     }
