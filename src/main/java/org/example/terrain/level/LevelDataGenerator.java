@@ -6,8 +6,7 @@ import org.example.terrain.Terrain.TreeScheme;
 
 import java.util.*;
 
-import static org.example.terrain.level.LevelData.Archetype.CLIFFSIDE_BLUFF;
-import static org.example.terrain.level.LevelData.Archetype.CRATER_FIELDS;
+import static org.example.terrain.level.LevelData.Archetype.*;
 
 public class LevelDataGenerator {
 
@@ -22,7 +21,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = CLIFFSIDE_BLUFF;
+        selectedType = PLUNGE_CENOTES;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -44,6 +43,10 @@ public class LevelDataGenerator {
                 break;
             case ISLAND_COAST:
                 algo = r.nextBoolean() ? LevelData.TerrainAlgorithm.SMOOTH_SINE : LevelData.TerrainAlgorithm.MULTI_WAVE;
+                scheme = TreeScheme.BIRCH;
+                break;
+            case PLUNGE_CENOTES:
+                algo = LevelData.TerrainAlgorithm.SMOOTH_SINE;
                 scheme = TreeScheme.BIRCH;
                 break;
             case CRATER_FIELDS:
@@ -254,6 +257,27 @@ public class LevelDataGenerator {
                 islands = 0.0f;
                 cohesion = 0.8f;
                 distance = Math.round(420 + r.nextFloat() * 120);
+                par = 4;
+                break;
+            case PLUNGE_CENOTES:
+                baseDifficultyIndex = 7f;
+                teeH = 5.0f + r.nextFloat() * 5.0f;
+                greenH = 0f;
+                windMin = 6f;
+                windMax = 12f;
+                treeH = 6.0f + r.nextFloat() * 2.0f;
+                treeDensity = 0.13f;
+                foliageR = 3.0f;
+                trunkR = 0.5f;
+                hillFreq = 0.02f;
+                maxH = 4.0f;
+                maxFairwayWidth = 35f;
+                minFairwayWidth = 0;
+                undulation = 0.5f;
+                fairwayWiggle = 0.1f + r.nextFloat() * 0.1f;
+                islands = 0.0f;
+                cohesion = 0.6f;
+                distance = Math.round(480 + r.nextFloat() * 100);
                 par = 4;
                 break;
             case STANDARD_LINKS:

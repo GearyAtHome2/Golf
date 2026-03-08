@@ -145,12 +145,17 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
 
-        // 1. Resolve Archetype Water Overrides BEFORE processing logic
+        // 1. Resolve Archetype Overrides
         if (flags.isMonolithPlains) {
             data.setWaterLevel(-2.0f);
         } else if (flags.isCraterFields) {
             data.setWaterLevel(-10.0f);
             this.craters = processor.generateCraterField(map, h, (int)(SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15));
+        } else if (flags.isPlungeCenotes) {
+            data.setWaterLevel(-8.0f);
+
+            processor.generatePlungeCenotes(map, h, -8f, 30.0f);
+            processor.generateRoughCenotes(map, h, -8f);
         }
 
         float water = data.getWaterLevel();
@@ -170,7 +175,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         smoothGreenBorders(map, h, flags.isPathDependent);
         if (flags.isMogulHighlands) processor.applyFairwayGaussianSmoothing(map, h);
 
-        // 4. Fairway protection (Only for maps where water is a hazard)
+        // 4. Fairway protection
         if (flags.isIslandMap || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
             processor.applyFairwayWaterBuffer(map, h, water, 3.0f);
         }
@@ -405,7 +410,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isMogulHighlands, isMonolithPlains, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
@@ -413,6 +418,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             isCraterFields = data.getArchetype() == LevelData.Archetype.CRATER_FIELDS;
             isMogulHighlands = data.getArchetype() == LevelData.Archetype.MOGUL_HIGHLANDS;
             isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
+            isPlungeCenotes = data.getArchetype() == LevelData.Archetype.PLUNGE_CENOTES;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }

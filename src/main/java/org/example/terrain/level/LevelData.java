@@ -14,7 +14,8 @@ public class LevelData {
         CRATER_FIELDS,
         SHADOW_CANYON,
         RAZORBACK_RIDGE,
-        MONOLITH_PLAINS
+        MONOLITH_PLAINS,
+        PLUNGE_CENOTES
     }
 
     public enum TerrainAlgorithm {
