@@ -6,6 +6,7 @@ import org.example.terrain.Terrain.TreeScheme;
 
 import java.util.*;
 
+import static org.example.terrain.level.LevelData.Archetype.CLIFFSIDE_BLUFF;
 import static org.example.terrain.level.LevelData.Archetype.CRATER_FIELDS;
 
 public class LevelDataGenerator {
@@ -21,7 +22,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = CRATER_FIELDS;
+        selectedType = CLIFFSIDE_BLUFF;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -90,7 +91,7 @@ public class LevelDataGenerator {
                 teeH = 0f;
                 greenH = 15.0f + r.nextFloat() * 15.0f;
                 windMin = 8f;
-                windMax = 25f;
+                windMax = 18f;
                 treeH = 12.0f;
                 treeDensity = 0.18f;
                 foliageR = 5.0f;
@@ -151,7 +152,7 @@ public class LevelDataGenerator {
                 teeH = 60.0f + r.nextFloat() * 30.0f;
                 greenH = 5.0f + r.nextFloat() * 10.0f;
                 windMin = 7f;
-                windMax = 15f;
+                windMax = 18f;
                 hillFreq = 0.012f;
                 maxH = 10.0f;
                 foliageR = 8.0f;
@@ -161,7 +162,7 @@ public class LevelDataGenerator {
                 undulation = 0.4f;
                 fairwayWiggle = 0.20f + r.nextFloat() * 0.1f;
                 islands = 0.05f;
-                cohesion = 0.7f;
+                cohesion = 0.9f;
                 distance = Math.round(410 + r.nextFloat() * 120);
                 par = distance < 480 ? 4 : 5;
                 break;

@@ -16,15 +16,8 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final Random rng;
     private final FeatureProcessor processor;
 
-    private final int SMOOTH_RADIUS = 2;
-    private final float SMOOTH_FAIRWAY_BUFFER = 6.0f;
-    private final float SMOOTH_STRENGTH = 0.9f;
-
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
-
-    private final float MOGUL_BASE_DAMPING = 0.3f;
-    private final float MOGUL_FADE_DISTANCE = 18.0f;
 
     private final float off1, off2;
     private final float[] waveAngles = new float[10];
@@ -72,215 +65,163 @@ public class ClassicGenerator implements ITerrainGenerator {
         craters.clear();
         monoliths.clear();
 
-        float hillFreq = data.getHillFrequency();
-        float maxHeight = data.getMaxHeight();
-        float undulation = data.getUndulation();
-        float waterLevel = data.getWaterLevel();
-        float maxFairwayWidth = data.getMaxFairwayWidth();
-        float teeSafetyElevation = data.getTeeHeight() + 0.2f;
+        ArchetypeFlags flags = new ArchetypeFlags(data);
 
-        boolean isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
-        boolean isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
-        boolean isCraterFields = data.getArchetype() == LevelData.Archetype.CRATER_FIELDS;
-        boolean isMogulHighlands = data.getArchetype() == LevelData.Archetype.MOGUL_HIGHLANDS;
-        boolean isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
-
-        boolean isRaisedFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
-        boolean isSunkenFairway = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
-
-        // Position green relative to map length
         int greenCenterZ = (int) (SIZE_Z * 0.92f);
         float greenOffset = (rng.nextFloat() - 0.5f) * (SIZE_X * 0.5f);
         int greenCenterX = MathUtils.clamp((int) (SIZE_X / 2 + greenOffset), 20, SIZE_X - 20);
 
-        mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, waterLevel, maxFairwayWidth, isIslandMap);
-        boolean[][] isPathMask = getPathMask(map);
+        mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, flags.isIslandMap);
 
-        boolean[][] greenBuffer = new boolean[SIZE_X][SIZE_Z];
+        boolean[][] isPathMask = getPathMask(map);
+        boolean[][] greenBuffer = createGreenBuffer(map);
+
+        generateHeightMap(map, heights, greenCenterX, greenCenterZ, isPathMask, greenBuffer, flags);
+        applyPostProcessing(map, heights, monoliths, trees, greenCenterX, greenCenterZ, teePos, holePos, greenBuffer, flags);
+
+        Gdx.app.log("GENERATOR", String.format("Map: %s length: %s par: %s", data.getArchetype().name(), data.getDistance(), data.getPar()));
+    }
+
+    private void generateHeightMap(Terrain.TerrainType[][] map, float[][] heights, int gCX, int gCZ, boolean[][] pathMask, boolean[][] greenBuf, ArchetypeFlags flags) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+        float teeSafety = data.getTeeHeight() + 0.2f;
+        float teeFlatBufferZ = 0.12f;
+
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                float zNorm = z / (float) (SIZE_Z - 1);
+                boolean isElevated = pathMask[x][z] || greenBuf[x][z];
+
+                float baseElevation = calculateBaseElevation(zNorm, teeFlatBufferZ, teeSafety, isElevated, flags);
+                float noise = calculateNoise(x, z, pathMask, flags);
+
+                float hillRamp = MathUtils.clamp((zNorm - teeFlatBufferZ) / 0.1f, 0f, 1f);
+                hillRamp = hillRamp * hillRamp * (3 - 2 * hillRamp);
+
+                float currentHeight = baseElevation + (noise * hillRamp);
+
+                if (flags.isIslandMap) {
+                    currentHeight = processor.applyIslandCoastline(x, z, zNorm, currentHeight, map[x][z], data.getWaterLevel(), off1, off2);
+                }
+
+                float distGreen = Vector3.dst(x, z, 0, gCX, gCZ, 0);
+                float protectedHeight = (flags.isPathDependent && !isElevated) ? currentHeight : getFinalRaw(distGreen, SIZE_Z * 0.22f, currentHeight);
+
+                float greenEffectMask = (float) Math.pow(1.0f - MathUtils.clamp(distGreen / 94.0f, 0f, 1f), 4.0f);
+                protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask);
+
+                float teeT = MathUtils.clamp(zNorm / 0.15f, 0f, 1f);
+                heights[x][z] = MathUtils.lerp(teeSafety, protectedHeight, teeT * teeT * (3 - 2 * teeT));
+            }
+        }
+    }
+
+    private float calculateBaseElevation(float zNorm, float buffer, float safety, boolean isElevated, ArchetypeFlags flags) {
+        if (zNorm <= buffer) return safety;
+
+        float climbNorm = (zNorm - buffer) / (1.0f - buffer);
+        float slopedElevation;
+
+        if (flags.isCliffMap) {
+            float sigmoid = 1f / (1f + (float) Math.exp(-100.0f * (climbNorm - 0.005f)));
+            slopedElevation = MathUtils.lerp(safety, data.getGreenHeight(), sigmoid);
+        } else {
+            float curveStep = 1.0f - (float) Math.pow(1.0f - climbNorm, 2.5f);
+            slopedElevation = MathUtils.lerp(safety, data.getGreenHeight(), curveStep);
+        }
+
+        return flags.isPathDependent ? (isElevated ? slopedElevation : safety) : slopedElevation;
+    }
+
+    private float calculateNoise(int x, int z, boolean[][] pathMask, ArchetypeFlags flags) {
+        if (flags.isMogulHighlands) {
+            return processor.calculateMogulNoise(x, z, SCALE, off1, off2, data.getHillFrequency(), data.getUndulation(), data.getMaxHeight(), pathMask);
+        }
+        return calculateHeightNoise(x, z, data.getHillFrequency(), data.getUndulation(), data.getMaxHeight(), data.getTerrainAlgorithm());
+    }
+
+    private void applyPostProcessing(Terrain.TerrainType[][] map, float[][] h, List<Terrain.Monolith> m, List<Terrain.Tree> t, int gX, int gZ, Vector3 teeP, Vector3 holeP, boolean[][] gBuf, ArchetypeFlags flags) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+
+        // 1. Resolve Archetype Water Overrides BEFORE processing logic
+        if (flags.isMonolithPlains) {
+            data.setWaterLevel(-2.0f);
+        } else if (flags.isCraterFields) {
+            data.setWaterLevel(-10.0f);
+            this.craters = processor.generateCraterField(map, h, (int)(SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15));
+        }
+
+        float water = data.getWaterLevel();
+
+        // 2. Adjust for specific algorithms
+        if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY) {
+            applyPathOffset(map, h, 25.0f, gBuf);
+            tagChasmWalls(map);
+        } else if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
+            applyPathOffset(map, h, -25.0f, gBuf);
+            tagChasmWalls(map);
+            water = (Math.min(data.getTeeHeight() + 0.2f, data.getGreenHeight()) - 25.0f) - 10.0f;
+            data.setWaterLevel(water);
+        }
+
+        // 3. Smoothing and Physical Adjustments
+        smoothGreenBorders(map, h, flags.isPathDependent);
+        if (flags.isMogulHighlands) processor.applyFairwayGaussianSmoothing(map, h);
+
+        // 4. Fairway protection (Only for maps where water is a hazard)
+        if (flags.isIslandMap || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
+            processor.applyFairwayWaterBuffer(map, h, water, 3.0f);
+        }
+
+        processor.applySlopeBasedStone(map, h, 0.35f);
+
+        // 5. Finalize world objects
+        finalizePositionsAndTrees(map, h, teeP, holeP, t, m, gX, gZ, water, flags.isCliffMap);
+
+        if (flags.isMonolithPlains) {
+            generateMonolithPlains(map, h, m, gX, gZ);
+        }
+    }
+
+    private boolean[][] createGreenBuffer(Terrain.TerrainType[][] map) {
+        int SIZE_X = map.length, SIZE_Z = map[0].length;
+        boolean[][] buffer = new boolean[SIZE_X][SIZE_Z];
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (map[x][z] == Terrain.TerrainType.GREEN) {
                     for (int dx = -2; dx <= 2; dx++) {
                         for (int dz = -2; dz <= 2; dz++) {
                             int nx = x + dx, nz = z + dz;
-                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
-                                if (map[nx][nz] != Terrain.TerrainType.GREEN) greenBuffer[nx][nz] = true;
+                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z && map[nx][nz] != Terrain.TerrainType.GREEN) {
+                                buffer[nx][nz] = true;
                             }
                         }
                     }
                 }
             }
         }
-
-        float cliffSteepness = isCliffMap ? 100.0f : 15.0f;
-        // Tee flat buffer remains normalized
-        float teeFlatBufferZ = 0.12f;
-
-        for (int x = 0; x < SIZE_X; x++) {
-            for (int z = 0; z < SIZE_Z; z++) {
-                float zNorm = z / (float) (SIZE_Z - 1);
-                float baseElevation;
-                boolean isPath = isPathMask[x][z];
-                boolean isElevated = isPath || greenBuffer[x][z];
-
-                if (zNorm <= teeFlatBufferZ) {
-                    baseElevation = teeSafetyElevation;
-                } else {
-                    float climbNorm = (zNorm - teeFlatBufferZ) / (1.0f - teeFlatBufferZ);
-                    float slopedElevation;
-                    if (isCliffMap) {
-                        float sigmoid = 1f / (1f + (float) Math.exp(-cliffSteepness * (climbNorm - 0.15f)));
-                        slopedElevation = MathUtils.lerp(teeSafetyElevation, data.getGreenHeight(), sigmoid);
-                    } else {
-                        float curveStep = 1.0f - (float) Math.pow(1.0f - climbNorm, 2.5f);
-                        slopedElevation = MathUtils.lerp(teeSafetyElevation, data.getGreenHeight(), curveStep);
-                    }
-                    baseElevation = (isRaisedFairway || isSunkenFairway) ? (isElevated ? slopedElevation : teeSafetyElevation) : slopedElevation;
-                }
-
-                float noise;
-                if (isMogulHighlands) {
-                    float wX = x * SCALE + off1, wZ = z * SCALE + off2;
-                    float rawMogul = (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, hillFreq)), 1.2f) * undulation * maxHeight * 6.0f;
-                    float dist = getDistanceToPath(x, z, isPathMask, MOGUL_FADE_DISTANCE);
-                    float t = MathUtils.clamp(dist / MOGUL_FADE_DISTANCE, 0f, 1f);
-                    float smoothT = t * t * (3 - 2 * t);
-                    float mogulIntensity = MathUtils.lerp(MOGUL_BASE_DAMPING, 1.0f, smoothT);
-                    noise = rawMogul * mogulIntensity;
-                } else {
-                    noise = calculateHeightNoise(x, z, hillFreq, undulation, maxHeight, data.getTerrainAlgorithm());
-                }
-
-                float hillRamp = MathUtils.clamp((zNorm - teeFlatBufferZ) / 0.1f, 0f, 1f);
-                hillRamp = hillRamp * hillRamp * (3 - 2 * hillRamp);
-                float currentHeight = baseElevation + (noise * hillRamp);
-
-                if (isIslandMap) currentHeight = applyIslandCoastline(x, z, zNorm, currentHeight, map[x][z], waterLevel);
-
-                float dxGreen = x - greenCenterX;
-                float dzGreen = z - greenCenterZ;
-                float distGreen = (float) Math.sqrt(dxGreen * dxGreen + dzGreen * dzGreen);
-
-                // Keep protection radius relative to distance (prevents hills from eating long fairways)
-                float protectionRadius = SIZE_Z * 0.22f;
-                float protectedHeight = ((isRaisedFairway || isSunkenFairway) && !isElevated) ? currentHeight : getFinalRaw(distGreen, protectionRadius, currentHeight);
-
-                // Green size should remain relatively constant in world units regardless of map length
-                float greenSize = 94.0f;
-                float tGreen = MathUtils.clamp(distGreen / greenSize, 0f, 1f);
-                float greenEffectMask = (float) Math.pow(1.0f - tGreen, 4.0f);
-                protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask);
-
-                float teeT = MathUtils.clamp(zNorm / 0.15f, 0f, 1f);
-                float smoothT = teeT * teeT * (3 - 2 * teeT);
-                heights[x][z] = MathUtils.lerp(teeSafetyElevation, protectedHeight, smoothT);
-            }
-        }
-
-        if (isCraterFields) {
-            data.setWaterLevel(-10f);
-            waterLevel = -10.0f;
-            int craterCount = (int)(SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15);
-            this.craters = processor.generateCraterField(map, heights, craterCount);
-        }
-
-        smoothGreenBorders(map, heights, isRaisedFairway || isSunkenFairway);
-
-        float offsetAmount = 25.0f;
-        if (isRaisedFairway) {
-            applyPathOffset(map, heights, offsetAmount, greenBuffer);
-            tagChasmWalls(map);
-        } else if (isSunkenFairway) {
-            applyPathOffset(map, heights, -offsetAmount, greenBuffer);
-            tagChasmWalls(map);
-            waterLevel = (Math.min(teeSafetyElevation, data.getGreenHeight()) - offsetAmount) - 10.0f;
-            data.setWaterLevel(waterLevel);
-        } else if (isMonolithPlains) {
-            waterLevel = -2;
-            data.setWaterLevel(-2);
-        }
-
-        if (isMogulHighlands) {
-            applyFairwayGaussianSmoothing(map, heights);
-        }
-
-        applyFairwayWaterBuffer(map, heights, waterLevel, 3.0f);
-        applySlopeBasedStone(map, heights, 0.35f);
-        finalizePositionsAndTrees(map, heights, teePos, holePos, trees, monoliths, greenCenterX, greenCenterZ, waterLevel, isCliffMap);
-
-        if (isMonolithPlains) {
-            generateMonolithPlains(map, heights, monoliths, greenCenterX, greenCenterZ, (int) (SIZE_X * 0.5f), (int) (SIZE_Z * 0.05f));
-        }
-
-        Gdx.app.log("GENERATOR", String.format("Map: %s length: %s par: %s", data.getArchetype().name(), data.getDistance(), data.getPar()));
+        return buffer;
     }
 
-    private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Monolith> monoliths, int gX, int gZ, int tX, int tZ) {
-        int SIZE_X = map.length;
-        int SIZE_Z = map[0].length;
+    private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Monolith> monoliths, int gX, int gZ) {
+        int SIZE_X = map.length, SIZE_Z = map[0].length;
         int spawnAttempts = (int) (SIZE_Z * 2.5f);
         float maxDist = (float) Math.sqrt(Math.pow(SIZE_X, 2) + Math.pow(SIZE_Z, 2));
 
         for (int i = 0; i < spawnAttempts; i++) {
-            int x = rng.nextInt(SIZE_X);
-            int z = rng.nextInt(SIZE_Z);
-            Terrain.TerrainType type = map[x][z];
-            if (type == Terrain.TerrainType.GREEN || type == Terrain.TerrainType.TEE) continue;
+            int x = rng.nextInt(SIZE_X), z = rng.nextInt(SIZE_Z);
+            if (map[x][z] == Terrain.TerrainType.GREEN || map[x][z] == Terrain.TerrainType.TEE) continue;
 
-            float dx = x - gX;
-            float dz = z - gZ;
-            float distToGreen = (float) Math.sqrt(dx * dx + dz * dz);
+            float distToGreen = Vector3.dst(x, z, 0, gX, gZ, 0);
             float p = MathUtils.clamp(1.0f - (distToGreen / maxDist), 0f, 1f);
-            float baseProbability = p * p * (3 - 2 * p);
+            float prob = p * p * (3 - 2 * p);
 
-            if (rng.nextFloat() < (baseProbability * MONOLITH_SPAWN_CHANCE)) {
-                float worldX = (x * SCALE) - (SIZE_X * SCALE / 2f);
-                float worldZ = (z * SCALE) - (SIZE_Z * SCALE / 2f);
-                float worldY = heights[x][z] - MONOLITH_UNDERGROUND_OFFSET;
-                float rotation = rng.nextFloat() * 360f;
-                monoliths.add(new Terrain.Monolith(worldX, worldY, worldZ, 2.0f, 18.0f, 8.0f, rotation));
+            if (rng.nextFloat() < (prob * MONOLITH_SPAWN_CHANCE)) {
+                monoliths.add(new Terrain.Monolith((x * SCALE) - (SIZE_X * SCALE / 2f), heights[x][z] - MONOLITH_UNDERGROUND_OFFSET, (z * SCALE) - (SIZE_Z * SCALE / 2f), 2.0f, 18.0f, 8.0f, rng.nextFloat() * 360f));
             }
         }
-    }
-
-    private void applyFairwayGaussianSmoothing(Terrain.TerrainType[][] map, float[][] heights) {
-        int SIZE_X = map.length;
-        int SIZE_Z = map[0].length;
-        float[][] smoothed = new float[SIZE_X][SIZE_Z];
-        boolean[][] isPathMask = getPathMask(map);
-
-        float[][] kernel = {
-                {1 / 256f, 4 / 256f, 6 / 256f, 4 / 256f, 1 / 256f},
-                {4 / 256f, 16 / 256f, 24 / 256f, 16 / 256f, 4 / 256f},
-                {6 / 256f, 24 / 256f, 36 / 256f, 24 / 256f, 6 / 256f},
-                {4 / 256f, 16 / 256f, 24 / 256f, 16 / 256f, 4 / 256f},
-                {1 / 256f, 4 / 256f, 6 / 256f, 4 / 256f, 1 / 256f}
-        };
-
-        for (int x = 0; x < SIZE_X; x++) {
-            for (int z = 0; z < SIZE_Z; z++) {
-                float dist = getDistanceToPath(x, z, isPathMask, SMOOTH_FAIRWAY_BUFFER);
-                if (dist < SMOOTH_FAIRWAY_BUFFER) {
-                    float weightSum = 0, heightSum = 0;
-                    for (int dx = -SMOOTH_RADIUS; dx <= SMOOTH_RADIUS; dx++) {
-                        for (int dz = -SMOOTH_RADIUS; dz <= SMOOTH_RADIUS; dz++) {
-                            int nx = x + dx, nz = z + dz;
-                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
-                                float kVal = kernel[dx + SMOOTH_RADIUS][dz + SMOOTH_RADIUS];
-                                heightSum += heights[nx][nz] * kVal;
-                                weightSum += kVal;
-                            }
-                        }
-                    }
-                    float blurredHeight = heightSum / weightSum;
-                    float falloff = MathUtils.clamp(1.0f - (dist / SMOOTH_FAIRWAY_BUFFER), 0, 1);
-                    smoothed[x][z] = MathUtils.lerp(heights[x][z], blurredHeight, SMOOTH_STRENGTH * falloff);
-                } else {
-                    smoothed[x][z] = heights[x][z];
-                }
-            }
-        }
-        for (int x = 0; x < SIZE_X; x++) System.arraycopy(smoothed[x], 0, heights[x], 0, SIZE_Z);
     }
 
     private void tagChasmWalls(Terrain.TerrainType[][] map) {
@@ -311,14 +252,13 @@ public class ClassicGenerator implements ITerrainGenerator {
     private void applyPathOffset(Terrain.TerrainType[][] map, float[][] heights, float amount, boolean[][] greenBuffer) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         boolean[][] isPathMask = getPathMask(map);
-        boolean isSunken = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
-        boolean isRaised = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
+        boolean isAbsolute = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
 
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (isPathMask[x][z] || greenBuffer[x][z]) {
                     heights[x][z] += amount;
-                } else if (!isSunken && !isRaised) {
+                } else if (!isAbsolute) {
                     float dist = getDistanceToPath(x, z, isPathMask, 8.0f);
                     float t = MathUtils.clamp(1.0f - (dist / 8.0f), 0, 1);
                     heights[x][z] += (amount * t * t * (3 - 2 * t));
@@ -338,15 +278,12 @@ public class ClassicGenerator implements ITerrainGenerator {
         holeP.set((flagX * SCALE) - (SIZE_X * SCALE / 2f), heights[flagX][flagZ], (flagZ * SCALE) - (SIZE_Z * SCALE / 2f));
 
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
-        // Tree count now scales with total map area (relative to Z)
         int treeCount = (int) (SIZE_Z * data.getTreeDensity() * 2.5f);
-
-        Terrain.TreeScheme scheme = data.getTreeScheme();
 
         for (int i = 0; i < treeCount; i++) {
             int tx = rng.nextInt(SIZE_X - 1), tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
-            if (tz <= teeZ + 30 && Math.abs(tx - teeX) < 15) continue;
+            if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
             if (worldY < water + 0.5f || (map[tx][tz] != Terrain.TerrainType.ROUGH)) continue;
             float slope = (float) Math.sqrt(Math.pow(heights[tx + 1][tz] - worldY, 2) + Math.pow(heights[tx][tz + 1] - worldY, 2));
             if (slope > 1.2f) continue;
@@ -358,44 +295,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                 else if (dist < crater.radius * 2.0f) treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
             }
             if (rng.nextFloat() > treeChance) continue;
-            float baseHeight = isCliff ? cliffDelta : data.getTreeHeight();
-            float tH = baseHeight * (0.8f + rng.nextFloat() * 0.3f);
-
-            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), scheme, rng
-            ));
-        }
-    }
-
-    private float applyIslandCoastline(int x, int z, float zNorm, float currentHeight, Terrain.TerrainType type, float waterLevel) {
-        float coastThreshold = 0.45f + MathUtils.sin(x * 0.05f + off1) * 0.04f + MathUtils.cos(x * 0.4f + off2) * 0.01f;
-        boolean isPlayable = (type == Terrain.TerrainType.FAIRWAY || type == Terrain.TerrainType.TEE || type == Terrain.TerrainType.GREEN);
-        if (zNorm > coastThreshold && !isPlayable) {
-            if (type == Terrain.TerrainType.ROUGH) currentHeight -= 20.0f;
-            else if (type == Terrain.TerrainType.SAND) currentHeight = MathUtils.lerp(waterLevel - 1.5f, currentHeight, MathUtils.clamp((currentHeight - waterLevel) / 5.0f, 0f, 1f));
-        }
-        if (isPlayable && currentHeight < waterLevel + 1.0f) currentHeight = waterLevel + 1.0f;
-        return currentHeight;
-    }
-
-    private void applyFairwayWaterBuffer(Terrain.TerrainType[][] map, float[][] heights, float waterLevel, float tileDistance) {
-        int SIZE_X = map.length, SIZE_Z = map[0].length;
-        float distSqThreshold = tileDistance * tileDistance;
-        for (int x = 0; x < SIZE_X; x++) {
-            for (int z = 0; z < SIZE_Z; z++) {
-                if (map[x][z] == Terrain.TerrainType.FAIRWAY) {
-                    if (heights[x][z] <= waterLevel + 0.5f) { map[x][z] = Terrain.TerrainType.ROUGH; continue; }
-                    boolean nearWater = false;
-                    int range = (int) Math.ceil(tileDistance);
-                    for (int dx = -range; dx <= range; dx++) {
-                        for (int dz = -range; dz <= range; dz++) {
-                            int nx = x + dx, nz = z + dz;
-                            if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z && heights[nx][nz] < waterLevel && (dx * dx + dz * dz) <= distSqThreshold) { nearWater = true; break; }
-                        }
-                        if (nearWater) break;
-                    }
-                    if (nearWater) map[x][z] = Terrain.TerrainType.ROUGH;
-                }
-            }
+            float tH = (isCliff ? cliffDelta : data.getTreeHeight()) * (0.8f + rng.nextFloat() * 0.3f);
+            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), data.getTreeScheme(), rng));
         }
     }
 
@@ -435,9 +336,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
     private float getFinalRaw(float dG, float pR, float rH) {
         float t = MathUtils.clamp(dG / pR, 0f, 1f);
-        float smoothT = t * t * (3 - 2 * t);
-        float plateauT = smoothT * smoothT;
-        return MathUtils.lerp(data.getGreenHeight(), rH, plateauT);
+        return MathUtils.lerp(data.getGreenHeight(), rH, (float) Math.pow(t * t * (3 - 2 * t), 2));
     }
 
     private boolean[][] getPathMask(Terrain.TerrainType[][] map) {
@@ -466,23 +365,23 @@ public class ClassicGenerator implements ITerrainGenerator {
         return (float) Math.sqrt(minDistSq);
     }
 
-    private void mapStandardFeatures(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ, float water, float fWidth, boolean isIsland) {
+    private void mapStandardFeatures(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ, boolean isIsland) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         int teeCenterX = SIZE_X / 2, teeCenterZ = (int) (SIZE_Z * 0.05f);
-        float minFWidth = data.getMinFairwayWidth();
+        float fWidth = data.getMaxFairwayWidth();
         for (int z = 0; z < SIZE_Z; z++) {
             for (int x = 0; x < SIZE_X; x++) {
                 map[x][z] = Terrain.TerrainType.ROUGH;
                 if (Math.abs(x - teeCenterX) < 7 && Math.abs(z - teeCenterZ) < 6) map[x][z] = Terrain.TerrainType.TEE;
                 else {
-                    float dist = (float) Math.sqrt(Math.pow(x - gX, 2) + Math.pow(z - gZ, 2));
+                    float dist = Vector3.dst(x, z, 0, gX, gZ, 0);
                     float dynamicRadius = 20f + (MathUtils.sin(MathUtils.atan2(z - gZ, x - gX) * 3 + off1) * 3.1f);
                     if (dist <= dynamicRadius) map[x][z] = Terrain.TerrainType.GREEN;
                 }
             }
         }
-        if (minFWidth <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
-        else processor.generateContinuousFairway(map, gX, gZ, fWidth, minFWidth, data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
+        if (data.getMinFairwayWidth() <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
+        else processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
     }
 
     private float calculateGreenUndulation(int x, int z) {
@@ -505,13 +404,16 @@ public class ClassicGenerator implements ITerrainGenerator {
         };
     }
 
-    private void applySlopeBasedStone(Terrain.TerrainType[][] map, float[][] heights, float threshold) {
-        int SIZE_X = map.length, SIZE_Z = map[0].length;
-        for (int x = 0; x < SIZE_X - 1; x++) {
-            for (int z = 0; z < SIZE_Z - 1; z++) {
-                float dx = heights[x + 1][z] - heights[x][z], dz = heights[x][z + 1] - heights[x][z];
-                if (1.0f - new Vector3(-dx, 1.0f, -dz).nor().y > threshold && map[x][z] == Terrain.TerrainType.ROUGH) map[x][z] = Terrain.TerrainType.STONE;
-            }
+    private static class ArchetypeFlags {
+        final boolean isCliffMap, isIslandMap, isCraterFields, isMogulHighlands, isMonolithPlains, isPathDependent;
+
+        ArchetypeFlags(LevelData data) {
+            isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
+            isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
+            isCraterFields = data.getArchetype() == LevelData.Archetype.CRATER_FIELDS;
+            isMogulHighlands = data.getArchetype() == LevelData.Archetype.MOGUL_HIGHLANDS;
+            isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
+            isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }
 }
