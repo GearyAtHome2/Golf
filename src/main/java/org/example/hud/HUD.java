@@ -23,22 +23,17 @@ import org.example.ball.ShotDifficulty;
 import org.example.terrain.Terrain;
 
 public class HUD {
+
     public enum GameDifficulty {
         EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
         public final float speedMult;
-
-        GameDifficulty(float speed) {
-            this.speedMult = speed;
-        }
+        GameDifficulty(float speed) { this.speedMult = speed; }
     }
 
     public enum AnimSpeed {
         NONE(0f), SLOW(0.6f), FAST(1.4f);
         public final float mult;
-
-        AnimSpeed(float mult) {
-            this.mult = mult;
-        }
+        AnimSpeed(float mult) { this.mult = mult; }
     }
 
     public static class ModAnimation {
@@ -70,6 +65,10 @@ public class HUD {
     private final Vector2 spinDot = new Vector2(0, 0);
     private final float SPIN_UI_RADIUS = 50f;
 
+    // Timer and string for the distance readout
+    private float distanceDisplayTimer = 0;
+    private String distanceText = "";
+
     private float seedFeedbackTimer = 0, shotFeedbackTimer = 0, barSwellTimer = 0, glowTimer = 0, minigameTimer = 0;
     private String shotFeedbackText = "";
     private Color shotFeedbackColor = Color.WHITE, glowColor = new Color(0, 0, 0, 0);
@@ -94,21 +93,10 @@ public class HUD {
         viewport = new ScreenViewport();
     }
 
-    public void incrementShots() {
-        shotCount++;
-    }
-
-    public void resetShots() {
-        shotCount = 0;
-    }
-
-    public int getShotCount() {
-        return shotCount;
-    }
-
-    public void resize(int width, int height) {
-        viewport.update(width, height, true);
-    }
+    public void incrementShots() { shotCount++; }
+    public void resetShots() { shotCount = 0; }
+    public int getShotCount() { return shotCount; }
+    public void resize(int width, int height) { viewport.update(width, height, true); }
 
     public void renderStartMenu(int selection) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
@@ -122,8 +110,7 @@ public class HUD {
             try {
                 Long.parseLong(clipboardContent.trim());
                 hasValidSeed = true;
-            } catch (NumberFormatException ignored) {
-            }
+            } catch (NumberFormatException ignored) {}
         }
 
         font.getData().setScale(3f);
@@ -143,11 +130,8 @@ public class HUD {
     }
 
     private void drawOption(boolean selected, boolean enabled, String text, float x, float y) {
-        if (!enabled) {
-            font.setColor(Color.DARK_GRAY);
-        } else {
-            font.setColor(selected ? Color.YELLOW : Color.WHITE);
-        }
+        if (!enabled) font.setColor(Color.DARK_GRAY);
+        else font.setColor(selected ? Color.YELLOW : Color.WHITE);
         font.draw(batch, (selected && enabled ? "> " : "  ") + text, x, y);
     }
 
@@ -194,11 +178,17 @@ public class HUD {
     }
 
     public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain) {
+        float delta = Gdx.graphics.getDeltaTime();
+
         if (!minigameActive) {
-            updateSpinInput(Gdx.graphics.getDeltaTime());
+            updateSpinInput(delta);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
+                float dist = ball.getFlatDistanceToHole(terrain);
+                distanceText = String.format("RANGE: %.1f yds", dist); // Adjusted for feet
+                distanceDisplayTimer = 3.0f;
+            }
         }
 
-        float delta = Gdx.graphics.getDeltaTime();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
@@ -207,6 +197,13 @@ public class HUD {
 
         batch.begin();
         renderFeedbackMessages(delta);
+        renderDistanceDisplay(delta);
+
+        // NEW: Render the live shot distance if in practice mode
+        if (isPractice) {
+            renderShotDistance(ball);
+        }
+
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed);
         if (ball.getState() == Ball.State.STATIONARY && !minigameActive)
             renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
@@ -215,6 +212,29 @@ public class HUD {
         if (minigameActive) {
             updateMinigame(delta, gameCamera, terrain);
             minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);
+        }
+    }
+
+    private void renderShotDistance(Ball ball) {
+        // Only show distance if the ball has actually moved from its starting spot
+        if (ball.getState() != Ball.State.STATIONARY || ball.getShotDistance() > 0.1f) {
+            font.getData().setScale(1.4f);
+            // Change color based on movement state: White when rolling, Gold when finished
+            font.setColor(ball.getState() == Ball.State.STATIONARY ? Color.GOLD : Color.WHITE);
+
+            String distStr = String.format("SHOT DISTANCE: %.1f yds", ball.getShotDistance());
+            font.draw(batch, distStr, viewport.getWorldWidth() - 300, 200);
+        }
+    }
+
+    private void renderDistanceDisplay(float delta) {
+        if (distanceDisplayTimer > 0) {
+            distanceDisplayTimer -= delta;
+            font.getData().setScale(1.8f);
+            // Fade out effect
+            float alpha = Math.min(1, distanceDisplayTimer);
+            font.setColor(1, 1, 0, alpha); // Yellow text
+            font.draw(batch, distanceText, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() - 50);
         }
     }
 
@@ -251,20 +271,15 @@ public class HUD {
         } else if (levelData != null) {
             font.setColor(Color.GOLD);
             font.draw(batch, levelData.getArchetype().name().replace("_", " "), 40, viewport.getWorldHeight() - 40);
-
             font.setColor(Color.WHITE);
-            // Display Par next to the Archetype
             font.draw(batch, "Par " + levelData.getPar(), 40, viewport.getWorldHeight() - 80);
         }
 
-        // Color coding shots based on par performance
         if (!isPractice && levelData != null) {
             if (shotCount > levelData.getPar()) font.setColor(Color.RED);
             else if (shotCount < levelData.getPar() && shotCount > 0) font.setColor(Color.GREEN);
             else font.setColor(Color.WHITE);
-        } else {
-            font.setColor(Color.WHITE);
-        }
+        } else font.setColor(Color.WHITE);
 
         float shotY = isPractice ? viewport.getWorldHeight() - 80 : viewport.getWorldHeight() - 120;
         font.draw(batch, "Shots: " + shotCount, 40, shotY);
@@ -449,11 +464,9 @@ public class HUD {
 
     public void renderVictory(int shots, LevelData levelData) {
         batch.begin();
-
         int par = (levelData != null) ? levelData.getPar() : 3;
         String shout = org.example.ScoreShout.getShout(shots, par);
         if (shots == 1) shout = ScoreShout.HIO.shout;
-
         int diff = shots - par;
 
         Color shoutColor;
@@ -472,7 +485,6 @@ public class HUD {
         font.setColor(Color.WHITE);
         String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
         font.draw(batch, "Total Strokes: " + shots + " (" + scoreType + ")", centerX - 180, viewport.getWorldHeight() / 2f);
-
         batch.end();
     }
 
@@ -484,33 +496,10 @@ public class HUD {
         if (spinDot.len() > 1f) spinDot.nor();
     }
 
-    public boolean isMinigameComplete() {
-        return !minigameActive && needleStopped && glowTimer <= 0 && lastResult != null;
-    }
-
-    public boolean wasMinigameCanceled() {
-        boolean c = minigameCanceled;
-        minigameCanceled = false;
-        return c;
-    }
-
-    public boolean wasMainMenuRequested() {
-        boolean m = mainMenuRequested;
-        mainMenuRequested = false;
-        return m;
-    }
-
-    public MinigameResult getMinigameResult() {
-        return lastResult;
-    }
-
-    public Vector2 getSpinOffset() {
-        return spinDot;
-    }
-
-    public void dispose() {
-        batch.dispose();
-        shapeRenderer.dispose();
-        font.dispose();
-    }
+    public boolean isMinigameComplete() { return !minigameActive && needleStopped && glowTimer <= 0 && lastResult != null; }
+    public boolean wasMinigameCanceled() { boolean c = minigameCanceled; minigameCanceled = false; return c; }
+    public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }
+    public MinigameResult getMinigameResult() { return lastResult; }
+    public Vector2 getSpinOffset() { return spinDot; }
+    public void dispose() { batch.dispose(); shapeRenderer.dispose(); font.dispose(); }
 }

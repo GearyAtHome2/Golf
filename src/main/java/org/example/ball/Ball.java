@@ -1,6 +1,5 @@
 package org.example.ball;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
@@ -8,6 +7,7 @@ import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import org.example.terrain.Terrain;
@@ -96,6 +96,17 @@ public class Ball {
             if (state == State.STATIONARY) break;
         }
         updateVisuals();
+    }
+
+    public float getFlatDistanceToHole(Terrain terrain) {
+        if (terrain == null) return 0f;
+        Vector3 holePos = terrain.getHolePosition();
+        return Vector2.dst(position.x, position.z, holePos.x, holePos.z);
+    }
+
+    public float getShotDistance() {
+        // Calculates the flat (2D) distance between where the ball was hit and where it is now
+        return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
     }
 
     private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind) {
@@ -336,7 +347,7 @@ public class Ball {
             case SUPER -> { activeTrailColor.set(Color.PINK); isGoodShot = true; }
             case GREAT -> { activeTrailColor.set(Color.GOLD); isGoodShot = true; }
             case GOOD -> activeTrailColor.set(Color.GREEN);
-            case MEH -> activeTrailColor.set(Color.GRAY);
+            case POOR -> activeTrailColor.set(Color.GRAY);
             case WANK -> activeTrailColor.set(Color.ORANGE);
             case SHIT -> activeTrailColor.set(Color.BROWN);
             default -> activeTrailColor.set(Color.WHITE);

@@ -152,11 +152,11 @@ public class ShotController {
 
         Vector2 rawOffset = hud.getSpinOffset();
         float rawR = MathUtils.clamp(rawOffset.len(), 0f, 1f);
-        float quadR = (float)Math.pow(rawR, INPUT_EXP);
+        float quadR = (float) Math.pow(rawR, INPUT_EXP);
         Vector2 quadOffset = new Vector2();
         if (rawR > 0) quadOffset.set(rawOffset).nor().scl(quadR);
 
-        float powerPenalty = (float)Math.pow(rawR, 6) * 0.40f;
+        float powerPenalty = (float) Math.pow(rawR, 6) * 0.40f;
         float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * accuracyPowerMod;
 
         Vector3 terrainNormal = terrain.getNormalAt(ball.getPosition().x, ball.getPosition().z);
@@ -180,18 +180,26 @@ public class ShotController {
         float totalSpeed = power * finalPowerMult;
         float attackAngle = quadOffset.y * -20.0f;
         float spinLoft = Math.abs(club.loft - attackAngle);
-        float sForce = (float)Math.sin(spinLoft * MathUtils.degreesToRadians);
+        float sForce = (float) Math.sin(spinLoft * MathUtils.degreesToRadians);
         float pinchFactor = 1.0f + (quadOffset.y * PINCH_FACTOR);
 
-        // --- RELATIVE SPIN CALCULATION ---
-        float backspinAmount = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor);
-        float sideSpinFromAccuracy = accuracy * totalSpeed * 45.0f;
-        float sidespinAmount = (quadOffset.x * totalSpeed * -10.0f) + sideSpinFromAccuracy;
+        float normalizedPower = MathUtils.clamp(power / MAX_POWER, 0f, 1f);
 
-        // Apply backspin around the 'Right' axis relative to the shot
+        float spinCurve = (float)Math.pow(normalizedPower, 1.5f);
+
+        float qualityFactor = switch (result.rating) {
+            case PERFECTION -> 1.2f;  // Extra crisp spin
+            case SUPER -> 1.1f;  // Extra crisp spin
+            case POOR -> 0.6f;  // Weak, "dead" ball
+            case WANK -> 0.4f;  // "Thinned" or "Chunked" - almost no spin
+            case SHIT -> 0.2f;  // "Thinned" or "Chunked" - almost no spin
+            default -> 1f;
+        };
+        float backspinAmount = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor) * qualityFactor * spinCurve;
+        float sideSpinFromAccuracy = accuracy * totalSpeed * 60.0f * spinCurve;
+        float sidespinAmount = (quadOffset.x * totalSpeed * -10.0f * qualityFactor * spinCurve) + sideSpinFromAccuracy;
+
         ball.getSpin().set(rightOfAim).scl(backspinAmount);
-
-        // Add sidespin around the 'Up' axis (Y)
         ball.getSpin().add(tempV1.set(Vector3.Y).scl(-sidespinAmount));
 
         Gdx.app.log("SHOT_MASTER", "--- TERRAIN KICK: " + physicalKickDegrees + " deg ---");
@@ -203,7 +211,9 @@ public class ShotController {
         ));
     }
 
-    public ShotDifficulty getCurrentDifficulty() { return currentDifficulty; }
+    public ShotDifficulty getCurrentDifficulty() {
+        return currentDifficulty;
+    }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {
         float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : shotPower);
@@ -244,6 +254,11 @@ public class ShotController {
         }
     }
 
-    public boolean isCharging() { return isCharging || isPowerLocked || waitingForMinigame; }
-    public void dispose() { if (powerBarModel != null) powerBarModel.dispose(); }
+    public boolean isCharging() {
+        return isCharging || isPowerLocked || waitingForMinigame;
+    }
+
+    public void dispose() {
+        if (powerBarModel != null) powerBarModel.dispose();
+    }
 }

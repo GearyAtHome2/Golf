@@ -108,7 +108,7 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 45.0f;
                 minFairwayWidth = 28.0f;
                 undulation = 0.4f;
-                fairwayWiggle = 0.28f;
+                fairwayWiggle = 0.25f + r.nextFloat() * 0.06f;
                 islands = 0f;
                 cohesion = 0.9f;
                 distance = Math.round(400 + r.nextFloat() * 200);
@@ -129,7 +129,7 @@ public class LevelDataGenerator {
                 treeDensity = 0.25f;
                 maxFairwayWidth = 40.0f;
                 undulation = 0.4f;
-                fairwayWiggle = 0.25f;
+                fairwayWiggle = 0.20f + r.nextFloat() * 0.1f;
                 islands = 0.05f;
                 cohesion = 0.7f;
                 distance = Math.round(410 + r.nextFloat() * 120);
@@ -148,7 +148,7 @@ public class LevelDataGenerator {
                 treeDensity = 0.35f;
                 maxFairwayWidth = 35.0f;
                 minFairwayWidth = 25.0f;
-                fairwayWiggle = 0.35f;
+                fairwayWiggle = 0.25f + r.nextFloat() * 0.2f;
                 islands = 0.0f;
                 cohesion = 0.95f;
                 distance = Math.round(550 + r.nextFloat() * 200);
@@ -165,7 +165,7 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 40.0f;
                 minFairwayWidth = 27.0f;
                 undulation = 0.2f;
-                fairwayWiggle = 0.2f;
+                fairwayWiggle = 0.16f + r.nextFloat() * 0.08f;
                 islands = 0.3f;
                 cohesion = 0.6f;
                 distance = Math.round(400 + r.nextFloat() * 150);
@@ -180,7 +180,7 @@ public class LevelDataGenerator {
                 hillFreq = 0.045f;
                 treeDensity = 0.9f;
                 maxFairwayWidth = 35.0f;
-                fairwayWiggle = 0.55f;
+                fairwayWiggle = 0.4f + r.nextFloat() * 0.3f;
                 islands = 0.7f;
                 cohesion = 0.42f;
                 distance = Math.round(410 + r.nextFloat() * 80);
@@ -199,11 +199,11 @@ public class LevelDataGenerator {
                 treeDensity = 0.10f;
                 maxFairwayWidth = 50.0f;
                 undulation = 0.15f;
-                fairwayWiggle = 0.1f;
+                fairwayWiggle = 0.1f + r.nextFloat() * 0.08f;
                 islands = 0.4f;
                 cohesion = 0.9f;
-                distance = Math.round(500 + r.nextFloat() * 100);
-                par = 5;
+                distance = Math.round(500 + r.nextFloat() * 150);
+                par = distance < 550? 4 : 5;
                 break;
 
             case SHADOW_CANYON:
@@ -219,7 +219,7 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 40.0f;
                 minFairwayWidth = 10f;
                 undulation = 0.5f;
-                fairwayWiggle = 0.31f;
+                fairwayWiggle = 0.1f + r.nextFloat() * 0.1f;
                 islands = 0.0f;
                 cohesion = 0.8f;
                 distance = Math.round(420 + r.nextFloat() * 120);
@@ -240,7 +240,7 @@ public class LevelDataGenerator {
                 minFairwayWidth = 0f;
                 undulation = 0.6f;
                 bunkerCount = 12 + r.nextInt(10);
-                fairwayWiggle = 0.19f;
+                fairwayWiggle = 0.15f + r.nextFloat() * 0.1f;
                 islands = 0.1f;
                 cohesion = 0.63f;
                 distance = Math.round(450 + r.nextFloat() * 100);
@@ -250,7 +250,7 @@ public class LevelDataGenerator {
             case MONOLITH_PLAINS:
                 teeH = 20f;
                 greenH = 15.0f + r.nextFloat() * 10.0f;
-                fairwayWiggle = 0.1f;
+                fairwayWiggle = 0.05f + r.nextFloat() * 0.1f;
                 maxWindSpeed = 10.0f;
                 islands = 0.25f;
                 maxFairwayWidth = 60f;
@@ -265,14 +265,14 @@ public class LevelDataGenerator {
 
             case STANDARD_LINKS:
             default:
-                fairwayWiggle = 0.1f;
+                fairwayWiggle = 0.05f + r.nextFloat() * 0.15f;
                 islands = 0.25f;
                 maxWindSpeed = 18.0f;
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
                 bunkerCount = 1 + r.nextInt(4);
-                distance = Math.round(400 + r.nextFloat() * 200);
-                par = distance < 480? 3 : distance < 530 ? 4 : 5;
+                distance = Math.round(400 + r.nextFloat() * 350);
+                par = distance < 500? 3 : distance < 620 ? 4 : 5;
                 break;
 
         }
