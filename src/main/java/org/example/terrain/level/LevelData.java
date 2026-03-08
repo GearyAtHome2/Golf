@@ -46,14 +46,13 @@ public class LevelData {
     private int nBunkers;
     private Vector3 wind;
     private int distance;
-    private int par; // Added difficulty field
+    private int par;
+    private float shotIndex; // Tracks which hole/shot sequence we are on
 
-    // Parameters for fairway control
     private float fairwayWiggle;
     private float fairwayRoughIslands;
     private float fairwayCohesion;
 
-    // Getters and Setters
     public long getSeed() { return seed; }
     public void setSeed(long seed) { this.seed = seed; }
     public Archetype getArchetype() { return archetype; }
@@ -105,4 +104,7 @@ public class LevelData {
 
     public float getFairwayCohesion() { return fairwayCohesion; }
     public void setFairwayCohesion(float fairwayCohesion) { this.fairwayCohesion = fairwayCohesion; }
+
+    public float getShotIndex() { return shotIndex; }
+    public void setShotIndex(float shotIndex) { this.shotIndex = shotIndex; }
 }

@@ -39,6 +39,7 @@ public class Ball {
     private final Vector3 velocity = new Vector3();
     private final Vector3 spin = new Vector3();
     private final Vector3 lastStationaryPosition = new Vector3();
+    private final Vector3 lastShotPosition = new Vector3();
 
     private Model trailPointModel;
     private ModelInstance trailInstance;
@@ -77,6 +78,7 @@ public class Ball {
 
         this.position.set(startPosition);
         this.lastStationaryPosition.set(startPosition);
+        this.lastShotPosition.set(startPosition);
         updateVisuals();
     }
 
@@ -105,7 +107,6 @@ public class Ball {
     }
 
     public float getShotDistance() {
-        // Calculates the flat (2D) distance between where the ball was hit and where it is now
         return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
     }
 
@@ -254,13 +255,9 @@ public class Ball {
 
         velocity.set(vTangent).add(vNormal);
         checkStationaryCondition(type, normal);
-
-        float horizSpeedPost = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
     }
 
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
-        float horizSpeedBeforeBounce = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-
         float friction = type.kineticFriction;
         float frictionImpact = (friction - 0.2f) * 0.08f;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - frictionImpact, 0.05f, BOUNCE_RESTITUTION);
@@ -285,9 +282,7 @@ public class Ball {
         Vector3 slopeForce = BallPhysics.getSlopeForce(BallPhysics.getGravityForce(GRAVITY), normal);
         Vector3 friction = BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY);
 
-        float horizSpeedBeforeRolling = tangentVel.len();
         tangentVel.add(slopeForce.scl(delta)).add(friction.scl(delta));
-        float horizSpeedAfterRolling = tangentVel.len();
 
         spin.setZero();
 
@@ -304,6 +299,7 @@ public class Ball {
             spin.setZero();
             state = State.STATIONARY;
             activeTrailColor.set(Color.WHITE);
+            lastStationaryPosition.set(position);
         }
     }
 
@@ -327,7 +323,6 @@ public class Ball {
                 continue;
             }
 
-            float fY = treePos.y + tree.getTrunkHeight() + tree.getFoliageRadius();
             if (tree.isInsideFoliage(position, BALL_RADIUS)) {
                 lastInteraction = Interaction.LEAVES;
                 BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE);
@@ -338,7 +333,8 @@ public class Ball {
 
     public void hit(Vector3 shootDir, float power, float loft, float powerMult, MinigameResult.Rating rating) {
         if (state != State.STATIONARY) return;
-        lastStationaryPosition.set(position);
+
+        capturePosition();
         spin.setZero();
 
         isGoodShot = false;
@@ -366,14 +362,22 @@ public class Ball {
         trail.clear();
     }
 
+    public void capturePosition() {
+        lastShotPosition.set(this.position);
+    }
+
     public void resetToLastPosition() {
-        this.position.set(lastStationaryPosition);
+        this.position.set(lastShotPosition);
         this.velocity.setZero();
         this.spin.setZero();
         this.state = State.STATIONARY;
         this.trail.clear();
         this.activeTrailColor.set(Color.WHITE);
         updateVisuals();
+    }
+
+    public boolean isInWater(Terrain terrain) {
+        return position.y < terrain.getWaterLevel();
     }
 
     public boolean checkVictory(Vector3 holePos, float holeSize) {

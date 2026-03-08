@@ -358,7 +358,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                 else if (dist < crater.radius * 2.0f) treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
             }
             if (rng.nextFloat() > treeChance) continue;
-            float tH = isCliff ? cliffDelta * (0.8f + rng.nextFloat() * 0.2f) : data.getTreeHeight();
+            float baseHeight = isCliff ? cliffDelta : data.getTreeHeight();
+            float tH = baseHeight * (0.8f + rng.nextFloat() * 0.3f);
 
             trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), scheme, rng
             ));

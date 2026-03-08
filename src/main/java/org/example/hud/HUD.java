@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -16,6 +17,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.ScoreShout;
+import org.example.ball.CompetitiveScore;
 import org.example.terrain.level.LevelData;
 import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
@@ -23,6 +25,9 @@ import org.example.ball.ShotDifficulty;
 import org.example.terrain.Terrain;
 
 public class HUD {
+    private float hazardTimer = 0;
+    private String hazardText = "";
+    private Color hazardColor = Color.WHITE;
 
     public enum GameDifficulty {
         EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
@@ -65,7 +70,6 @@ public class HUD {
     private final Vector2 spinDot = new Vector2(0, 0);
     private final float SPIN_UI_RADIUS = 50f;
 
-    // Timer and string for the distance readout
     private float distanceDisplayTimer = 0;
     private String distanceText = "";
 
@@ -114,18 +118,20 @@ public class HUD {
         }
 
         font.getData().setScale(3f);
-        font.draw(batch, "GEARY GOLF", centerX - 180, centerY + 150);
+        font.draw(batch, "GEARY GOLF", centerX - 180, centerY + 180);
 
         font.getData().setScale(1.5f);
-        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY);
-        drawOption(selection == 1, true, "PRACTICE RANGE", centerX - 80, centerY - 60);
+        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 30);
+        font.setColor(selection == 1 ? Color.GOLD : Color.WHITE);
+        drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY - 30);
+        drawOption(selection == 2, true, "PRACTICE RANGE", centerX - 80, centerY - 90);
 
         String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
-        drawOption(selection == 2, hasValidSeed, seedText, centerX - 80, centerY - 120);
+        drawOption(selection == 3, hasValidSeed, seedText, centerX - 80, centerY - 150);
 
         font.getData().setScale(1f);
         font.setColor(Color.GRAY);
-        font.draw(batch, "Use UP/DOWN to select, ENTER to start", centerX - 130, centerY - 210);
+        font.draw(batch, "Use UP/DOWN to select, ENTER to start", centerX - 130, centerY - 240);
         batch.end();
     }
 
@@ -149,7 +155,6 @@ public class HUD {
             String seedString = String.valueOf(levelData.getSeed());
             Gdx.app.getClipboard().setContents(seedString);
             seedFeedbackTimer = 1.0f;
-            Gdx.app.log("HUD", "Seed copied to clipboard: " + seedString);
         }
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
@@ -177,14 +182,14 @@ public class HUD {
         batch.end();
     }
 
-    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain) {
+    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore) {
         float delta = Gdx.graphics.getDeltaTime();
 
         if (!minigameActive) {
             updateSpinInput(delta);
             if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
                 float dist = ball.getFlatDistanceToHole(terrain);
-                distanceText = String.format("RANGE: %.1f yds", dist); // Adjusted for feet
+                distanceText = String.format("RANGE: %.1f yds", dist);
                 distanceDisplayTimer = 3.0f;
             }
         }
@@ -198,13 +203,12 @@ public class HUD {
         batch.begin();
         renderFeedbackMessages(delta);
         renderDistanceDisplay(delta);
-
-        // NEW: Render the live shot distance if in practice mode
+        renderHazardPopUp(delta); // <--- Add this here
         if (isPractice) {
             renderShotDistance(ball);
         }
 
-        renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed);
+        renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore);
         if (ball.getState() == Ball.State.STATIONARY && !minigameActive)
             renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
         batch.end();
@@ -216,12 +220,9 @@ public class HUD {
     }
 
     private void renderShotDistance(Ball ball) {
-        // Only show distance if the ball has actually moved from its starting spot
         if (ball.getState() != Ball.State.STATIONARY || ball.getShotDistance() > 0.1f) {
             font.getData().setScale(1.4f);
-            // Change color based on movement state: White when rolling, Gold when finished
             font.setColor(ball.getState() == Ball.State.STATIONARY ? Color.GOLD : Color.WHITE);
-
             String distStr = String.format("SHOT DISTANCE: %.1f yds", ball.getShotDistance());
             font.draw(batch, distStr, viewport.getWorldWidth() - 300, 200);
         }
@@ -231,9 +232,8 @@ public class HUD {
         if (distanceDisplayTimer > 0) {
             distanceDisplayTimer -= delta;
             font.getData().setScale(1.8f);
-            // Fade out effect
             float alpha = Math.min(1, distanceDisplayTimer);
-            font.setColor(1, 1, 0, alpha); // Yellow text
+            font.setColor(1, 1, 0, alpha);
             font.draw(batch, distanceText, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() - 50);
         }
     }
@@ -259,7 +259,8 @@ public class HUD {
         }
     }
 
-    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed) {
+    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore) {
+        float topY = viewport.getWorldHeight() - 40;
         font.getData().setScale(1f);
         font.setColor(Color.WHITE);
         font.draw(batch, "CONTACT POINT", 35, 20);
@@ -267,22 +268,29 @@ public class HUD {
         font.getData().setScale(1.5f);
         if (isPractice) {
             font.setColor(Color.CYAN);
-            font.draw(batch, "PRACTICE RANGE", 40, viewport.getWorldHeight() - 40);
+            font.draw(batch, "PRACTICE RANGE", 40, topY);
         } else if (levelData != null) {
             font.setColor(Color.GOLD);
-            font.draw(batch, levelData.getArchetype().name().replace("_", " "), 40, viewport.getWorldHeight() - 40);
+            String header = (compScore != null) ? "HOLE " + compScore.getCurrentHoleNumber() : levelData.getArchetype().name().replace("_", " ");
+            font.draw(batch, header, 40, topY);
+
             font.setColor(Color.WHITE);
-            font.draw(batch, "Par " + levelData.getPar(), 40, viewport.getWorldHeight() - 80);
+            font.draw(batch, "Par " + levelData.getPar(), 40, topY - 40);
+
+            if (compScore != null) {
+                font.setColor(Color.YELLOW);
+                font.draw(batch, "TO PAR: " + compScore.getToParString(), 40, topY - 80);
+            }
         }
 
+        font.setColor(Color.WHITE);
+        // Ensure "Shots" is always drawn below the other labels to prevent overlap
+        float shotsY = topY - 40; // Default for practice
         if (!isPractice && levelData != null) {
-            if (shotCount > levelData.getPar()) font.setColor(Color.RED);
-            else if (shotCount < levelData.getPar() && shotCount > 0) font.setColor(Color.GREEN);
-            else font.setColor(Color.WHITE);
-        } else font.setColor(Color.WHITE);
+            shotsY = (compScore != null) ? topY - 120 : topY - 80;
+        }
 
-        float shotY = isPractice ? viewport.getWorldHeight() - 80 : viewport.getWorldHeight() - 120;
-        font.draw(batch, "Shots: " + shotCount, 40, shotY);
+        font.draw(batch, "Shots: " + shotCount, 40, shotsY);
 
         font.setColor(Color.WHITE);
         float rightX = viewport.getWorldWidth() - 250;
@@ -300,37 +308,24 @@ public class HUD {
             cancelMinigame();
             return;
         }
-
         updateAnimations(delta);
-
         if (!needleStopped) {
             minigameTimer += delta;
             float stepDuration = (animSetting == AnimSpeed.NONE) ? 0.01f : (0.7f / animSetting.mult);
-
             Vector3 normal = terrain.getNormalAt(activeBallPos.x, activeBallPos.z);
             Vector3 rightOfAim = new Vector3(camera.direction).crs(Vector3.Y).nor();
             engine.updateZones(delta, normal.dot(rightOfAim), spinDot.x, shotRandomness);
-
             if (minigameStep < 4 && minigameTimer >= stepDuration) advanceMinigameStep();
-
             if (minigameStep == 4) {
                 float move = delta * needleSpeed;
                 engine.needlePos += (engine.needleMovingRight ? move : -move);
-                if (engine.needlePos >= 1.0f) {
-                    engine.needlePos = 1.0f;
-                    engine.needleMovingRight = false;
-                } else if (engine.needlePos <= 0f) {
-                    engine.needlePos = 0f;
-                    engine.needleMovingRight = true;
-                }
+                if (engine.needlePos >= 1.0f) { engine.needlePos = 1.0f; engine.needleMovingRight = false; }
+                else if (engine.needlePos <= 0f) { engine.needlePos = 0f; engine.needleMovingRight = true; }
                 if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) stopNeedle();
             }
         } else {
             glowTimer -= delta;
-            if (glowTimer <= 0) {
-                minigameActive = false;
-                activeAnims.clear();
-            }
+            if (glowTimer <= 0) { minigameActive = false; activeAnims.clear(); }
         }
     }
 
@@ -340,25 +335,10 @@ public class HUD {
         String text = "";
         float mult = 1.0f;
         switch (minigameStep) {
-            case 1 -> {
-                mult = activeDiff.terrainDifficulty;
-                text = "TERRAIN x" + String.format("%.2f", mult);
-                engine.barWidthMult *= (1.0f / mult);
-            }
-            case 2 -> {
-                mult = activeDiff.clubDifficulty;
-                text = "WEIGHT x" + String.format("%.2f", mult);
-                engine.barWidthMult *= (1.0f / mult);
-            }
-            case 3 -> {
-                mult = activeDiff.swingDifficulty;
-                text = "PRECISION x" + String.format("%.2f", mult);
-                engine.barWidthMult *= (1.0f / mult);
-            }
-            case 4 -> {
-                text = "GO!";
-                needleSpeed = activePowerMod * 1.5f * currentDifficulty.speedMult;
-            }
+            case 1 -> { mult = activeDiff.terrainDifficulty; text = "TERRAIN x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
+            case 2 -> { mult = activeDiff.clubDifficulty; text = "WEIGHT x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
+            case 3 -> { mult = activeDiff.swingDifficulty; text = "PRECISION x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
+            case 4 -> { text = "GO!"; needleSpeed = activePowerMod * 1.5f * currentDifficulty.speedMult; }
         }
         if (animSetting != AnimSpeed.NONE) {
             Color c = (mult <= 1.05f) ? Color.GREEN : Color.RED;
@@ -394,10 +374,7 @@ public class HUD {
             anim.yOffset = MathUtils.lerp(-5f, 45f, Interpolation.swingIn.apply(progress));
             anim.alpha = MathUtils.clamp(anim.life * 5f, 0, 1);
             anim.scale = 0.8f + (progress * 0.4f);
-            if (!anim.hitBar && anim.yOffset > 15f) {
-                anim.hitBar = true;
-                barSwellTimer = SWELL_DURATION;
-            }
+            if (!anim.hitBar && anim.yOffset > 15f) { anim.hitBar = true; barSwellTimer = SWELL_DURATION; }
             if (anim.life <= 0 || anim.hitBar) activeAnims.removeIndex(i);
         }
         if (barSwellTimer > 0) barSwellTimer = Math.max(0, barSwellTimer - delta);
@@ -447,8 +424,7 @@ public class HUD {
         if (worldWind.len() > 0.1f) {
             camForward.set(camera.direction.x, 0, camera.direction.z).nor();
             camRight.set(camera.direction).crs(camera.up).nor();
-            camRight.y = 0;
-            camRight.nor();
+            camRight.y = 0; camRight.nor();
             float angle = MathUtils.atan2(worldWind.dot(camForward), worldWind.dot(camRight));
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
             shapeRenderer.setColor(Color.YELLOW);
@@ -462,30 +438,141 @@ public class HUD {
         batch.end();
     }
 
-    public void renderVictory(int shots, LevelData levelData) {
+    public void showWaterHazard() {
+        this.hazardText = "WATER HAZARD";
+        this.hazardColor = Color.CYAN;
+        this.hazardTimer = 1.0f; // Matches your RESET_DELAY comfortably
+    }
+
+    public void showOutOfBounds() {
+        this.hazardText = "OUT OF BOUNDS";
+        this.hazardColor = Color.RED;
+        this.hazardTimer = 1.1f;
+    }
+
+    private void renderHazardPopUp(float delta) {
+        if (hazardTimer > 0) {
+            hazardTimer -= delta;
+
+            // Subtle pulse effect using sine
+            float pulse = 1.0f + (MathUtils.sin(hazardTimer * 10f) * 0.1f);
+            font.getData().setScale(3.0f * pulse);
+
+            // Fade out logic
+            float alpha = MathUtils.clamp(hazardTimer * 2f, 0, 1);
+            font.setColor(hazardColor.r, hazardColor.g, hazardColor.b, alpha);
+
+            float centerX = viewport.getWorldWidth() / 2f;
+            float centerY = viewport.getWorldHeight() / 2f + 100; // Positioned slightly above center
+
+            // Center the text (approximate width based on scale)
+            font.draw(batch, hazardText, centerX - 200, centerY);
+        }
+    }
+
+    public void renderVictory(int shots, LevelData levelData, CompetitiveScore compScore) {
+        float centerX = viewport.getWorldWidth() / 2f;
+        float centerY = viewport.getWorldHeight() / 2f;
+
         batch.begin();
+
         int par = (levelData != null) ? levelData.getPar() : 3;
         String shout = org.example.ScoreShout.getShout(shots, par);
         if (shots == 1) shout = ScoreShout.HIO.shout;
         int diff = shots - par;
 
-        Color shoutColor;
-        if (shots == 1 || diff <= -2) shoutColor = Color.GOLD;
-        else if (diff == -1) shoutColor = Color.CYAN;
-        else if (diff == 0) shoutColor = Color.WHITE;
-        else if (diff == 1) shoutColor = Color.ORANGE;
-        else shoutColor = Color.RED;
+        Color shoutColor = (shots == 1 || diff <= -2) ? Color.GOLD : (diff == -1 ? Color.CYAN : (diff == 0 ? Color.WHITE : (diff == 1 ? Color.ORANGE : Color.RED)));
 
-        font.getData().setScale(4f);
+        font.getData().setScale(4.5f);
         font.setColor(shoutColor);
-        float centerX = viewport.getWorldWidth() / 2f;
-        font.draw(batch, shout, centerX - 200, viewport.getWorldHeight() / 2f + 100);
+        font.draw(batch, shout, centerX - 180, viewport.getWorldHeight() - 60);
 
-        font.getData().setScale(2f);
+        font.getData().setScale(1.8f);
         font.setColor(Color.WHITE);
         String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
-        font.draw(batch, "Total Strokes: " + shots + " (" + scoreType + ")", centerX - 180, viewport.getWorldHeight() / 2f);
+        font.draw(batch, "Hole Strokes: " + shots + " (" + scoreType + ")", centerX - 160, viewport.getWorldHeight() - 150);
         batch.end();
+
+        if (compScore != null) {
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            shapeRenderer.setColor(0, 0, 0, 0.75f);
+            shapeRenderer.rect(centerX - 300, centerY - 240, 600, 460);
+            shapeRenderer.end();
+            Gdx.gl.glDisable(GL20.GL_BLEND);
+
+            batch.begin();
+            renderScoreTable(compScore, centerX, centerY + 180);
+
+            // --- Handicap Logic for Completed Tournaments ---
+            if (compScore.isCourseComplete()) {
+                // Reverse the to-par value: +11 becomes -11, -2 becomes +2
+                int totalDiff = compScore.getTotalToPar();
+                int handicapValue = -totalDiff;
+                String handicapStr = (handicapValue > 0) ? "+" + handicapValue : String.valueOf(handicapValue);
+
+                font.getData().setScale(1.8f);
+                font.setColor(Color.GOLD);
+                font.draw(batch, "YOUR HANDICAP: " + handicapStr, centerX - 150, centerY - 200);
+            }
+
+            font.getData().setScale(1.5f);
+            font.setColor(Color.YELLOW);
+            String prompt = compScore.isCourseComplete() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
+            font.draw(batch, prompt, centerX - 210, centerY - 270);
+            batch.end();
+        } else {
+            batch.begin();
+            font.getData().setScale(1.5f);
+            font.draw(batch, "Press [N] for New Level", centerX - 120, centerY - 100);
+            batch.end();
+        }
+    }
+
+    private void renderScoreTable(CompetitiveScore compScore, float x, float y) {
+        if (compScore == null) return;
+
+        float startX = x - 260;
+        float rowH = 20f;
+
+        font.getData().setScale(1.0f);
+        font.setColor(Color.LIGHT_GRAY);
+        font.draw(batch, "HOLE", startX, y);
+        font.draw(batch, "PAR", startX + 80, y);
+        font.draw(batch, "SCORE", startX + 160, y);
+        font.draw(batch, "TOTAL", startX + 240, y);
+
+        int runningTotal = 0;
+        for (int i = 0; i < 18; i++) {
+            float rowY = y - 30 - (i * rowH);
+            int holeScore = compScore.getScoreForHole(i);
+            int holePar = compScore.getParForHole(i);
+
+            boolean isCurrent = (i == (compScore.getCurrentHoleNumber() - 1));
+            font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
+
+            font.draw(batch, String.format("%02d", (i + 1)), startX, rowY);
+            font.draw(batch, "" + holePar, startX + 80, rowY);
+
+            if (holeScore > 0) {
+                runningTotal += holeScore;
+                int holeDiff = holeScore - holePar;
+                font.setColor(holeDiff < 0 ? Color.CYAN : (holeDiff > 0 ? Color.RED : Color.WHITE));
+                font.draw(batch, "" + holeScore, startX + 160, rowY);
+                font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
+                font.draw(batch, "" + runningTotal, startX + 240, rowY);
+            } else {
+                font.setColor(Color.DARK_GRAY);
+                font.draw(batch, "-", startX + 160, rowY);
+                font.draw(batch, "-", startX + 240, rowY);
+            }
+        }
+
+        font.getData().setScale(1.2f);
+        font.setColor(Color.GOLD);
+        float totalY = y - 30 - (18 * rowH) - 30;
+        font.draw(batch, "TOTAL TO PAR: " + compScore.getToParString(), startX, totalY);
     }
 
     public void updateSpinInput(float d) {

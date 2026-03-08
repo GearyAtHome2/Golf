@@ -151,18 +151,9 @@ public class BallPhysics {
             vTangent.add(sideDir.scl(sideKick));
         }
 
-        // 3. Horizontal Energy Decay (The Thud)
-        // High softness + High friction = High speed loss
         float speedLoss = (friction + softness) * 0.5f;
         float frictionScale = MathUtils.clamp(1.0f - speedLoss, 0.4f, 0.98f);
         vTangent.scl(frictionScale);
-
-        float horizFinal = vTangent.len();
-
-        Gdx.app.log("PHYSICS_LOG", String.format(
-                "   [Bounce Calc] F: %.2f | S: %.2f | Horiz: %.4f -> %.4f",
-                friction, softness, initialHoriz, horizFinal
-        ));
 
         return vTangent.add(vNormalBounce);
     }

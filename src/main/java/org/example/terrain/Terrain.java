@@ -105,6 +105,21 @@ public class Terrain {
         }
     }
 
+    public float getMaxDistanceX() {
+        return (SIZE_X * SCALE) / 2f;
+    }
+
+    public float getMaxDistanceZ() {
+        return (SIZE_Z * SCALE) / 2f;
+    }
+
+    public boolean isPointOutOfBounds(float worldX, float worldZ) {
+        float limitX = getMaxDistanceX();
+        float limitZ = getMaxDistanceZ();
+
+        return Math.abs(worldX) > limitX || Math.abs(worldZ) > limitZ;
+    }
+
     private ModelInstance buildChunk(int zStart, int zEnd) {
         ModelBuilder builder = new ModelBuilder();
         builder.begin();

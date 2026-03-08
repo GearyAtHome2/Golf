@@ -201,14 +201,6 @@ public class ShotController {
 
         ball.getSpin().set(rightOfAim).scl(backspinAmount);
         ball.getSpin().add(tempV1.set(Vector3.Y).scl(-sidespinAmount));
-
-        Gdx.app.log("SHOT_MASTER", "--- TERRAIN KICK: " + physicalKickDegrees + " deg ---");
-        float headingDegrees = MathUtils.atan2(camDir.x, camDir.z) * MathUtils.radiansToDegrees;
-
-        Gdx.app.log("SPIN_VERIFY", String.format(
-                "Heading: %.2f | Spin Vector: %s | BackspinMag: %.2f",
-                headingDegrees, ball.getSpin().toString(), backspinAmount
-        ));
     }
 
     public ShotDifficulty getCurrentDifficulty() {
