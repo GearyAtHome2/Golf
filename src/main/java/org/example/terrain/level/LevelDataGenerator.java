@@ -21,7 +21,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = PLUNGE_CENOTES;
+//        selectedType = PLUNGE_CENOTES;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---

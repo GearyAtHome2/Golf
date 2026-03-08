@@ -51,8 +51,7 @@ public class FeatureProcessor {
                 int cx = gx + rng.nextInt(gridSize / 2) - gridSize / 4;
                 int cz = gz + rng.nextInt(gridSize / 2) - gridSize / 4;
 
-                // PROTECTED ZONE CHECK: Only applies to the center point (cx, cz)
-                if (map[cx][cz] != Terrain.TerrainType.ROUGH || isNearProtectedZone(cx, cz, map, TEE_BUFFER, GREEN_BUFFER)) continue;
+                if (map[cx][cz] != Terrain.TerrainType.ROUGH || TerrainUtils.isNearProtectedZone(cx, cz, map, TEE_BUFFER, GREEN_BUFFER)) continue;
 
                 float angle = rng.nextFloat() * MathUtils.PI2;
                 float majorRadius = 10f + rng.nextFloat() * 5f;
@@ -65,8 +64,7 @@ public class FeatureProcessor {
                 int scan = (int) majorRadius + 1;
                 for (int x = Math.max(0, cx - scan); x <= Math.min(SIZE_X - 1, cx + scan); x++) {
                     for (int z = Math.max(0, cz - scan); z <= Math.min(SIZE_Z - 1, cz + scan); z++) {
-                        // INNER CHECK: Only prevent editing the actual Tee/Green tiles, ignoring buffers
-                        if (isUnmodifiable(map[x][z])) continue;
+                        if (TerrainUtils.isUnmodifiable(map[x][z])) continue;
 
                         float dx = x - cx;
                         float dz = z - cz;
@@ -102,8 +100,7 @@ public class FeatureProcessor {
         for (int x = 1; x < SIZE_X - 1; x++) {
             for (int z = 1; z < SIZE_Z - 1; z++) {
                 if (map[x][z] == Terrain.TerrainType.FAIRWAY && isBorderingRough(x, z, map)) {
-                    // SEED CHECK: Only add seeds if the center point is outside the buffer
-                    if (!isNearProtectedZone(x, z, map, TEE_BUFFER, GREEN_BUFFER)) {
+                    if (!TerrainUtils.isNearProtectedZone(x, z, map, TEE_BUFFER, GREEN_BUFFER)) {
                         edgeMask[x][z] = true;
                         seeds.add(new Vector2(x, z));
                     }
@@ -119,14 +116,13 @@ public class FeatureProcessor {
             List<Vector2> spine = buildSpine(startPoint, edgeMask, 20 + rng.nextInt(20));
             if (spine.size() < 5) continue;
 
-            int[] bounds = getSpineBounds(spine, SIZE_X, SIZE_Z, (int) maxRadius + 1);
+            int[] bounds = TerrainUtils.getSpineBounds(spine, SIZE_X, SIZE_Z, (int) maxRadius + 1);
 
             for (int x = bounds[0]; x <= bounds[1]; x++) {
                 for (int z = bounds[2]; z <= bounds[3]; z++) {
-                    // INNER CHECK: Protect actual tiles only
-                    if (isUnmodifiable(map[x][z])) continue;
+                    if (TerrainUtils.isUnmodifiable(map[x][z])) continue;
 
-                    float[] stats = getDistanceAndProgress((float) x, (float) z, spine);
+                    float[] stats = TerrainUtils.getDistanceAndProgress((float) x, (float) z, spine);
                     float distance = stats[0];
 
                     if (distance < maxRadius) {
@@ -147,38 +143,6 @@ public class FeatureProcessor {
     private boolean isBorderingRough(int x, int z, Terrain.TerrainType[][] map) {
         return map[x + 1][z] == Terrain.TerrainType.ROUGH || map[x - 1][z] == Terrain.TerrainType.ROUGH ||
                 map[x][z + 1] == Terrain.TerrainType.ROUGH || map[x][z - 1] == Terrain.TerrainType.ROUGH;
-    }
-
-    private boolean isUnmodifiable(Terrain.TerrainType type) {
-        return type == Terrain.TerrainType.TEE || type == Terrain.TerrainType.GREEN;
-    }
-
-    private int[] getSpineBounds(List<Vector2> spine, int maxX, int maxZ, int pad) {
-        int minX = maxX, resMaxX = 0, minZ = maxZ, resMaxZ = 0;
-        for (Vector2 p : spine) {
-            minX = Math.min(minX, (int) p.x);
-            resMaxX = Math.max(resMaxX, (int) p.x);
-            minZ = Math.min(minZ, (int) p.y);
-            resMaxZ = Math.max(resMaxZ, (int) p.y);
-        }
-        return new int[]{
-                Math.max(0, minX - pad), Math.min(maxX - 1, resMaxX + pad),
-                Math.max(0, minZ - pad), Math.min(maxZ - 1, resMaxZ + pad)
-        };
-    }
-
-    private boolean isNearProtectedZone(int cx, int cz, Terrain.TerrainType[][] map, float teeBuffer, float greenBuffer) {
-        int maxR = (int) Math.max(teeBuffer, greenBuffer);
-        for (int x = cx - maxR; x <= cx + maxR; x++) {
-            for (int z = cz - maxR; z <= cz + maxR; z++) {
-                if (x >= 0 && x < map.length && z >= 0 && z < map[0].length) {
-                    float dstSq = (x - cx) * (x - cx) + (z - cz) * (z - cz);
-                    if (map[x][z] == Terrain.TerrainType.TEE && dstSq <= teeBuffer * teeBuffer) return true;
-                    if (map[x][z] == Terrain.TerrainType.GREEN && dstSq <= greenBuffer * greenBuffer) return true;
-                }
-            }
-        }
-        return false;
     }
 
     private List<Vector2> buildSpine(Vector2 start, boolean[][] mask, int maxLength) {
@@ -209,27 +173,6 @@ public class FeatureProcessor {
             current = next;
         }
         return spine;
-    }
-
-    private float[] getDistanceAndProgress(float px, float pz, List<Vector2> path) {
-        float minDistSq = Float.MAX_VALUE;
-        float progress = 0;
-        int segments = path.size() - 1;
-        for (int i = 0; i < segments; i++) {
-            Vector2 a = path.get(i);
-            Vector2 b = path.get(i + 1);
-            float dx = b.x - a.x, dz = b.y - a.y;
-            float lenSq = dx * dx + dz * dz;
-            if (lenSq == 0) continue;
-            float t = MathUtils.clamp(((px - a.x) * dx + (pz - a.y) * dz) / lenSq, 0, 1);
-            float cx = a.x + t * dx, cz = a.y + t * dz;
-            float dSq = (px - cx) * (px - cx) + (pz - cz) * (pz - cz);
-            if (dSq < minDistSq) {
-                minDistSq = dSq;
-                progress = (i + t) / (float) segments;
-            }
-        }
-        return new float[]{(float) Math.sqrt(minDistSq), progress};
     }
 
     public float calculateMogulNoise(int x, int z, float scale, float o1, float o2, float freq, float und, float maxH, boolean[][] pathMask) {
@@ -279,7 +222,7 @@ public class FeatureProcessor {
 
     public float applyIslandCoastline(int x, int z, float zNorm, float currentHeight, Terrain.TerrainType type, float water, float o1, float o2) {
         float coastThreshold = 0.45f + MathUtils.sin(x * 0.05f + o1) * 0.04f + MathUtils.cos(x * 0.4f + o2) * 0.01f;
-        boolean isPlayable = !isUnmodifiable(type) && type != Terrain.TerrainType.FAIRWAY;
+        boolean isPlayable = !TerrainUtils.isUnmodifiable(type) && type != Terrain.TerrainType.FAIRWAY;
         if (zNorm > coastThreshold && isPlayable) {
             if (type == Terrain.TerrainType.ROUGH) currentHeight -= 20.0f;
             else if (type == Terrain.TerrainType.SAND) currentHeight = MathUtils.lerp(water - 1.5f, currentHeight, MathUtils.clamp((currentHeight - water) / 5.0f, 0f, 1f));
@@ -335,7 +278,7 @@ public class FeatureProcessor {
             float bias = rng.nextFloat();
             int cz = (int) (SIZE_Z * 0.15f) + (int) (bias * bias * (SIZE_Z * 0.75f));
             float radius = 18f + rng.nextFloat() * 10f;
-            if (isInsideProtectedZone(cx, cz, radius * 1.4f + 8f, map)) continue;
+            if (TerrainUtils.isInsideProtectedZone(cx, cz, radius * 1.4f + 8f, map)) continue;
             boolean tooClose = false;
             for (ClassicGenerator.CraterRecord existing : newCraters) {
                 if (Vector2.dst(cx, cz, existing.x(), existing.z()) < (radius * 1.4f + existing.radius() * 1.4f + clusterBuffer)) {
@@ -358,7 +301,7 @@ public class FeatureProcessor {
             float angle = rng.nextFloat() * MathUtils.PI2, sRadius = 4f + rng.nextFloat() * 6f;
             float distFromParent = (parent.radius() * 1.4f) + (sRadius * 1.4f) + 2f;
             int sx = (int) (parent.x() + MathUtils.cos(angle) * distFromParent), sz = (int) (parent.z() + MathUtils.sin(angle) * distFromParent);
-            if (sx < 0 || sx >= map.length || sz < 0 || sz >= map[0].length || isInsideProtectedZone(sx, sz, sRadius * 1.4f + 2f, map)) continue;
+            if (sx < 0 || sx >= map.length || sz < 0 || sz >= map[0].length || TerrainUtils.isInsideProtectedZone(sx, sz, sRadius * 1.4f + 2f, map)) continue;
             boolean overlaps = false;
             for (ClassicGenerator.CraterRecord e : list) {
                 if (Vector2.dst(sx, sz, e.x(), e.z()) < (sRadius * 1.4f + e.radius() * 1.4f + 1f)) { overlaps = true; break; }
@@ -368,18 +311,6 @@ public class FeatureProcessor {
                 list.add(new ClassicGenerator.CraterRecord(sx, sz, sRadius));
             }
         }
-    }
-
-    private boolean isInsideProtectedZone(int cx, int cz, float checkRadius, Terrain.TerrainType[][] map) {
-        int r = (int) Math.ceil(checkRadius);
-        for (int x = cx - r; x <= cx + r; x++) {
-            for (int z = cz - r; z <= cz + r; z++) {
-                if (x >= 0 && x < map.length && z >= 0 && z < map[0].length && (x - cx) * (x - cx) + (z - cz) * (z - cz) <= checkRadius * checkRadius) {
-                    if (isUnmodifiable(map[x][z])) return true;
-                }
-            }
-        }
-        return false;
     }
 
     public void applyCrater(Terrain.TerrainType[][] map, float[][] heights, int cX, int cZ, float r, float d, boolean isDeep) {
@@ -395,7 +326,7 @@ public class FeatureProcessor {
                     if (dist < pR) { mod += pH * (float) Math.cos((dist / pR) * MathUtils.PI / 2); if (r > 10f) type = Terrain.TerrainType.STONE; }
                 } else { mod = rH * (float) Math.sin(((dist - r) / rW) * MathUtils.PI); type = Terrain.TerrainType.ROUGH; }
                 heights[x][z] += mod;
-                if (type != null && !isUnmodifiable(map[x][z])) map[x][z] = type;
+                if (type != null && !TerrainUtils.isUnmodifiable(map[x][z])) map[x][z] = type;
             }
         }
     }
