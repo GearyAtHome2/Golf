@@ -73,10 +73,11 @@ public class InstructionRenderer {
                     "[SPACE] - Hold for power / Lock in shot minigame",
                     "[LTAB] - Map Oversight View",
                     " * You can use LClick and drag to rotate, RClick to pan",
+                    "[F] - Use Rangefinder",
+                    "[P] - Toggle shot angle projection",
                     "[R] - Reset Ball to last position",
                     "[N] - Next map (Disabled during competitive play)",
-                    "[F] - Use Rangefinder",
-                    "[ESC] - Pause Menu",
+                    "[ESC] - Pause Menu - contains additional keybinds",
                     "[UP/DOWN] - Change game speed"
             };
             for (String line : controls) {

@@ -21,6 +21,11 @@ public class ShotController {
     private ModelInstance powerBarInstance;
     private ModelInstance maxPowerGhost;
 
+    private Model projectionLineModel;
+    private ModelInstance projectionLineInstance;
+    private Model targetDotModel;
+    private ModelInstance targetDotInstance;
+
     private float spaceHoldTime = 0f;
     private float shotPower = 0f;
     private boolean isCharging = false;
@@ -32,16 +37,21 @@ public class ShotController {
     private final float LOCK_DURATION = 0.4f;
 
     private boolean waitingForMinigame = false;
-
     private float cancelCooldown = 0f;
     private final float CANCEL_COOLDOWN_TIME = 0.5f;
 
     private float animationTimer = 0f;
     private ShotDifficulty currentDifficulty;
 
-    // Reuse vectors to avoid GC pressure
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
+    private final Vector3 projectionVector = new Vector3();
+
+    private Vector3 lastBallPos = new Vector3();
+    private boolean ballIsStationary = false;
+
+    // --- NEW FLAG ---
+    private boolean showGuideline = false;
 
     public ShotController() {
         ModelBuilder mb = new ModelBuilder();
@@ -56,6 +66,20 @@ public class ShotController {
                 new DepthTestAttribute(false),
                 ColorAttribute.createDiffuse(new Color(1, 1, 1, 0.5f))
         );
+
+        projectionLineModel = mb.createBox(0.04f, 0.04f, 1f,
+                new Material(ColorAttribute.createDiffuse(Color.WHITE), new BlendingAttribute(0.4f)),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+        projectionLineInstance = new ModelInstance(projectionLineModel);
+
+        targetDotModel = mb.createSphere(0.12f, 0.12f, 0.12f, 12, 12,
+                new Material(ColorAttribute.createDiffuse(Color.RED)),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+        targetDotInstance = new ModelInstance(targetDotModel);
+    }
+
+    public void toggleGuideline() {
+        this.showGuideline = !this.showGuideline;
     }
 
     public void reset() {
@@ -72,12 +96,18 @@ public class ShotController {
         animationTimer += delta;
         if (cancelCooldown > 0) cancelCooldown -= delta;
 
+        lastBallPos.set(ball.getPosition());
+        ballIsStationary = (ball.getState() == Ball.State.STATIONARY);
+
+        if (ballIsStationary) {
+            calculateShotVector(projectionVector, camDir, club, hud, terrain, 0f);
+        }
+
         if (waitingForMinigame) {
             if (hud.wasMinigameCanceled()) {
                 reset();
                 return false;
             }
-
             if (hud.isMinigameComplete()) {
                 waitingForMinigame = false;
                 executeShot(ball, camDir, club, lockedPower, hud, terrain, hud.getMinigameResult());
@@ -142,115 +172,120 @@ public class ShotController {
     }
 
     private void executeShot(Ball ball, Vector3 camDir, Club club, float power, HUD hud, Terrain terrain, MinigameResult result) {
-        float accuracy = result.accuracy;
-        float accuracyPowerMod = result.powerMod;
-
-        float MAX_DELOFT = -65.0f;
-        float BASE_SPIN_MULT = 14.5f;
-        float PINCH_FACTOR = 1.8f;
-        float INPUT_EXP = 2.8f;
-
-        Vector2 rawOffset = hud.getSpinOffset();
-        float rawR = MathUtils.clamp(rawOffset.len(), 0f, 1f);
-        float quadR = (float) Math.pow(rawR, INPUT_EXP);
-        Vector2 quadOffset = new Vector2();
-        if (rawR > 0) quadOffset.set(rawOffset).nor().scl(quadR);
-
+        calculateShotVector(tempV1, camDir, club, hud, terrain, result.accuracy);
+        float rawR = MathUtils.clamp(hud.getSpinOffset().len(), 0f, 1f);
         float powerPenalty = (float) Math.pow(rawR, 6) * 0.40f;
-        float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * accuracyPowerMod;
+        float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * result.powerMod;
+        float launchLoft = (float) Math.asin(tempV1.y) * MathUtils.radiansToDegrees;
+        ball.hit(tempV1, power, launchLoft, finalPowerMult, result.rating);
 
-        Vector3 terrainNormal = terrain.getNormalAt(ball.getPosition().x, ball.getPosition().z);
+        Vector3 aimDir = new Vector3(camDir.x, 0, camDir.z).nor();
+        Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
+        Vector2 quadOffset = getQuadraticSpinOffset(hud.getSpinOffset());
+        float attackAngle = quadOffset.y * -20.0f;
+        float sForce = (float) Math.sin(Math.abs(club.loft - attackAngle) * MathUtils.degreesToRadians);
+        float spinCurve = (float)Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
+        float quality = getQualityFactor(result.rating);
+        float backspin = (power * finalPowerMult) * sForce * 14.5f * (1.0f + (quadOffset.y * 1.8f)) * quality * spinCurve;
+        float sidespin = (quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 60.0f * spinCurve);
+
+        ball.getSpin().set(rightOfAim).scl(backspin);
+        ball.getSpin().add(tempV2.set(Vector3.Y).scl(-sidespin));
+    }
+
+    private void calculateShotVector(Vector3 out, Vector3 camDir, Club club, HUD hud, Terrain terrain, float accuracy) {
+        Vector2 quadOffset = getQuadraticSpinOffset(hud.getSpinOffset());
         Vector3 aimDir = new Vector3(camDir.x, 0, camDir.z).nor();
         Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
 
-        float sidePush = terrainNormal.dot(rightOfAim);
-        float physicalKickDegrees = sidePush * 30.0f;
+        Vector3 terrainNormal = terrain.getNormalAt(lastBallPos.x, lastBallPos.z);
+        float physicalKick = terrainNormal.dot(rightOfAim) * 30.0f;
 
-        float accuracySquirt = accuracy * 12.0f;
-        Vector3 shotDir = new Vector3(aimDir);
-
-        shotDir.rotate(Vector3.Y, (quadOffset.x * 2.5f) - accuracySquirt - physicalKickDegrees);
+        out.set(aimDir);
+        out.rotate(Vector3.Y, (quadOffset.x * 2.5f) - (accuracy * 12.0f) - physicalKick);
 
         float deloftAbility = MathUtils.clamp(1.2f - (club.loft / 45f), 0.2f, 1.2f);
-        float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * MAX_DELOFT * deloftAbility), 0.1f, 85f);
+        float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * -65.0f * deloftAbility), 0.1f, 85f);
 
-        // This call resets ball.spin to Zero
-        ball.hit(shotDir, power, adjustedLoft, finalPowerMult, result.rating);
-
-        float totalSpeed = power * finalPowerMult;
-        float attackAngle = quadOffset.y * -20.0f;
-        float spinLoft = Math.abs(club.loft - attackAngle);
-        float sForce = (float) Math.sin(spinLoft * MathUtils.degreesToRadians);
-        float pinchFactor = 1.0f + (quadOffset.y * PINCH_FACTOR);
-
-        float normalizedPower = MathUtils.clamp(power / MAX_POWER, 0f, 1f);
-
-        float spinCurve = (float)Math.pow(normalizedPower, 1.5f);
-
-        float qualityFactor = switch (result.rating) {
-            case PERFECTION -> 1.2f;  // Extra crisp spin
-            case SUPER -> 1.1f;  // Extra crisp spin
-            case POOR -> 0.6f;  // Weak, "dead" ball
-            case WANK -> 0.4f;  // "Thinned" or "Chunked" - almost no spin
-            case SHIT -> 0.2f;  // "Thinned" or "Chunked" - almost no spin
-            default -> 1f;
-        };
-        float backspinAmount = totalSpeed * sForce * BASE_SPIN_MULT * Math.max(0.05f, pinchFactor) * qualityFactor * spinCurve;
-        float sideSpinFromAccuracy = accuracy * totalSpeed * 60.0f * spinCurve;
-        float sidespinAmount = (quadOffset.x * totalSpeed * -10.0f * qualityFactor * spinCurve) + sideSpinFromAccuracy;
-
-        ball.getSpin().set(rightOfAim).scl(backspinAmount);
-        ball.getSpin().add(tempV1.set(Vector3.Y).scl(-sidespinAmount));
+        float angleRad = adjustedLoft * MathUtils.degreesToRadians;
+        out.y = MathUtils.sin(angleRad);
+        float hLen = MathUtils.cos(angleRad);
+        out.x *= hLen;
+        out.z *= hLen;
+        out.nor();
     }
 
-    public ShotDifficulty getCurrentDifficulty() {
-        return currentDifficulty;
+    private Vector2 getQuadraticSpinOffset(Vector2 rawOffset) {
+        float rawR = MathUtils.clamp(rawOffset.len(), 0f, 1f);
+        float quadR = (float) Math.pow(rawR, 2.8f);
+        return (rawR > 0) ? new Vector2(rawOffset).nor().scl(quadR) : new Vector2(0, 0);
+    }
+
+    private float getQualityFactor(MinigameResult.Rating rating) {
+        return switch (rating) {
+            case PERFECTION -> 1.2f;
+            case SUPER -> 1.1f;
+            case POOR -> 0.6f;
+            case WANK, SHIT -> 0.3f;
+            default -> 1f;
+        };
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {
+        // --- GUIDELINE RENDERING ---
+        if (showGuideline && ballIsStationary && ballPos != null) {
+            float lineLength = 5.0f;
+            projectionLineInstance.transform.setToTranslation(ballPos);
+            projectionLineInstance.transform.rotateTowardDirection(projectionVector, Vector3.Y);
+            projectionLineInstance.transform.scale(1f, 1f, lineLength);
+            projectionLineInstance.transform.translate(0, 0, -0.5f);
+            batch.render(projectionLineInstance, env);
+
+            tempV1.set(ballPos).add(tempV2.set(projectionVector).scl(lineLength));
+            targetDotInstance.transform.setToTranslation(tempV1);
+            batch.render(targetDotInstance, env);
+        }
+
+        // --- POWER BAR RENDERING ---
         float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : shotPower);
         if (height <= 0 && !isCharging && !isPowerLocked && !waitingForMinigame) return;
 
         float dist = camPos.dst(ballPos);
-        float baseScaleFactor = 0.04f;
-        float currentUnitScale = MathUtils.clamp(dist * baseScaleFactor, 0.15f, 1.2f);
+        float currentUnitScale = MathUtils.clamp(dist * 0.04f, 0.15f, 1.2f);
+        float bulge = 1.0f;
 
-        float bulgeMult = 1.0f;
         if (isPowerLocked || waitingForMinigame) {
-            bulgeMult = 1.0f + (MathUtils.sin((lockTimer / LOCK_DURATION) * MathUtils.PI) * 0.4f);
-            if (waitingForMinigame) bulgeMult = 1.4f;
+            bulge = 1.0f + (MathUtils.sin((lockTimer / LOCK_DURATION) * MathUtils.PI) * 0.4f);
+            if (waitingForMinigame) bulge = 1.4f;
         } else if (isCharging && spaceHoldTime >= MAX_POWER) {
-            bulgeMult = 1.2f + (MathUtils.sin(animationTimer * 18f) * 0.2f);
+            bulge = 1.2f + (MathUtils.sin(animationTimer * 18f) * 0.2f);
         }
 
-        float verticalOffset = currentUnitScale * 1.5f;
+        float vOffset = currentUnitScale * 1.5f;
+        float displayH = waitingForMinigame ? lockedPower : height;
 
         if (isCharging || isPowerLocked || waitingForMinigame) {
-            maxPowerGhost.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (MAX_POWER * currentUnitScale / 2f), ballPos.z);
+            maxPowerGhost.transform.setToTranslation(ballPos.x, ballPos.y + vOffset + (MAX_POWER * currentUnitScale / 2f), ballPos.z);
             maxPowerGhost.transform.set(maxPowerGhost.transform).scale(currentUnitScale * 1.1f, MAX_POWER * currentUnitScale, currentUnitScale * 1.1f);
             batch.render(maxPowerGhost, env);
         }
 
-        float displayHeight = waitingForMinigame ? lockedPower : height;
-        if (displayHeight > 0) {
-            Color color = displayHeight < (MAX_POWER / 2) ?
-                    Color.GREEN.cpy().lerp(Color.YELLOW, displayHeight / (MAX_POWER / 2)) :
-                    Color.YELLOW.cpy().lerp(Color.RED, (displayHeight - (MAX_POWER / 2)) / (MAX_POWER / 2));
-
+        if (displayH > 0) {
+            Color color = displayH < (MAX_POWER / 2) ? Color.GREEN.cpy().lerp(Color.YELLOW, displayH / (MAX_POWER / 2)) : Color.YELLOW.cpy().lerp(Color.RED, (displayH - (MAX_POWER / 2)) / (MAX_POWER / 2));
             if (isPowerLocked || waitingForMinigame) color.lerp(Color.WHITE, 0.5f);
 
             powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
-            powerBarInstance.transform.setToTranslation(ballPos.x, ballPos.y + verticalOffset + (displayHeight * currentUnitScale / 2f), ballPos.z);
-            powerBarInstance.transform.set(powerBarInstance.transform).scale(currentUnitScale * bulgeMult, displayHeight * currentUnitScale, currentUnitScale * bulgeMult);
+            powerBarInstance.transform.setToTranslation(ballPos.x, ballPos.y + vOffset + (displayH * currentUnitScale / 2f), ballPos.z);
+            powerBarInstance.transform.set(powerBarInstance.transform).scale(currentUnitScale * bulge, displayH * currentUnitScale, currentUnitScale * bulge);
             batch.render(powerBarInstance, env);
         }
     }
 
-    public boolean isCharging() {
-        return isCharging || isPowerLocked || waitingForMinigame;
-    }
+    public boolean isCharging() { return isCharging || isPowerLocked || waitingForMinigame; }
 
     public void dispose() {
         if (powerBarModel != null) powerBarModel.dispose();
+        if (projectionLineModel != null) projectionLineModel.dispose();
+        if (targetDotModel != null) targetDotModel.dispose();
     }
 }

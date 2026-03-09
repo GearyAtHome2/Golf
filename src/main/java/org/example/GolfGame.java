@@ -432,6 +432,10 @@ public class GolfGame extends ApplicationAdapter {
             return;
         }
 
+        if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+            shotController.toggleGuideline();
+        }
+
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
             if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
                 if (isVictory && currentHoleIndex + 1 < competitiveCourse.size()) {
