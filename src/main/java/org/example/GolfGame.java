@@ -40,6 +40,8 @@ public class GolfGame extends ApplicationAdapter {
 
     private GameState currentState = GameState.START;
     private GameState previousState = GameState.PLAYING;
+    private GameState returnState = GameState.PLAYING; // Dedicated return target
+
     private final List<DistanceSign> rangeSigns = new ArrayList<>();
     private final List<Ball> shotHistory = new ArrayList<>();
     private final int MAX_GHOSTS = 8;
@@ -337,7 +339,10 @@ public class GolfGame extends ApplicationAdapter {
         boolean isPractice = (currentState == GameState.PRACTICE);
         boolean isCompetitive = (currentState == GameState.COMPETITIVE);
 
-        if (isVictory) {
+        if (currentState == GameState.INSTRUCTIONS) {
+            // HUD.renderInstructions is called in render() block,
+            // but we ensure logic is isolated.
+        } else if (isVictory) {
             hud.renderVictory(hud.getShotCount(), currentLevelData, isCompetitive ? competitiveScore : null);
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(isPractice, currentLevelData);
@@ -347,7 +352,7 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void handleInput() {
-        // 1. Check for Global HUD Requests (like "M" for Menu or "I" for Instructions)
+        // 1. Check for Global HUD Requests
         boolean manualMenuPress = isVictory &&
                 currentState == GameState.COMPETITIVE &&
                 competitiveScore != null &&
@@ -355,21 +360,21 @@ public class GolfGame extends ApplicationAdapter {
                 Gdx.input.isKeyJustPressed(Input.Keys.M);
 
         if (hud.wasMainMenuRequested() || manualMenuPress) {
+            Gdx.app.log("STATE_CHANGE", "Returning to Main Menu");
             currentState = GameState.START;
             currentHoleIndex = 0;
             isVictory = false;
-            // ... (rest of your cleanup code remains identical) ...
             if (markerLineModel != null) { markerLineModel.dispose(); markerLineModel = null; }
             return;
         }
 
-        // NEW: Handle the Instructions "Popup" Request from Pause or elsewhere
+        // Handle Instructions Trigger from UI
         if (hud.wasInstructionsRequested()) {
             hud.clearInstructionsRequest();
             hud.resetInstructionScroll();
-            // Capture where we came from so ESCAPE knows where to go back to
-            previousState = currentState;
+            returnState = currentState; // Cache exactly where we are
             currentState = GameState.INSTRUCTIONS;
+            Gdx.app.log("STATE_CHANGE", "Entering Instructions. Return Target: " + returnState);
             return;
         }
 
@@ -396,7 +401,7 @@ public class GolfGame extends ApplicationAdapter {
                     currentState = GameState.PLAYING;
                     initLevel(seed);
                 } else if (menuSelection == 4) {
-                    previousState = GameState.START; // Set return target
+                    returnState = GameState.START;
                     currentState = GameState.INSTRUCTIONS;
                     hud.resetInstructionScroll();
                 }
@@ -407,31 +412,35 @@ public class GolfGame extends ApplicationAdapter {
         // 3. Instructions Navigation
         if (currentState == GameState.INSTRUCTIONS) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE)) {
-                // Return to wherever we were (START or PAUSED)
-                currentState = previousState;
+                Gdx.app.log("STATE_CHANGE", "Exiting Instructions. Returning to: " + returnState);
+                currentState = returnState;
+                return; // Guard against clobbering in block 4
             }
             return;
         }
 
         // 4. Standard In-Game/Pause Input
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            if (currentState == GameState.PAUSED) currentState = previousState;
-            else { previousState = currentState; currentState = GameState.PAUSED; }
+            if (currentState == GameState.PAUSED) {
+                currentState = previousState;
+                Gdx.app.log("STATE_CHANGE", "Unpausing. Returning to: " + currentState);
+            } else {
+                previousState = currentState;
+                currentState = GameState.PAUSED;
+                Gdx.app.log("STATE_CHANGE", "Pausing. Cached state: " + previousState);
+            }
+            return;
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
-            // 1. If we are in COMPETITIVE mode, we strictly control the Reset/Next Hole key
             if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
                 if (isVictory && currentHoleIndex + 1 < competitiveCourse.size()) {
                     currentHoleIndex++;
                     competitiveScore.setCurrentHoleIndex(currentHoleIndex);
-                    if (currentState == GameState.PAUSED) {
-                        currentState = GameState.COMPETITIVE;
-                    }
+                    if (currentState == GameState.PAUSED) currentState = GameState.COMPETITIVE;
                     initLevel();
                 }
-            }
-            else {
+            } else {
                 if (currentState == GameState.PAUSED) currentState = previousState;
                 initLevel();
             }
@@ -440,12 +449,10 @@ public class GolfGame extends ApplicationAdapter {
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
         if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
             Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
-        if (currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE || currentState == GameState.PRACTICE) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.UP))
-                gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
 
-            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN))
-                gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
+        if (currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE || currentState == GameState.PRACTICE) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
         }
     }
 

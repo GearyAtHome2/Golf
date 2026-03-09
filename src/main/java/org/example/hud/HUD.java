@@ -9,7 +9,6 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.*;
-import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
@@ -27,8 +26,11 @@ public class HUD {
     private String hazardText = "";
     private Color hazardColor = Color.WHITE;
     private boolean instructionsRequested = false;
-    private float instructionScrollY = 0;
-    private final float MAX_SCROLL = 550f;
+
+    // --- Practice Mode Persistence Fields ---
+    private float persistentShotDistance = 0f;
+    private float shotDistanceDisplayTimer = 0f;
+    private boolean ballWasInFlight = false;
 
     public enum GameDifficulty {
         EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
@@ -66,6 +68,8 @@ public class HUD {
     private final MinigameEngine engine = new MinigameEngine();
     private final MinigameUI minigameUI = new MinigameUI();
 
+    private final InstructionRenderer instructionRenderer = new InstructionRenderer();
+
     private int shotCount = 0;
     private float lastDisplayedSpin = 0f;
     private final Vector2 spinDot = new Vector2(0, 0);
@@ -81,7 +85,7 @@ public class HUD {
     private final Vector3 camForward = new Vector3(), camRight = new Vector3(), activeBallPos = new Vector3();
     private final float SWELL_DURATION = 0.3f;
 
-    public AnimSpeed animSetting = AnimSpeed.NONE;
+    public AnimSpeed animSetting = AnimSpeed.SLOW;
     public GameDifficulty currentDifficulty = GameDifficulty.EASY;
 
     private boolean mainMenuRequested = false, minigameActive = false, needleStopped = false, minigameCanceled = false;
@@ -199,6 +203,29 @@ public class HUD {
             }
         }
 
+        // --- Logic: Track flight to lock distance ---
+        if (isPractice) {
+            Ball.State s = ball.getState();
+            // We consider the ball "active" if it is in the air or bouncing
+            if (s == Ball.State.AIR || s == Ball.State.CONTACT) {
+                if (!ballWasInFlight) {
+                    Gdx.app.log("HUD", "Ball flight detected. Tracking distance...");
+                    ballWasInFlight = true;
+                }
+                shotDistanceDisplayTimer = 0f; // Hide persistent text while live
+            }
+            // When it starts ROLLING or hits STATIONARY, we prepare to lock the final value
+            else if (ballWasInFlight && (s == Ball.State.STATIONARY || s == Ball.State.ROLLING)) {
+                float finalDist = ball.getShotDistance();
+                if (finalDist > 0.1f) {
+                    persistentShotDistance = finalDist;
+                    shotDistanceDisplayTimer = 4.0f; // 4 second hold
+                    ballWasInFlight = false;
+                    Gdx.app.log("HUD", "Distance locked: " + persistentShotDistance);
+                }
+            }
+        }
+
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
@@ -209,8 +236,9 @@ public class HUD {
         renderFeedbackMessages(delta);
         renderDistanceDisplay(delta);
         renderHazardPopUp(delta);
+
         if (isPractice) {
-            renderShotDistance(ball);
+            renderShotDistance(ball, delta);
         }
 
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore);
@@ -224,11 +252,27 @@ public class HUD {
         }
     }
 
-    private void renderShotDistance(Ball ball) {
-        if (ball.getState() != Ball.State.STATIONARY || ball.getShotDistance() > 0.1f) {
+    private void renderShotDistance(Ball ball, float delta) {
+        Ball.State state = ball.getState();
+        float toRender = 0;
+
+        // While the ball is moving, always show live distance
+        if (state == Ball.State.AIR || state == Ball.State.ROLLING || state == Ball.State.CONTACT) {
+            toRender = ball.getShotDistance();
+            font.setColor(Color.WHITE);
+        }
+        // If stopped but we have a recently locked distance, show that
+        else if (shotDistanceDisplayTimer > 0) {
+            toRender = persistentShotDistance;
+            shotDistanceDisplayTimer -= delta;
+
+            float alpha = MathUtils.clamp(shotDistanceDisplayTimer, 0, 1);
+            font.setColor(1f, 0.84f, 0f, alpha); // Gold
+        }
+
+        if (toRender > 0.1f) {
             font.getData().setScale(1.4f);
-            font.setColor(ball.getState() == Ball.State.STATIONARY ? Color.GOLD : Color.WHITE);
-            String distStr = String.format("SHOT DISTANCE: %.1f yds", ball.getShotDistance());
+            String distStr = String.format("SHOT DISTANCE: %.1f yds", toRender);
             font.draw(batch, distStr, viewport.getWorldWidth() - 300, 200);
         }
     }
@@ -561,119 +605,12 @@ public class HUD {
     }
 
     public void renderInstructions() {
-        float scrollSpeed = 350f * Gdx.graphics.getDeltaTime();
-        if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
-            instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
-            instructionScrollY = Math.min(MAX_SCROLL, instructionScrollY + scrollSpeed);
-        }
-
-        float centerX = viewport.getWorldWidth() / 2f;
-        float boxW = 800;
-        float boxH = viewport.getWorldHeight() - 180;
-        float boxX = centerX - boxW / 2f;
-        float boxY = 120;
-
-        // Draw Background
-        Gdx.gl.glEnable(GL20.GL_BLEND);
-        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0.08f, 0.08f, 0.08f, 0.9f);
-        shapeRenderer.rect(boxX, boxY, boxW, boxH);
-        shapeRenderer.end();
-        Gdx.gl.glDisable(GL20.GL_BLEND);
-
-        // Prepare Scissor for Clipping
-        Rectangle scissor = new Rectangle();
-        Rectangle area = new Rectangle(boxX, boxY, boxW, boxH);
-        ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), area, scissor);
-
-        batch.setProjectionMatrix(viewport.getCamera().combined);
-        batch.begin();
-
-        if (ScissorStack.pushScissors(scissor)) {
-            float currentY = boxY + boxH - 50 + instructionScrollY;
-
-            font.getData().setScale(2.5f);
-            font.setColor(Color.GOLD);
-            font.draw(batch, "HOW TO PLAY", centerX - 140, currentY);
-            currentY -= 80;
-
-            font.getData().setScale(1.5f);
-            font.setColor(Color.CYAN);
-            font.draw(batch, "CONTROLS", centerX - 350, currentY);
-            currentY -= 40;
-
-            font.getData().setScale(1.1f);
-            font.setColor(Color.WHITE);
-            String[] controls = {
-                    "[WASD] - Aim Contact Point (Spin and loft)",
-                    "[RCLICK + DRAG] - Aim Direction",
-                    "[SCROLL] - Change Clubs",
-                    "[SPACE] - Hold for power/Lock in shot minigame",
-                    "[LTAB] - Map Oversight View",
-                    " * You can use LClick and drag to rotate, RClick to pan",
-                    "[R] - Reset Ball to last position",
-                    "[N] - Next map",
-                    " * Disabled during competitive play",
-                    "[F] - User Rangefinder",
-                    "[ESC] - Pause Menu",
-                    "[UP/DOWN] - Change game speed"
-            };
-            for (String line : controls) {
-                font.draw(batch, line, centerX - 330, currentY);
-                currentY -= 35;
-            }
-
-            currentY -= 50;
-
-            font.getData().setScale(1.5f);
-            font.setColor(Color.CYAN);
-            font.draw(batch, "GAMEPLAY", centerX - 350, currentY);
-            currentY -= 40;
-
-            font.getData().setScale(1.1f);
-            font.setColor(Color.WHITE);
-            String[] gameplay = {
-                    "SPIN PHYSICS: 'Bottom hits' result in high loft/low spin.",
-                    "'Middle hits' result in mid loft/mid spin.",
-                    "'Top hits' result in low loft/high spin.",
-                    "--------------------------------------------------------------",
-                    "Physics: The physics engine simulates lift based on ball",
-                    "velocity and spin magnitude consistently. This will allow for",
-                    "some interesting shots - experiment with spin",
-                    "--------------------------------------------------------------",
-                    "POWER METER: Time your SPACE press in the sweet spots",
-                    "to maximize power and minimize shot randomness. Hitting the",
-                    "innermost sweet spot gives spin+power boosts and 100% accuracy.",
-                    "You can left click to cancel the minigame at any time, and ",
-                    "adjust your aim but not aim contact freely within the minigame",
-                    "--------------------------------------------------------------",
-                    "TERRAIN: Different surfaces affect ball friction and the",
-                    "difficulty of the swing. A sloped surface will kick the ",
-                    "ball trajectory left or right."
-            };
-            for (String line : gameplay) {
-                font.draw(batch, line, centerX - 330, currentY);
-                currentY -= 35;
-            }
-
-            batch.flush();
-            ScissorStack.popScissors();
-        }
-
-        // Fixed Footer - Outside the scissor so it's always visible
-        font.getData().setScale(1.1f);
-        font.setColor(Color.YELLOW);
-        font.draw(batch, "W/S or UP/DOWN to Scroll | [ESC] to Close", centerX - 180, boxY - 30);
-
-        batch.end();
+        instructionRenderer.render(batch, shapeRenderer, font, viewport);
     }
 
     public boolean wasInstructionsRequested() { return instructionsRequested; }
     public void clearInstructionsRequest() { instructionsRequested = false; }
-    public void resetInstructionScroll() { instructionScrollY = 0; }
+    public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
     public boolean isMinigameComplete() { return !minigameActive && needleStopped && glowTimer <= 0 && lastResult != null; }
     public boolean wasMinigameCanceled() { boolean c = minigameCanceled; minigameCanceled = false; return c; }
     public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }

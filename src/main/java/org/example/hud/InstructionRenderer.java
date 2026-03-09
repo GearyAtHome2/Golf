@@ -1,0 +1,134 @@
+package org.example.hud;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
+import com.badlogic.gdx.utils.viewport.Viewport;
+
+public class InstructionRenderer {
+
+    private float instructionScrollY = 0;
+    private final float MAX_SCROLL = 720f;
+
+    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport) {
+        float delta = Gdx.graphics.getDeltaTime();
+        float scrollSpeed = 350f * delta;
+
+        if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
+            instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
+            instructionScrollY = Math.min(MAX_SCROLL, instructionScrollY + scrollSpeed);
+        }
+
+        float centerX = viewport.getWorldWidth() / 2f;
+        float boxW = 800;
+        float boxH = viewport.getWorldHeight() - 180;
+        float boxX = centerX - boxW / 2f;
+        float boxY = 120;
+
+        // Draw Background
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.08f, 0.08f, 0.08f, 0.9f);
+        shapeRenderer.rect(boxX, boxY, boxW, boxH);
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+        // Prepare Scissor for Clipping
+        Rectangle scissor = new Rectangle();
+        Rectangle area = new Rectangle(boxX, boxY, boxW, boxH);
+        ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), area, scissor);
+
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
+
+        if (ScissorStack.pushScissors(scissor)) {
+            float currentY = boxY + boxH - 50 + instructionScrollY;
+
+            font.getData().setScale(2.5f);
+            font.setColor(Color.GOLD);
+            font.draw(batch, "HOW TO PLAY", centerX - 140, currentY);
+            currentY -= 80;
+
+            font.getData().setScale(1.5f);
+            font.setColor(Color.CYAN);
+            font.draw(batch, "CONTROLS", centerX - 350, currentY);
+            currentY -= 40;
+
+            font.getData().setScale(1.1f);
+            font.setColor(Color.WHITE);
+            String[] controls = {
+                    "[WASD] - Aim Contact Point (Spin and loft)",
+                    "[RCLICK + DRAG] - Aim Direction",
+                    "[SCROLL] - Change Clubs",
+                    "[SPACE] - Hold for power/Lock in shot minigame",
+                    "[LTAB] - Map Oversight View",
+                    " * You can use LClick and drag to rotate, RClick to pan",
+                    "[R] - Reset Ball to last position",
+                    "[N] - Next map",
+                    " * Disabled during competitive play",
+                    "[F] - User Rangefinder",
+                    "[ESC] - Pause Menu",
+                    "[UP/DOWN] - Change game speed"
+            };
+            for (String line : controls) {
+                font.draw(batch, line, centerX - 330, currentY);
+                currentY -= 35;
+            }
+
+            currentY -= 50;
+
+            font.getData().setScale(1.5f);
+            font.setColor(Color.CYAN);
+            font.draw(batch, "GAMEPLAY", centerX - 350, currentY);
+            currentY -= 40;
+
+            font.getData().setScale(1.1f);
+            font.setColor(Color.WHITE);
+            String[] gameplay = {
+                    "SPIN PHYSICS: 'Bottom hits' result in high loft/low spin.",
+                    "'Middle hits' result in mid loft/mid spin.",
+                    "'Top hits' result in low loft/high spin.",
+                    "--------------------------------------------------------------",
+                    "Physics: The physics engine simulates lift based on ball",
+                    "velocity and spin magnitude consistently. This will allow for",
+                    "some interesting shots - experiment with spin!",
+                    "--------------------------------------------------------------",
+                    "POWER METER: Time your SPACE press in the sweet spots",
+                    "to maximize power and minimize shot randomness. Hitting the",
+                    "innermost sweet spot gives spin+power boosts and 100% accuracy.",
+                    "You can left click to cancel the minigame at any time, and ",
+                    "adjust your aim (not aim contact) freely within the minigame",
+                    "--------------------------------------------------------------",
+                    "TERRAIN: Different surfaces affect ball friction and the",
+                    "difficulty of the swing. A sloped surface will kick the ",
+                    "ball trajectory left or right."
+            };
+            for (String line : gameplay) {
+                font.draw(batch, line, centerX - 330, currentY);
+                currentY -= 35;
+            }
+
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+
+        font.getData().setScale(1.1f);
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "W/S or UP/DOWN to Scroll | [ESC] to Close", centerX - 180, boxY - 30);
+
+        batch.end();
+    }
+
+    public void resetScroll() {
+        this.instructionScrollY = 0;
+    }
+}
