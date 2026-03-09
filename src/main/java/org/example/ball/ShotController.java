@@ -78,6 +78,10 @@ public class ShotController {
         targetDotInstance = new ModelInstance(targetDotModel);
     }
 
+    public void setGuidelineEnabled(boolean enabled) {
+        this.showGuideline = enabled;
+    }
+
     public void toggleGuideline() {
         this.showGuideline = !this.showGuideline;
     }

@@ -122,6 +122,7 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void initLevel(long manualSeed) {
+        // --- SAFE CLEANUP SEQUENCE ---
         if (terrain != null) {
             terrain.dispose();
             terrain = null;
@@ -132,13 +133,18 @@ public class GolfGame extends ApplicationAdapter {
         }
         for (DistanceSign s : rangeSigns) s.dispose();
         rangeSigns.clear();
+
         yardageMarkers.clear();
         if (markerLineModel != null) {
             markerLineModel.dispose();
             markerLineModel = null;
         }
+
         for (Ball ghost : shotHistory) ghost.dispose();
         shotHistory.clear();
+
+        shotController.reset();
+        hud.reset();
 
         ITerrainGenerator generator;
         if (currentState == GameState.PRACTICE) {
@@ -361,6 +367,8 @@ public class GolfGame extends ApplicationAdapter {
 
         if (hud.wasMainMenuRequested() || manualMenuPress) {
             Gdx.app.log("STATE_CHANGE", "Returning to Main Menu");
+            shotController.reset();
+            hud.resetShots();
             currentState = GameState.START;
             currentHoleIndex = 0;
             isVictory = false;
@@ -392,6 +400,7 @@ public class GolfGame extends ApplicationAdapter {
                     currentHoleIndex = 0;
                     competitiveCourse = LevelDataGenerator.generate18Holes();
                     competitiveScore = new CompetitiveScore(competitiveCourse);
+                    shotController.setGuidelineEnabled(false);
                     initLevel();
                 } else if (menuSelection == 2) { currentState = GameState.PRACTICE; initLevel(); }
                 else if (menuSelection == 3) {
@@ -405,6 +414,7 @@ public class GolfGame extends ApplicationAdapter {
                     currentState = GameState.INSTRUCTIONS;
                     hud.resetInstructionScroll();
                 }
+                shotController.reset();
             }
             return;
         }
@@ -433,7 +443,11 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
-            shotController.toggleGuideline();
+            if (currentState != GameState.COMPETITIVE) {
+                shotController.toggleGuideline();
+            } else {
+                Gdx.app.log("INPUT", "Guideline toggling is disabled in Competitive Mode.");
+            }
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {

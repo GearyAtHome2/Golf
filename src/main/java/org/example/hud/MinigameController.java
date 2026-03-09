@@ -142,6 +142,19 @@ public class MinigameController {
         if (barSwellTimer > 0) barSwellTimer = Math.max(0, barSwellTimer - delta);
     }
 
+    public void reset() {
+        active = false;
+        needleStopped = false;
+        canceled = false;
+        lastResult = null;
+        step = 0;
+        timer = 0;
+        glowTimer = 0;
+        activeAnims.clear();
+        // Also reset the internal engine if it holds state
+        engine.needlePos = 0.5f;
+    }
+
     public void cancel() { active = false; needleStopped = false; canceled = true; lastResult = null; activeAnims.clear(); }
     public boolean isActive() { return active; }
     public boolean isNeedleStopped() { return needleStopped; }

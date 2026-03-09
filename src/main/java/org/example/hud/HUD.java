@@ -343,6 +343,16 @@ public class HUD {
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, compScore);
     }
 
+    public void reset() {
+        minigameController.reset(); // You'll need to add this to MinigameController too
+        hazardTimer = 0;
+        shotFeedbackTimer = 0;
+        distanceDisplayTimer = 0;
+        mainMenuRequested = false;
+        instructionsRequested = false;
+        spinDot.set(0, 0); // Optional: reset spin too?
+    }
+
     public void updateSpinInput(float d) {
         if (Gdx.input.isKeyPressed(Input.Keys.W)) spinDot.y = MathUtils.clamp(spinDot.y + d * 2, -1f, 1f);
         if (Gdx.input.isKeyPressed(Input.Keys.S)) spinDot.y = MathUtils.clamp(spinDot.y - d * 2, -1f, 1f);

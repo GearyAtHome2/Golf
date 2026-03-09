@@ -74,7 +74,7 @@ public class InstructionRenderer {
                     "[LTAB] - Map Oversight View",
                     " * You can use LClick and drag to rotate, RClick to pan",
                     "[F] - Use Rangefinder",
-                    "[P] - Toggle shot angle projection",
+                    "[P] - Toggle shot angle projection (Disabled during competitive play)",
                     "[R] - Reset Ball to last position",
                     "[N] - Next map (Disabled during competitive play)",
                     "[ESC] - Pause Menu - contains additional keybinds",
