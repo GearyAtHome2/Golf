@@ -2,7 +2,6 @@ package org.example.ball;
 
 import org.example.terrain.level.LevelData;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class CompetitiveScore {

@@ -1,16 +1,9 @@
 package org.example.terrain.features;
 
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
-import org.example.terrain.ClassicGenerator;
 import org.example.terrain.Terrain;
 import org.example.terrain.TerrainUtils;
-import org.example.terrain.level.LevelData;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 
 public class CoastlineGenerator {
 

@@ -8,23 +8,19 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.Interpolation;
-import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Rectangle;
-import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.math.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.ScoreShout;
-import org.example.ball.CompetitiveScore;
-import org.example.terrain.level.LevelData;
 import org.example.ball.Ball;
+import org.example.ball.CompetitiveScore;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.Terrain;
+import org.example.terrain.level.LevelData;
 
 public class HUD {
     private float hazardTimer = 0;
@@ -621,8 +617,9 @@ public class HUD {
                     "[R] - Reset Ball to last position",
                     "[N] - Next map",
                     " * Disabled during competitive play",
-                    "[F] - Check distance to hole",
-                    "[ESC] - Pause Menu"
+                    "[F] - User Rangefinder",
+                    "[ESC] - Pause Menu",
+                    "[UP/DOWN] - Change game speed"
             };
             for (String line : controls) {
                 font.draw(batch, line, centerX - 330, currentY);

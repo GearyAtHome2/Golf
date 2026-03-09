@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = REDWOOD_VALLEY;
+        selectedType = LevelData.Archetype.SHADOW_CANYON;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -246,7 +246,7 @@ public class LevelDataGenerator {
             case SHADOW_CANYON:
                 baseDifficultyIndex = 7f;
                 teeH = 0f;
-                greenH = 10.0f + r.nextFloat() * 5.0f;
+                greenH = 15.0f + r.nextFloat() * 8.0f;
                 windMin = 0f;
                 windMax = 7f;
                 treeH = 4.0f + r.nextFloat() * 2.0f;

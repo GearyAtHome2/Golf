@@ -182,7 +182,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             applyPathOffset(map, h, 25.0f, gBuf);
             tagChasmWalls(map);
         } else if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
-            applyPathOffset(map, h, -25.0f, gBuf);
+            applyPathOffset(map, h, -26.0f, gBuf);
             tagChasmWalls(map);
             water = (Math.min(data.getTeeHeight() + 0.2f, data.getGreenHeight()) - 25.0f) - 10.0f;
             data.setWaterLevel(water);

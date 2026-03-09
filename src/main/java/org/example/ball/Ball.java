@@ -233,9 +233,15 @@ public class Ball {
             return;
         }
 
+        // LAUNCH CHECK: If moving away from the normal faster than gravity can keep us down
+        float vDotN = velocity.dot(normal);
+        if (state == State.ROLLING && vDotN > 1.5f && type != Terrain.TerrainType.GREEN) {
+            state = State.AIR;
+            return;
+        }
+
         if (position.y < terrainHeight && !isWall) position.y = terrainHeight;
 
-        float vDotN = velocity.dot(normal);
         if (state == State.ROLLING) {
             vNormal.set(normal).scl(vDotN);
             velocity.sub(vNormal);

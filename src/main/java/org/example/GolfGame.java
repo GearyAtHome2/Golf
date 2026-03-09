@@ -23,7 +23,9 @@ import org.example.ball.ShotController;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
 import org.example.hud.HUD;
-import org.example.terrain.*;
+import org.example.terrain.ClassicGenerator;
+import org.example.terrain.ITerrainGenerator;
+import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 import org.example.terrain.level.LevelDataGenerator;
 import org.example.terrain.practiceRange.DistanceSign;
@@ -432,10 +434,16 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F2) && currentLevelData != null)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
             Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
-        if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS)) gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
-        if (Gdx.input.isKeyJustPressed(Input.Keys.MINUS)) gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
+        if (currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE || currentState == GameState.PRACTICE) {
+            // Keep your +/- keys
+            if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.UP))
+                gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.MINUS) || Gdx.input.isKeyJustPressed(Input.Keys.DOWN))
+                gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
+        }
     }
 
     private void setupEnvironment() {
