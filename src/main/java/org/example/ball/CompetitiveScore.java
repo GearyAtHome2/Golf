@@ -39,6 +39,11 @@ public class CompetitiveScore {
         return scores[holeIndex];
     }
 
+
+    public void setCurrentHoleIndex(int index) {
+        this.currentHoleIndex = index;
+    }
+
     public int getCurrentHoleNumber() {
         return currentHoleIndex + 1;
     }

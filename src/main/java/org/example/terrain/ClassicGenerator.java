@@ -3,6 +3,7 @@ package org.example.terrain;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import org.example.terrain.features.*;
 import org.example.terrain.level.LevelData;
 
 import java.util.ArrayList;
@@ -15,6 +16,10 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final LevelData data;
     private final Random rng;
     private final FeatureProcessor processor;
+    private final CenoteGenerator cenoteGenerator;
+    private final CoastlineGenerator coastlineGenerator;
+    private final BeachBluffsGenerator beachBluffsGenerator;
+    private final CraterGenerator craterGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
@@ -52,6 +57,10 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
 
         this.processor = new FeatureProcessor(data, rng, off1, off2, waveAngles, waveFreqs, waveAmps, waveOffsets);
+        this.cenoteGenerator = new CenoteGenerator(rng);
+        this.coastlineGenerator = new CoastlineGenerator();
+        this.beachBluffsGenerator = new BeachBluffsGenerator(data, rng,waveAngles, waveFreqs, waveAmps, waveOffsets);
+        this.craterGenerator = new CraterGenerator(rng);
     }
 
     public LevelData getData() {
@@ -102,7 +111,7 @@ public class ClassicGenerator implements ITerrainGenerator {
                 float currentHeight = baseElevation + (noise * hillRamp);
 
                 if (flags.isIslandMap) {
-                    currentHeight = processor.applyIslandCoastline(x, z, zNorm, currentHeight, map[x][z], data.getWaterLevel(), off1, off2);
+                    currentHeight = coastlineGenerator.applyIslandCoastline(x, z, zNorm, currentHeight, map[x][z], data.getWaterLevel(), off1, off2);
                 }
 
                 float distGreen = Vector3.dst(x, z, 0, gCX, gCZ, 0);
@@ -150,15 +159,15 @@ public class ClassicGenerator implements ITerrainGenerator {
             data.setWaterLevel(-2.0f);
         } else if (flags.isCraterFields) {
             data.setWaterLevel(-10.0f);
-            this.craters = processor.generateCraterField(map, h, (int) (SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15));
+            this.craters = craterGenerator.generateCraterField(map, h, (int) (SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15));
         } else if (flags.isRoughBluffs) {
             data.setWaterLevel(-1f);
-            processor.generateBeachBLuffs(map, h, gX, gZ, -2f);
+            beachBluffsGenerator.generateBeachBLuffs(map, h, gX, gZ, -2f);
         } else if (flags.isPlungeCenotes) {
             data.setWaterLevel(-8.0f);
 
-            processor.generatePlungeCenotes(map, h, -8f, 30.0f);
-            processor.generateRoughCenotes(map, h, -8f);
+            cenoteGenerator.generatePlungeCenotes(map, h, -8f, 30.0f);
+            cenoteGenerator.generateRoughCenotes(map, h, -8f);
         }
 
         float water = data.getWaterLevel();
@@ -178,9 +187,9 @@ public class ClassicGenerator implements ITerrainGenerator {
         smoothGreenBorders(map, h, flags.isPathDependent);
         if (flags.isMogulHighlands) processor.applyFairwayGaussianSmoothing(map, h);
 
-        processor.applyFairwayWaterBuffer(map, h, water, 3.0f);
+        coastlineGenerator.applyFairwayWaterBuffer(map, h, water, 3.0f);
 
-        processor.applySlopeBasedStone(map, h, 0.35f);
+        coastlineGenerator.applySlopeBasedStone(map, h, 0.35f);
 
         // 5. Finalize world objects
         finalizePositionsAndTrees(map, h, teeP, holeP, t, m, gX, gZ, water, flags.isCliffMap);

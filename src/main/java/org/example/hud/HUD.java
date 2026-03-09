@@ -271,7 +271,16 @@ public class HUD {
             font.draw(batch, "PRACTICE RANGE", 40, topY);
         } else if (levelData != null) {
             font.setColor(Color.GOLD);
-            String header = (compScore != null) ? "HOLE " + compScore.getCurrentHoleNumber() : levelData.getArchetype().name().replace("_", " ");
+
+            // --- FIXED HEADER LOGIC ---
+            String holeName = levelData.getArchetype().name().replace("_", " ");
+            String header = holeName;
+
+            if (compScore != null) {
+                // Combines Name + Hole Number (e.g., "COASTAL BLUFFS - HOLE 4")
+                header = holeName + " - HOLE " + compScore.getCurrentHoleNumber();
+            }
+
             font.draw(batch, header, 40, topY);
 
             font.setColor(Color.WHITE);
@@ -284,8 +293,8 @@ public class HUD {
         }
 
         font.setColor(Color.WHITE);
-        // Ensure "Shots" is always drawn below the other labels to prevent overlap
-        float shotsY = topY - 40; // Default for practice
+        // Position Shots dynamically based on whether we are showing "TO PAR"
+        float shotsY = topY - 40;
         if (!isPractice && levelData != null) {
             shotsY = (compScore != null) ? topY - 120 : topY - 80;
         }
@@ -295,10 +304,12 @@ public class HUD {
         font.setColor(Color.WHITE);
         float rightX = viewport.getWorldWidth() - 250;
         font.draw(batch, "Club: " + club.name(), rightX, 140);
+
         float currentSpinMag = ball.getSpin().len();
         font.setColor(currentSpinMag > 0.1f ? (currentSpinMag > lastDisplayedSpin ? Color.GREEN : Color.RED) : Color.GRAY);
         font.draw(batch, String.format("Spin: %.1fk RPM", (currentSpinMag * 100f) / 1000f), rightX, 100);
         lastDisplayedSpin = currentSpinMag;
+
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("Speed: %.1fx", speed), rightX, 60);
     }

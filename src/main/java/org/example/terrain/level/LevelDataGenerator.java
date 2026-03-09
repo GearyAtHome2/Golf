@@ -284,7 +284,7 @@ public class LevelDataGenerator {
                 par = 4;
                 break;
             case WETLANDS:
-                baseDifficultyIndex = 4f;
+                baseDifficultyIndex = 1f;
                 teeH = 17.0f + r.nextFloat() * 2.0f;
                 greenH = 13.0f + r.nextFloat() * 3.0f;
                 windMin = 6f;
@@ -305,11 +305,11 @@ public class LevelDataGenerator {
                 par = 3;
                 break;
             case ROUGH_HOUGH_BLUFFS:
-                baseDifficultyIndex = 4f;
+                baseDifficultyIndex = 6f;
                 teeH = 17.0f + r.nextFloat() * 2.0f;
                 greenH = 13.0f + r.nextFloat() * 3.0f;
-                windMin = 6f;
-                windMax = 12f;
+                windMin = 8f;
+                windMax = 14f;
                 treeH = 6.0f + r.nextFloat() * 2.0f;
                 treeDensity = 0.13f;
                 foliageR = 3.0f;

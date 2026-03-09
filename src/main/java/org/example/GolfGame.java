@@ -351,13 +351,19 @@ public class GolfGame extends ApplicationAdapter {
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(isPractice, currentLevelData);
         } else {
-            // Pass the competitiveScore to the HUD for the real-time "To Par" display
             hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice, currentLevelData, camera, terrain, isCompetitive ? competitiveScore : null);
         }
     }
 
     private void handleInput() {
-        if (hud.wasMainMenuRequested()) {
+
+        boolean manualMenuPress = isVictory &&
+                currentState == GameState.COMPETITIVE &&
+                competitiveScore != null &&
+                competitiveScore.isCourseComplete() &&
+                Gdx.input.isKeyJustPressed(Input.Keys.M);
+
+        if (hud.wasMainMenuRequested()|| manualMenuPress) {
             currentState = GameState.START;
             currentHoleIndex = 0;
             competitiveCourse.clear();
@@ -438,6 +444,7 @@ public class GolfGame extends ApplicationAdapter {
             if (currentState == GameState.COMPETITIVE) {
                 if (isVictory && currentHoleIndex + 1 < competitiveCourse.size()) {
                     currentHoleIndex++;
+                    competitiveScore.setCurrentHoleIndex(currentHoleIndex);
                     initLevel();
                 }
             } else {
