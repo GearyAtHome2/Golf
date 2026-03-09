@@ -10,8 +10,10 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
@@ -28,6 +30,9 @@ public class HUD {
     private float hazardTimer = 0;
     private String hazardText = "";
     private Color hazardColor = Color.WHITE;
+    private boolean instructionsRequested = false;
+    private float instructionScrollY = 0;
+    private final float MAX_SCROLL = 550f;
 
     public enum GameDifficulty {
         EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
@@ -121,13 +126,14 @@ public class HUD {
         font.draw(batch, "GEARY GOLF", centerX - 180, centerY + 180);
 
         font.getData().setScale(1.5f);
-        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 30);
-        font.setColor(selection == 1 ? Color.GOLD : Color.WHITE);
-        drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY - 30);
-        drawOption(selection == 2, true, "PRACTICE RANGE", centerX - 80, centerY - 90);
+        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 60);
+        drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY + 10);
+        drawOption(selection == 2, true, "PRACTICE RANGE", centerX - 80, centerY - 40);
 
         String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
-        drawOption(selection == 3, hasValidSeed, seedText, centerX - 80, centerY - 150);
+        drawOption(selection == 3, hasValidSeed, seedText, centerX - 80, centerY - 90);
+
+        drawOption(selection == 4, true, "INSTRUCTIONS", centerX - 80, centerY - 140);
 
         font.getData().setScale(1f);
         font.setColor(Color.GRAY);
@@ -151,6 +157,9 @@ public class HUD {
         if (Gdx.input.isKeyJustPressed(Input.Keys.M)) {
             mainMenuRequested = true;
         }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.I)) {
+            instructionsRequested = true;
+        }
         if (!isPractice && Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
             String seedString = String.valueOf(levelData.getSeed());
             Gdx.app.getClipboard().setContents(seedString);
@@ -173,7 +182,7 @@ public class HUD {
         font.setColor(Color.GRAY);
         font.draw(batch, "----------------", centerX - 80, centerY - 60);
         font.setColor(Color.WHITE);
-        font.draw(batch, "[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [ESC] RESUME" + (isPractice ? "" : "  |  [C] COPY SEED"), 50, 100);
+        font.draw(batch, "[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [I] HELP", 50, 100);
         if (seedFeedbackTimer > 0) {
             seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
             font.setColor(Color.GREEN);
@@ -203,7 +212,7 @@ public class HUD {
         batch.begin();
         renderFeedbackMessages(delta);
         renderDistanceDisplay(delta);
-        renderHazardPopUp(delta); // <--- Add this here
+        renderHazardPopUp(delta);
         if (isPractice) {
             renderShotDistance(ball);
         }
@@ -271,45 +280,32 @@ public class HUD {
             font.draw(batch, "PRACTICE RANGE", 40, topY);
         } else if (levelData != null) {
             font.setColor(Color.GOLD);
-
-            // --- FIXED HEADER LOGIC ---
             String holeName = levelData.getArchetype().name().replace("_", " ");
             String header = holeName;
-
             if (compScore != null) {
-                // Combines Name + Hole Number (e.g., "COASTAL BLUFFS - HOLE 4")
                 header = holeName + " - HOLE " + compScore.getCurrentHoleNumber();
             }
-
             font.draw(batch, header, 40, topY);
-
             font.setColor(Color.WHITE);
             font.draw(batch, "Par " + levelData.getPar(), 40, topY - 40);
-
             if (compScore != null) {
                 font.setColor(Color.YELLOW);
                 font.draw(batch, "TO PAR: " + compScore.getToParString(), 40, topY - 80);
             }
         }
-
         font.setColor(Color.WHITE);
-        // Position Shots dynamically based on whether we are showing "TO PAR"
         float shotsY = topY - 40;
         if (!isPractice && levelData != null) {
             shotsY = (compScore != null) ? topY - 120 : topY - 80;
         }
-
         font.draw(batch, "Shots: " + shotCount, 40, shotsY);
-
         font.setColor(Color.WHITE);
         float rightX = viewport.getWorldWidth() - 250;
         font.draw(batch, "Club: " + club.name(), rightX, 140);
-
         float currentSpinMag = ball.getSpin().len();
         font.setColor(currentSpinMag > 0.1f ? (currentSpinMag > lastDisplayedSpin ? Color.GREEN : Color.RED) : Color.GRAY);
         font.draw(batch, String.format("Spin: %.1fk RPM", (currentSpinMag * 100f) / 1000f), rightX, 100);
         lastDisplayedSpin = currentSpinMag;
-
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("Speed: %.1fx", speed), rightX, 60);
     }
@@ -452,7 +448,7 @@ public class HUD {
     public void showWaterHazard() {
         this.hazardText = "WATER HAZARD";
         this.hazardColor = Color.CYAN;
-        this.hazardTimer = 1.0f; // Matches your RESET_DELAY comfortably
+        this.hazardTimer = 1.0f;
     }
 
     public void showOutOfBounds() {
@@ -464,19 +460,12 @@ public class HUD {
     private void renderHazardPopUp(float delta) {
         if (hazardTimer > 0) {
             hazardTimer -= delta;
-
-            // Subtle pulse effect using sine
             float pulse = 1.0f + (MathUtils.sin(hazardTimer * 10f) * 0.1f);
             font.getData().setScale(3.0f * pulse);
-
-            // Fade out logic
             float alpha = MathUtils.clamp(hazardTimer * 2f, 0, 1);
             font.setColor(hazardColor.r, hazardColor.g, hazardColor.b, alpha);
-
             float centerX = viewport.getWorldWidth() / 2f;
-            float centerY = viewport.getWorldHeight() / 2f + 100; // Positioned slightly above center
-
-            // Center the text (approximate width based on scale)
+            float centerY = viewport.getWorldHeight() / 2f + 100;
             font.draw(batch, hazardText, centerX - 200, centerY);
         }
     }
@@ -484,26 +473,20 @@ public class HUD {
     public void renderVictory(int shots, LevelData levelData, CompetitiveScore compScore) {
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
-
         batch.begin();
-
         int par = (levelData != null) ? levelData.getPar() : 3;
         String shout = org.example.ScoreShout.getShout(shots, par);
         if (shots == 1) shout = ScoreShout.HIO.shout;
         int diff = shots - par;
-
         Color shoutColor = (shots == 1 || diff <= -2) ? Color.GOLD : (diff == -1 ? Color.CYAN : (diff == 0 ? Color.WHITE : (diff == 1 ? Color.ORANGE : Color.RED)));
-
         font.getData().setScale(4.5f);
         font.setColor(shoutColor);
         font.draw(batch, shout, centerX - 180, viewport.getWorldHeight() - 60);
-
         font.getData().setScale(1.8f);
         font.setColor(Color.WHITE);
         String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
         font.draw(batch, "Hole Strokes: " + shots + " (" + scoreType + ")", centerX - 160, viewport.getWorldHeight() - 150);
         batch.end();
-
         if (compScore != null) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
@@ -512,22 +495,16 @@ public class HUD {
             shapeRenderer.rect(centerX - 300, centerY - 240, 600, 460);
             shapeRenderer.end();
             Gdx.gl.glDisable(GL20.GL_BLEND);
-
             batch.begin();
             renderScoreTable(compScore, centerX, centerY + 180);
-
-            // --- Handicap Logic for Completed Tournaments ---
             if (compScore.isCourseComplete()) {
-                // Reverse the to-par value: +11 becomes -11, -2 becomes +2
                 int totalDiff = compScore.getTotalToPar();
                 int handicapValue = -totalDiff;
                 String handicapStr = (handicapValue > 0) ? "+" + handicapValue : String.valueOf(handicapValue);
-
                 font.getData().setScale(1.8f);
                 font.setColor(Color.GOLD);
                 font.draw(batch, "YOUR HANDICAP: " + handicapStr, centerX - 150, centerY - 200);
             }
-
             font.getData().setScale(1.5f);
             font.setColor(Color.YELLOW);
             String prompt = compScore.isCourseComplete() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
@@ -543,29 +520,23 @@ public class HUD {
 
     private void renderScoreTable(CompetitiveScore compScore, float x, float y) {
         if (compScore == null) return;
-
         float startX = x - 260;
         float rowH = 20f;
-
         font.getData().setScale(1.0f);
         font.setColor(Color.LIGHT_GRAY);
         font.draw(batch, "HOLE", startX, y);
         font.draw(batch, "PAR", startX + 80, y);
         font.draw(batch, "SCORE", startX + 160, y);
         font.draw(batch, "TOTAL", startX + 240, y);
-
         int runningTotal = 0;
         for (int i = 0; i < 18; i++) {
             float rowY = y - 30 - (i * rowH);
             int holeScore = compScore.getScoreForHole(i);
             int holePar = compScore.getParForHole(i);
-
             boolean isCurrent = (i == (compScore.getCurrentHoleNumber() - 1));
             font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
-
             font.draw(batch, String.format("%02d", (i + 1)), startX, rowY);
             font.draw(batch, "" + holePar, startX + 80, rowY);
-
             if (holeScore > 0) {
                 runningTotal += holeScore;
                 int holeDiff = holeScore - holePar;
@@ -579,7 +550,6 @@ public class HUD {
                 font.draw(batch, "-", startX + 240, rowY);
             }
         }
-
         font.getData().setScale(1.2f);
         font.setColor(Color.GOLD);
         float totalY = y - 30 - (18 * rowH) - 30;
@@ -594,6 +564,118 @@ public class HUD {
         if (spinDot.len() > 1f) spinDot.nor();
     }
 
+    public void renderInstructions() {
+        float scrollSpeed = 350f * Gdx.graphics.getDeltaTime();
+        if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
+            instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
+            instructionScrollY = Math.min(MAX_SCROLL, instructionScrollY + scrollSpeed);
+        }
+
+        float centerX = viewport.getWorldWidth() / 2f;
+        float boxW = 800;
+        float boxH = viewport.getWorldHeight() - 180;
+        float boxX = centerX - boxW / 2f;
+        float boxY = 120;
+
+        // Draw Background
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.08f, 0.08f, 0.08f, 0.9f);
+        shapeRenderer.rect(boxX, boxY, boxW, boxH);
+        shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+
+        // Prepare Scissor for Clipping
+        Rectangle scissor = new Rectangle();
+        Rectangle area = new Rectangle(boxX, boxY, boxW, boxH);
+        ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), area, scissor);
+
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
+
+        if (ScissorStack.pushScissors(scissor)) {
+            float currentY = boxY + boxH - 50 + instructionScrollY;
+
+            font.getData().setScale(2.5f);
+            font.setColor(Color.GOLD);
+            font.draw(batch, "HOW TO PLAY", centerX - 140, currentY);
+            currentY -= 80;
+
+            font.getData().setScale(1.5f);
+            font.setColor(Color.CYAN);
+            font.draw(batch, "CONTROLS", centerX - 350, currentY);
+            currentY -= 40;
+
+            font.getData().setScale(1.1f);
+            font.setColor(Color.WHITE);
+            String[] controls = {
+                    "[WASD] - Aim Contact Point (Spin and loft)",
+                    "[RCLICK + DRAG] - Aim Direction",
+                    "[SCROLL] - Change Clubs",
+                    "[SPACE] - Hold for power/Lock in shot minigame",
+                    "[LTAB] - Map Oversight View",
+                    " * You can use LClick and drag to rotate, RClick to pan",
+                    "[R] - Reset Ball to last position",
+                    "[N] - Next map",
+                    " * Disabled during competitive play",
+                    "[F] - Check distance to hole",
+                    "[ESC] - Pause Menu"
+            };
+            for (String line : controls) {
+                font.draw(batch, line, centerX - 330, currentY);
+                currentY -= 35;
+            }
+
+            currentY -= 50;
+
+            font.getData().setScale(1.5f);
+            font.setColor(Color.CYAN);
+            font.draw(batch, "GAMEPLAY", centerX - 350, currentY);
+            currentY -= 40;
+
+            font.getData().setScale(1.1f);
+            font.setColor(Color.WHITE);
+            String[] gameplay = {
+                    "SPIN PHYSICS: 'Bottom hits' result in high loft/low spin.",
+                    "'Middle hits' result in mid loft/mid spin.",
+                    "'Top hits' result in low loft/high spin.",
+                    "--------------------------------------------------------------",
+                    "Physics: The physics engine simulates lift based on ball",
+                    "velocity and spin magnitude consistently. This will allow for",
+                    "some interesting shots - experiment with spin",
+                    "--------------------------------------------------------------",
+                    "POWER METER: Time your SPACE press in the sweet spots",
+                    "to maximize power and minimize shot randomness. Hitting the",
+                    "innermost sweet spot gives spin+power boosts and 100% accuracy.",
+                    "You can left click to cancel the minigame at any time, and ",
+                    "adjust your aim but not aim contact freely within the minigame",
+                    "--------------------------------------------------------------",
+                    "TERRAIN: Different surfaces affect ball friction and the",
+                    "difficulty of the swing."
+            };
+            for (String line : gameplay) {
+                font.draw(batch, line, centerX - 330, currentY);
+                currentY -= 35;
+            }
+
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+
+        // Fixed Footer - Outside the scissor so it's always visible
+        font.getData().setScale(1.1f);
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "W/S or UP/DOWN to Scroll | [ESC] to Close", centerX - 180, boxY - 30);
+
+        batch.end();
+    }
+
+    public boolean wasInstructionsRequested() { return instructionsRequested; }
+    public void clearInstructionsRequest() { instructionsRequested = false; }
+    public void resetInstructionScroll() { instructionScrollY = 0; }
     public boolean isMinigameComplete() { return !minigameActive && needleStopped && glowTimer <= 0 && lastResult != null; }
     public boolean wasMinigameCanceled() { boolean c = minigameCanceled; minigameCanceled = false; return c; }
     public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }
