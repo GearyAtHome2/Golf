@@ -29,8 +29,9 @@ public class HUD {
 
     // --- Practice Mode Persistence Fields ---
     private float persistentShotDistance = 0f;
+    private float maxDistanceSeen = 0f;
     private float shotDistanceDisplayTimer = 0f;
-    private boolean ballWasInFlight = false;
+    private boolean ballWasActive = false;
 
     public enum GameDifficulty {
         EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
@@ -203,26 +204,26 @@ public class HUD {
             }
         }
 
-        // --- Logic: Track flight to lock distance ---
+        // --- Improved Practice Tracking ---
         if (isPractice) {
             Ball.State s = ball.getState();
-            // We consider the ball "active" if it is in the air or bouncing
-            if (s == Ball.State.AIR || s == Ball.State.CONTACT) {
-                if (!ballWasInFlight) {
-                    Gdx.app.log("HUD", "Ball flight detected. Tracking distance...");
-                    ballWasInFlight = true;
+            boolean isMoving = (s == Ball.State.AIR || s == Ball.State.ROLLING || s == Ball.State.CONTACT);
+
+            if (isMoving) {
+                ballWasActive = true;
+                // Update max distance to catch the absolute peak before any internal reset
+                float currentShotDist = ball.getShotDistance();
+                if (currentShotDist > maxDistanceSeen) {
+                    maxDistanceSeen = currentShotDist;
                 }
-                shotDistanceDisplayTimer = 0f; // Hide persistent text while live
-            }
-            // When it starts ROLLING or hits STATIONARY, we prepare to lock the final value
-            else if (ballWasInFlight && (s == Ball.State.STATIONARY || s == Ball.State.ROLLING)) {
-                float finalDist = ball.getShotDistance();
-                if (finalDist > 0.1f) {
-                    persistentShotDistance = finalDist;
-                    shotDistanceDisplayTimer = 4.0f; // 4 second hold
-                    ballWasInFlight = false;
-                    Gdx.app.log("HUD", "Distance locked: " + persistentShotDistance);
-                }
+                shotDistanceDisplayTimer = 0f;
+            } else if (s == Ball.State.STATIONARY && ballWasActive) {
+                // Ball has fully stopped. Lock the highest distance seen.
+                persistentShotDistance = maxDistanceSeen;
+                shotDistanceDisplayTimer = 5.0f;
+                ballWasActive = false;
+                maxDistanceSeen = 0f; // Clear for next shot
+                Gdx.app.log("HUD", "Shot finalized at: " + persistentShotDistance);
             }
         }
 
@@ -253,21 +254,18 @@ public class HUD {
     }
 
     private void renderShotDistance(Ball ball, float delta) {
-        Ball.State state = ball.getState();
         float toRender = 0;
+        Ball.State state = ball.getState();
+        boolean isMoving = (state == Ball.State.AIR || state == Ball.State.ROLLING || state == Ball.State.CONTACT);
 
-        // While the ball is moving, always show live distance
-        if (state == Ball.State.AIR || state == Ball.State.ROLLING || state == Ball.State.CONTACT) {
+        if (isMoving) {
             toRender = ball.getShotDistance();
             font.setColor(Color.WHITE);
-        }
-        // If stopped but we have a recently locked distance, show that
-        else if (shotDistanceDisplayTimer > 0) {
+        } else if (shotDistanceDisplayTimer > 0) {
             toRender = persistentShotDistance;
             shotDistanceDisplayTimer -= delta;
-
             float alpha = MathUtils.clamp(shotDistanceDisplayTimer, 0, 1);
-            font.setColor(1f, 0.84f, 0f, alpha); // Gold
+            font.setColor(1f, 0.85f, 0f, alpha);
         }
 
         if (toRender > 0.1f) {
@@ -453,6 +451,7 @@ public class HUD {
         this.lastResult = null;
         this.minigameStep = 0;
         this.shotRandomness = MathUtils.random(-0.1f, 0.1f);
+        this.maxDistanceSeen = 0f; // Reset peak tracker for new shot
         engine.reset(club.baseDifficulty);
         activeAnims.clear();
         if (animSetting == AnimSpeed.NONE) {
