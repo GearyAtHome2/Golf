@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.SHADOW_CANYON;
+//        selectedType = LevelData.Archetype.SHADOW_CANYON;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -171,8 +171,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.20f + r.nextFloat() * 0.1f;
                 islands = 0.05f;
                 cohesion = 0.9f;
-                distance = Math.round(450 + r.nextFloat() * 120);
-                par = distance < 510 ? 4 : 5;
+                distance = Math.round(450 + r.nextFloat() * 80);
+                par = 4;
                 break;
             case BUSH_WORLD:
                 baseDifficultyIndex = 3f;
@@ -206,7 +206,7 @@ public class LevelDataGenerator {
                 islands = 0f;
                 cohesion = 0.9f;
                 distance = Math.round(400 + r.nextFloat() * 200);
-                par = distance < 490 ? 4 : distance < 560 ? 5 : 6;
+                par = distance < 500 ? 4 : 5;
                 break;
             case MONOLITH_PLAINS:
                 baseDifficultyIndex = 5f;
@@ -222,8 +222,8 @@ public class LevelDataGenerator {
                 bunkerCount = 1 + r.nextInt(4);
                 hillFreq = 0.008f;
                 maxH = 15f;
-                distance = Math.round(500 + r.nextFloat() * 120);
-                par = distance < 560 ? 4 : 5;
+                distance = Math.round(600 + r.nextFloat() * 200);
+                par = distance < 650 ? 4 : 5;
                 break;
             case MOGUL_HIGHLANDS:
                 baseDifficultyIndex = 6f;
@@ -359,7 +359,7 @@ public class LevelDataGenerator {
                 cohesion = 1.3f;
                 bunkerCount = 1 + r.nextInt(4);
                 distance = Math.round(400 + r.nextFloat() * 350);
-                par = distance < 450 ? 3 : distance < 620 ? 4 : 5;
+                par = distance < 450 ? 3 : distance < 650 ? 4 : 5;
                 break;
         }
 

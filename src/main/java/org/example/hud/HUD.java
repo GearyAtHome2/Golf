@@ -651,7 +651,8 @@ public class HUD {
                     "adjust your aim but not aim contact freely within the minigame",
                     "--------------------------------------------------------------",
                     "TERRAIN: Different surfaces affect ball friction and the",
-                    "difficulty of the swing."
+                    "difficulty of the swing. A sloped surface will kick the ",
+                    "ball trajectory left or right."
             };
             for (String line : gameplay) {
                 font.draw(batch, line, centerX - 330, currentY);
