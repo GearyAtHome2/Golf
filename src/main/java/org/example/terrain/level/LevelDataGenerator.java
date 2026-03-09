@@ -107,7 +107,7 @@ public class LevelDataGenerator {
                 hillFreq = 0.02f;
                 maxH = 5.0f;
                 maxFairwayWidth = 48.0f;
-                undulation = 0.6f;
+                undulation = 1.2f;
                 bunkerCount = 12 + r.nextInt(10);
                 fairwayWiggle = 0.15f + r.nextFloat() * 0.1f;
                 islands = 0.1f;

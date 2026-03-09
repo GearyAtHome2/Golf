@@ -170,7 +170,6 @@ public class ClassicGenerator implements ITerrainGenerator {
             whistlingIslesGenerator.generateWhistlingIsles(map, h, gX, gZ, 0f);
         } else if (flags.isPlungeCenotes) {
             data.setWaterLevel(-8.0f);
-
             cenoteGenerator.generatePlungeCenotes(map, h, -8f, 30.0f);
             cenoteGenerator.generateRoughCenotes(map, h, -8f);
         }
@@ -182,9 +181,9 @@ public class ClassicGenerator implements ITerrainGenerator {
             applyPathOffset(map, h, 25.0f, gBuf);
             tagChasmWalls(map);
         } else if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
-            applyPathOffset(map, h, -26.0f, gBuf);
+            applyPathOffset(map, h, -40.0f, gBuf);
             tagChasmWalls(map);
-            water = (Math.min(data.getTeeHeight() + 0.2f, data.getGreenHeight()) - 25.0f) - 10.0f;
+            water = (Math.min(data.getTeeHeight() + 0.2f, data.getGreenHeight()) - 35.0f) - 10.0f;
             data.setWaterLevel(water);
         }
 
@@ -274,16 +273,53 @@ public class ClassicGenerator implements ITerrainGenerator {
     private void applyPathOffset(Terrain.TerrainType[][] map, float[][] heights, float amount, boolean[][] greenBuffer) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         boolean[][] isPathMask = getPathMask(map);
-        boolean isAbsolute = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
 
+        // CONFIGURABLE: Horizontal distance of the ramp.
+        // Increase for a gentle slope, decrease for a steep cliff.
+        final float RAMP_WIDTH = 12.0f;
+
+        // 1. First, apply the drop to the path tiles themselves
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (isPathMask[x][z] || greenBuffer[x][z]) {
                     heights[x][z] += amount;
-                } else if (!isAbsolute) {
-                    float dist = getDistanceToPath(x, z, isPathMask, 8.0f);
-                    float t = MathUtils.clamp(1.0f - (dist / 8.0f), 0, 1);
-                    heights[x][z] += (amount * t * t * (3 - 2 * t));
+                }
+            }
+        }
+
+        // 2. Second, pull the neighboring Rough down to meet the dropped path
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                if (!isPathMask[x][z] && !greenBuffer[x][z]) {
+                    float dist = getDistanceToPath(x, z, isPathMask, RAMP_WIDTH);
+
+                    if (dist < RAMP_WIDTH) {
+                        // Find the height of the nearest dropped path tile
+                        float targetDroppedHeight = heights[x][z];
+                        float closestDistSq = Float.MAX_VALUE;
+                        int range = (int) RAMP_WIDTH + 1;
+
+                        for (int ix = x - range; ix <= x + range; ix++) {
+                            for (int iz = z - range; iz <= z + range; iz++) {
+                                if (ix >= 0 && ix < SIZE_X && iz >= 0 && iz < SIZE_Z && isPathMask[ix][iz]) {
+                                    float dSq = (x - ix) * (x - ix) + (z - iz) * (z - iz);
+                                    if (dSq < closestDistSq) {
+                                        closestDistSq = dSq;
+                                        targetDroppedHeight = heights[ix][iz];
+                                    }
+                                }
+                            }
+                        }
+
+                        // t=0 at the fairway edge (100% targetHeight)
+                        // t=1 at the end of the ramp (100% original rough height)
+                        float t = MathUtils.clamp(dist / RAMP_WIDTH, 0f, 1f);
+                        float smoothT = t * t * (3 - 2 * t);
+
+                        // Pull the rough down: targetDroppedHeight is the "bottom"
+                        // and heights[x][z] is the "top" (original rough)
+                        heights[x][z] = MathUtils.lerp(targetDroppedHeight, heights[x][z], smoothT);
+                    }
                 }
             }
         }
