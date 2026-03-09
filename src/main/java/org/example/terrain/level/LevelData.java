@@ -15,7 +15,9 @@ public class LevelData {
         SHADOW_CANYON,
         RAZORBACK_RIDGE,
         MONOLITH_PLAINS,
-        PLUNGE_CENOTES
+        PLUNGE_CENOTES,
+        ROUGH_HOUGH_BLUFFS,
+        WETLANDS
     }
 
     public enum TerrainAlgorithm {
@@ -24,7 +26,10 @@ public class LevelData {
         TERRACED,
         MOUNDS,
         RAISED_FAIRWAY,
-        SUNKEN_FAIRWAY
+        SUNKEN_FAIRWAY,
+        CRAGGY_RIDGES,
+        DUNES,
+        PLATEAU
     }
 
     private long seed;

@@ -408,5 +408,85 @@ public class FeatureProcessor {
         return total / totalA;
     }
 
+    public void generateBeachBLuffs(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ, float waterLevel) {
+        int SIZE_X = map.length;
+        int SIZE_Z = map[0].length;
+        List<Vector3> bluffPoints = new ArrayList<>();
+
+        float beachHeader = waterLevel + 4.0f;
+
+        // 1. Fixed Points: Tee and Green
+        bluffPoints.add(new Vector3(SIZE_X / 2f, data.getTeeHeight(), SIZE_Z * 0.05f));
+        bluffPoints.add(new Vector3(gX, data.getGreenHeight(), gZ));
+
+        // 2. Spread Out Intermediate Bluffs (Poisson-lite)
+        float minSeparation = 65.0f;
+        int attempts = 0;
+        while (bluffPoints.size() < 5 && attempts < 300) {
+            attempts++;
+            float z = MathUtils.lerp(SIZE_Z * 0.2f, SIZE_Z * 0.8f, rng.nextFloat());
+            float x = (SIZE_X * 0.15f) + rng.nextFloat() * (SIZE_X * 0.7f);
+
+            boolean tooClose = false;
+            for (Vector3 b : bluffPoints) {
+                if (Vector2.dst(x, z, b.x, b.z) < minSeparation) {
+                    tooClose = true;
+                    break;
+                }
+            }
+
+            if (!tooClose) {
+                float zProgress = (z - (SIZE_Z * 0.05f)) / (SIZE_Z * 0.87f);
+                float h = MathUtils.lerp(data.getTeeHeight(), data.getGreenHeight(), MathUtils.clamp(zProgress, 0, 1));
+                h += (rng.nextFloat() - 0.5f) * 5.0f;
+                bluffPoints.add(new Vector3(x, h, z));
+            }
+        }
+
+        // 3. Render Pass
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                if (TerrainUtils.isUnmodifiable(map[x][z])) continue;
+
+                float highestPoint = waterLevel - 1.0f;
+                Terrain.TerrainType selectedType = Terrain.TerrainType.ROUGH;
+
+                // Wobble for organic edges
+                float wobble = generateMultiWaveNoise(x * 0.8f, z * 0.8f, 0.15f) * 5.0f;
+
+                for (Vector3 bluff : bluffPoints) {
+                    float dist = Vector2.dst(x, z, bluff.x, bluff.z);
+                    float fairwayR = (12f + (bluff.y * 0.3f)) + (wobble * 0.5f);
+                    float roughR = fairwayR + 15f + wobble;
+                    float beachR = roughR + 17f;
+
+                    if (dist < roughR) {
+                        // CLIFF LOGIC: Lerp from Plateau Top down to Beach Header
+                        float t = MathUtils.clamp(dist / roughR, 0, 1);
+                        float influence = 1.0f - (float) Math.pow(t, 14.0f);
+
+                        float h = MathUtils.lerp(beachHeader, bluff.y, influence);
+                        if (h > highestPoint) {
+                            highestPoint = h;
+                            selectedType = (dist < fairwayR) ? Terrain.TerrainType.FAIRWAY : Terrain.TerrainType.ROUGH;
+                        }
+                    }
+                    else if (dist < beachR) {
+                        float t = (dist - roughR) / (beachR - roughR);
+                        float h = MathUtils.lerp(beachHeader, waterLevel - 1.0f, t);
+
+                        if (h > highestPoint) {
+                            highestPoint = h;
+                            selectedType = (h > waterLevel) ? Terrain.TerrainType.SAND : Terrain.TerrainType.ROUGH;
+                        }
+                    }
+                }
+
+                heights[x][z] = highestPoint;
+                map[x][z] = selectedType;
+            }
+        }
+    }
+
     public LevelData getData() { return data; }
 }

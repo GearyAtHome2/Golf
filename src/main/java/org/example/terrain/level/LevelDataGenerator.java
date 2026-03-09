@@ -1,6 +1,5 @@
 package org.example.terrain.level;
 
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.Terrain.TreeScheme;
 
@@ -21,7 +20,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = PLUNGE_CENOTES;
+//        selectedType = ROUGH_HOUGH_BLUFFS;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -68,6 +67,10 @@ public class LevelDataGenerator {
             case MONOLITH_PLAINS:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
                 scheme = TreeScheme.CHERRY_BLOSSOM;
+                break;
+            case WETLANDS:
+                algo = LevelData.TerrainAlgorithm.DUNES;
+                scheme = TreeScheme.OAK;
                 break;
             default:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
@@ -260,7 +263,7 @@ public class LevelDataGenerator {
                 par = 4;
                 break;
             case PLUNGE_CENOTES:
-                baseDifficultyIndex = 7f;
+                baseDifficultyIndex = 5f;
                 teeH = 5.0f + r.nextFloat() * 5.0f;
                 greenH = 0f;
                 windMin = 6f;
@@ -278,6 +281,48 @@ public class LevelDataGenerator {
                 islands = 0.0f;
                 cohesion = 0.6f;
                 distance = Math.round(480 + r.nextFloat() * 100);
+                par = 4;
+                break;
+            case WETLANDS:
+                baseDifficultyIndex = 4f;
+                teeH = 17.0f + r.nextFloat() * 2.0f;
+                greenH = 13.0f + r.nextFloat() * 3.0f;
+                windMin = 6f;
+                windMax = 12f;
+                treeH = 6.0f + r.nextFloat() * 2.0f;
+                treeDensity = 0.13f;
+                foliageR = 3.0f;
+                trunkR = 0.5f;
+                hillFreq = 0.06f;
+                maxH = 4.0f;
+                maxFairwayWidth = 50f;
+                minFairwayWidth = 28;
+                undulation = 1.4f;
+                fairwayWiggle = 0.1f + r.nextFloat() * 0.1f;
+                islands = 0.0f;
+                cohesion = 1f;
+                distance = Math.round(250 + r.nextFloat() * 80);
+                par = 3;
+                break;
+            case ROUGH_HOUGH_BLUFFS:
+                baseDifficultyIndex = 4f;
+                teeH = 17.0f + r.nextFloat() * 2.0f;
+                greenH = 13.0f + r.nextFloat() * 3.0f;
+                windMin = 6f;
+                windMax = 12f;
+                treeH = 6.0f + r.nextFloat() * 2.0f;
+                treeDensity = 0.13f;
+                foliageR = 3.0f;
+                trunkR = 0.5f;
+                hillFreq = 0.06f;
+                maxH = 4.0f;
+                maxFairwayWidth = 50f;
+                minFairwayWidth = 28;
+                undulation = 0.4f;
+                fairwayWiggle = 0.1f + r.nextFloat() * 0.1f;
+                islands = 0.0f;
+                cohesion = 1f;
+                distance = Math.round(300 + r.nextFloat() * 100);
                 par = 4;
                 break;
             case STANDARD_LINKS:

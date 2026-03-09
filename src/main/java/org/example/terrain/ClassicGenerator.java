@@ -67,7 +67,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         ArchetypeFlags flags = new ArchetypeFlags(data);
 
-        int greenCenterZ = (int) (SIZE_Z * 0.92f);
+        int greenCenterZ = (int) (SIZE_Z * 0.85f);
         float greenOffset = (rng.nextFloat() - 0.5f) * (SIZE_X * 0.5f);
         int greenCenterX = MathUtils.clamp((int) (SIZE_X / 2 + greenOffset), 20, SIZE_X - 20);
 
@@ -150,7 +150,10 @@ public class ClassicGenerator implements ITerrainGenerator {
             data.setWaterLevel(-2.0f);
         } else if (flags.isCraterFields) {
             data.setWaterLevel(-10.0f);
-            this.craters = processor.generateCraterField(map, h, (int)(SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15));
+            this.craters = processor.generateCraterField(map, h, (int) (SIZE_Z / 50.0f * 2.5f) + rng.nextInt(15));
+        } else if (flags.isRoughBluffs) {
+            data.setWaterLevel(-1f);
+            processor.generateBeachBLuffs(map, h, gX, gZ, -2f);
         } else if (flags.isPlungeCenotes) {
             data.setWaterLevel(-8.0f);
 
@@ -175,10 +178,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         smoothGreenBorders(map, h, flags.isPathDependent);
         if (flags.isMogulHighlands) processor.applyFairwayGaussianSmoothing(map, h);
 
-        // 4. Fairway protection
-        if (flags.isIslandMap || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
-            processor.applyFairwayWaterBuffer(map, h, water, 3.0f);
-        }
+        processor.applyFairwayWaterBuffer(map, h, water, 3.0f);
 
         processor.applySlopeBasedStone(map, h, 0.35f);
 
@@ -243,7 +243,10 @@ public class ClassicGenerator implements ITerrainGenerator {
                         if (nx >= 0 && nx < SIZE_X && nz >= 0 && nz < SIZE_Z) {
                             Terrain.TerrainType t = map[nx][nz];
                             boolean neighborIsPath = (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE);
-                            if (isPath != neighborIsPath) { neighborIsOpposite = true; break; }
+                            if (isPath != neighborIsPath) {
+                                neighborIsOpposite = true;
+                                break;
+                            }
                         }
                     }
                     if (neighborIsOpposite) break;
@@ -296,8 +299,11 @@ public class ClassicGenerator implements ITerrainGenerator {
             float treeChance = 1.0f;
             for (CraterRecord crater : craters) {
                 float dist = (float) Math.sqrt(Math.pow(tx - crater.x, 2) + Math.pow(tz - crater.z, 2));
-                if (dist < crater.radius) { treeChance = 0; break; }
-                else if (dist < crater.radius * 2.0f) treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
+                if (dist < crater.radius) {
+                    treeChance = 0;
+                    break;
+                } else if (dist < crater.radius * 2.0f)
+                    treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
             }
             if (rng.nextFloat() > treeChance) continue;
             float tH = (isCliff ? cliffDelta : data.getTreeHeight()) * (0.8f + rng.nextFloat() * 0.3f);
@@ -315,7 +321,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                 boolean isGreen = map[x][z] == Terrain.TerrainType.GREEN;
                 boolean isIslandRough = !skipRough && data.getArchetype() == LevelData.Archetype.ISLAND_COAST && map[x][z] == Terrain.TerrainType.ROUGH;
                 if ((isGreen || isIslandRough) && isBorderTile(x, z, map)) {
-                    float avg = 0; int kIdx = 0;
+                    float avg = 0;
+                    int kIdx = 0;
                     for (int dx = -1; dx <= 1; dx++) {
                         for (int dz = -1; dz <= 1; dz++) {
                             int nx = MathUtils.clamp(x + dx, 0, SIZE_X - 1), nz = MathUtils.clamp(z + dz, 0, SIZE_Z - 1);
@@ -333,7 +340,8 @@ public class ClassicGenerator implements ITerrainGenerator {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 int nx = x + dx, nz = z + dz;
-                if (nx >= 0 && nx < map.length && nz >= 0 && nz < map[0].length && map[nx][nz] != map[x][z]) return true;
+                if (nx >= 0 && nx < map.length && nz >= 0 && nz < map[0].length && map[nx][nz] != map[x][z])
+                    return true;
             }
         }
         return false;
@@ -386,7 +394,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
         if (data.getMinFairwayWidth() <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
-        else processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
+        else
+            processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
     }
 
     private float calculateGreenUndulation(int x, int z) {
@@ -402,20 +411,37 @@ public class ClassicGenerator implements ITerrainGenerator {
         float wX = x * SCALE + off1, wZ = z * SCALE + off2;
         return switch (algo) {
             case MULTI_WAVE -> processor.generateMultiWaveNoise(wX, wZ, freq) * und * maxH * 2.5f;
-            case TERRACED -> Math.signum(processor.generateMultiWaveNoise(wX, wZ, freq)) * (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 0.4f) * und * maxH * 2.5f;
-            case MOUNDS -> (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 1.5f) * und * maxH * 4.0f;
-            case RAISED_FAIRWAY, SUNKEN_FAIRWAY -> processor.generateMultiWaveNoise(wX, wZ, freq * 0.5f) * und * maxH * 1.5f;
+            case TERRACED ->
+                    Math.signum(processor.generateMultiWaveNoise(wX, wZ, freq)) * (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 0.4f) * und * maxH * 2.5f;
+            case MOUNDS ->
+                    (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 1.5f) * und * maxH * 4.0f;
+            case RAISED_FAIRWAY, SUNKEN_FAIRWAY ->
+                    processor.generateMultiWaveNoise(wX, wZ, freq * 0.5f) * und * maxH * 1.5f;
+            case CRAGGY_RIDGES -> {
+                float noise = processor.generateMultiWaveNoise(wX, wZ, freq);
+                yield (1.0f - Math.abs(noise)) * und * maxH * 3.0f;
+            }
+            case DUNES -> {
+                float noise = processor.generateMultiWaveNoise(wX, wZ, freq);
+                yield Math.signum(noise) * (noise * noise) * und * maxH * 3.5f;
+            }
+            case PLATEAU -> {
+                float noise = processor.generateMultiWaveNoise(wX, wZ, freq);
+                float shelf = MathUtils.clamp(noise * 2.0f, -0.5f, 0.5f);
+                yield shelf * und * maxH * 4.0f;
+            }
             default -> (MathUtils.sin(wX * freq) * 2.0f + MathUtils.cos(wZ * freq * 0.6f) * 1.7f) * und * maxH;
         };
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
             isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
             isCraterFields = data.getArchetype() == LevelData.Archetype.CRATER_FIELDS;
+            isRoughBluffs = data.getArchetype() == LevelData.Archetype.ROUGH_HOUGH_BLUFFS;
             isMogulHighlands = data.getArchetype() == LevelData.Archetype.MOGUL_HIGHLANDS;
             isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
             isPlungeCenotes = data.getArchetype() == LevelData.Archetype.PLUNGE_CENOTES;
