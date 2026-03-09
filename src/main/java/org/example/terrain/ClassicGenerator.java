@@ -19,6 +19,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final CenoteGenerator cenoteGenerator;
     private final CoastlineGenerator coastlineGenerator;
     private final BeachBluffsGenerator beachBluffsGenerator;
+    private final WhistlingIslesGenerator whistlingIslesGenerator;
     private final CraterGenerator craterGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
@@ -61,6 +62,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.coastlineGenerator = new CoastlineGenerator();
         this.beachBluffsGenerator = new BeachBluffsGenerator(data, rng,waveAngles, waveFreqs, waveAmps, waveOffsets);
         this.craterGenerator = new CraterGenerator(rng);
+        this.whistlingIslesGenerator = new WhistlingIslesGenerator(data, rng,waveAngles, waveFreqs, waveAmps, waveOffsets);
     }
 
     public LevelData getData() {
@@ -163,6 +165,9 @@ public class ClassicGenerator implements ITerrainGenerator {
         } else if (flags.isRoughBluffs) {
             data.setWaterLevel(-1f);
             beachBluffsGenerator.generateBeachBLuffs(map, h, gX, gZ, -2f);
+        } else if (flags.isWhistlingIsles) {
+            data.setWaterLevel(0f);
+            whistlingIslesGenerator.generateWhistlingIsles(map, h, gX, gZ, 0f);
         } else if (flags.isPlungeCenotes) {
             data.setWaterLevel(-8.0f);
 
@@ -301,7 +306,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             int tx = rng.nextInt(SIZE_X - 1), tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
             if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
-            if (worldY < water + 0.5f || (map[tx][tz] != Terrain.TerrainType.ROUGH)) continue;
+            if (worldY < water + 0.1f || (map[tx][tz] != Terrain.TerrainType.ROUGH)) continue;
             float slope = (float) Math.sqrt(Math.pow(heights[tx + 1][tz] - worldY, 2) + Math.pow(heights[tx][tz + 1] - worldY, 2));
             if (slope > 1.2f) continue;
 
@@ -444,13 +449,14 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
             isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
             isCraterFields = data.getArchetype() == LevelData.Archetype.CRATER_FIELDS;
             isRoughBluffs = data.getArchetype() == LevelData.Archetype.ROUGH_HOUGH_BLUFFS;
+            isWhistlingIsles = data.getArchetype() == LevelData.Archetype.WHISTLING_ISLES;
             isMogulHighlands = data.getArchetype() == LevelData.Archetype.MOGUL_HIGHLANDS;
             isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
             isPlungeCenotes = data.getArchetype() == LevelData.Archetype.PLUNGE_CENOTES;

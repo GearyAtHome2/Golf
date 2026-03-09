@@ -72,7 +72,7 @@ public class BallPhysics {
                 efficiency = MathUtils.clamp(efficiency, 0, 1);
                 efficiency *= efficiency;
 
-                float upwardImpulse = (speed * speed) * 0.0034f * efficiency;
+                float upwardImpulse = (speed * speed) * 0.005f * efficiency;
 
                 float oldVy = velocity.y;
                 velocity.y += upwardImpulse;

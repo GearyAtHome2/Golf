@@ -8,7 +8,7 @@ public class LevelData {
         STANDARD_LINKS,
         ISLAND_COAST,
         CLIFFSIDE_BLUFF,
-        REDWOOD_VALLEY,
+        REDWOOD_FOREST,
         MOGUL_HIGHLANDS,
         BUSH_WORLD,
         CRATER_FIELDS,
@@ -17,7 +17,8 @@ public class LevelData {
         MONOLITH_PLAINS,
         PLUNGE_CENOTES,
         ROUGH_HOUGH_BLUFFS,
-        WETLANDS
+        WETLANDS,
+        WHISTLING_ISLES
     }
 
     public enum TerrainAlgorithm {

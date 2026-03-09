@@ -27,8 +27,6 @@ public class BeachBluffsGenerator {
         this.waveOffsets = waveOffsets;
     }
 
-    /* --- BLUFFS & BEACHES --- */
-
     public void generateBeachBLuffs(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ, float water) {
         int SX = map.length, SZ = map[0].length;
         List<Vector3> points = new ArrayList<>();

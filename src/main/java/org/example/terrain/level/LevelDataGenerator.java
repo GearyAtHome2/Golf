@@ -5,8 +5,6 @@ import org.example.terrain.Terrain.TreeScheme;
 
 import java.util.*;
 
-import static org.example.terrain.level.LevelData.Archetype.*;
-
 public class LevelDataGenerator {
 
     public static LevelData createRandomLevelData() {
@@ -20,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = ROUGH_HOUGH_BLUFFS;
+//        selectedType = REDWOOD_VALLEY;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -60,7 +58,7 @@ public class LevelDataGenerator {
                 algo = LevelData.TerrainAlgorithm.RAISED_FAIRWAY;
                 scheme = TreeScheme.AUTUMN_MAPLE;
                 break;
-            case REDWOOD_VALLEY:
+            case REDWOOD_FOREST:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
                 scheme = TreeScheme.REDWOOD;
                 break;
@@ -70,6 +68,10 @@ public class LevelDataGenerator {
                 break;
             case WETLANDS:
                 algo = LevelData.TerrainAlgorithm.DUNES;
+                scheme = TreeScheme.OAK;
+                break;
+            case WHISTLING_ISLES:
+                algo = LevelData.TerrainAlgorithm.CRAGGY_RIDGES;
                 scheme = TreeScheme.OAK;
                 break;
             default:
@@ -111,7 +113,7 @@ public class LevelDataGenerator {
                 islands = 0.1f;
                 cohesion = 0.63f;
                 distance = Math.round(450 + r.nextFloat() * 100);
-                par = 6;
+                par = 5;
                 break;
             case CRATER_FIELDS:
                 baseDifficultyIndex = 2f;
@@ -133,7 +135,7 @@ public class LevelDataGenerator {
                 distance = Math.round(500 + r.nextFloat() * 150);
                 par = distance < 600 ? 4 : 5;
                 break;
-            case REDWOOD_VALLEY:
+            case REDWOOD_FOREST:
                 baseDifficultyIndex = 3f;
                 teeH = 5.0f + r.nextFloat() * 5.0f;
                 greenH = 5.0f + r.nextFloat() * 5.0f;
@@ -145,16 +147,16 @@ public class LevelDataGenerator {
                 hillFreq = 0.025f;
                 maxH = 5.0f;
                 treeDensity = 0.26f;
-                maxFairwayWidth = 35.0f;
-                minFairwayWidth = 25.0f;
-                fairwayWiggle = 0.25f + r.nextFloat() * 0.2f;
+                maxFairwayWidth = 45.0f;
+                minFairwayWidth = 20.0f;
+                fairwayWiggle = 0.08f + r.nextFloat() * 0.02f;
                 islands = 0.0f;
                 cohesion = 0.95f;
                 distance = Math.round(550 + r.nextFloat() * 200);
                 par = 5;
                 break;
             case CLIFFSIDE_BLUFF:
-                baseDifficultyIndex = 3f;
+                baseDifficultyIndex = 2f;
                 teeH = 60.0f + r.nextFloat() * 30.0f;
                 greenH = 5.0f + r.nextFloat() * 10.0f;
                 windMin = 7f;
@@ -169,8 +171,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.20f + r.nextFloat() * 0.1f;
                 islands = 0.05f;
                 cohesion = 0.9f;
-                distance = Math.round(410 + r.nextFloat() * 120);
-                par = distance < 480 ? 4 : 5;
+                distance = Math.round(450 + r.nextFloat() * 120);
+                par = distance < 510 ? 4 : 5;
                 break;
             case BUSH_WORLD:
                 baseDifficultyIndex = 3f;
@@ -263,7 +265,7 @@ public class LevelDataGenerator {
                 par = 4;
                 break;
             case PLUNGE_CENOTES:
-                baseDifficultyIndex = 5f;
+                baseDifficultyIndex = 2f;
                 teeH = 5.0f + r.nextFloat() * 5.0f;
                 greenH = 0f;
                 windMin = 6f;
@@ -284,7 +286,7 @@ public class LevelDataGenerator {
                 par = 4;
                 break;
             case WETLANDS:
-                baseDifficultyIndex = 1f;
+                baseDifficultyIndex = 5f;
                 teeH = 17.0f + r.nextFloat() * 2.0f;
                 greenH = 13.0f + r.nextFloat() * 3.0f;
                 windMin = 6f;
@@ -304,8 +306,29 @@ public class LevelDataGenerator {
                 distance = Math.round(250 + r.nextFloat() * 80);
                 par = 3;
                 break;
+            case WHISTLING_ISLES:
+                baseDifficultyIndex = 1f;
+                teeH = 0.2f;
+                greenH = 1.0f ;
+                windMin = 11f;
+                windMax = 18f;
+                treeH = 8.0f + r.nextFloat() * 2.0f;
+                treeDensity = 0.98f;
+                foliageR = 3.0f;
+                trunkR = 0.5f;
+                hillFreq = 0.06f;
+                maxH = 4.0f;
+                maxFairwayWidth = 50f;
+                minFairwayWidth = 28;
+                undulation = 1.4f;
+                fairwayWiggle = 0.1f + r.nextFloat() * 0.1f;
+                islands = 0.0f;
+                cohesion = 1f;
+                distance = Math.round(600 + r.nextFloat() * 100);
+                par = 5;
+                break;
             case ROUGH_HOUGH_BLUFFS:
-                baseDifficultyIndex = 6f;
+                baseDifficultyIndex = 2f;
                 teeH = 17.0f + r.nextFloat() * 2.0f;
                 greenH = 13.0f + r.nextFloat() * 3.0f;
                 windMin = 8f;
@@ -348,7 +371,7 @@ public class LevelDataGenerator {
         finalShotIndex -= (actualWindSpeed / 8.0f);
         finalShotIndex -= (45.0f - maxFairwayWidth) * 0.1f;
 
-        if (selectedType == LevelData.Archetype.REDWOOD_VALLEY || selectedType == LevelData.Archetype.CLIFFSIDE_BLUFF) {
+        if (selectedType == LevelData.Archetype.REDWOOD_FOREST || selectedType == LevelData.Archetype.CLIFFSIDE_BLUFF) {
             finalShotIndex -= (distance / 200.0f);
         }
 
