@@ -23,7 +23,7 @@ public class VictoryRenderer {
         int diff = shots - par;
 
         Color shoutColor = (shots == 1 || diff <= -2) ? Color.GOLD : (diff == -1 ? Color.CYAN : (diff == 0 ? Color.WHITE : (diff == 1 ? Color.ORANGE : Color.RED)));
-        
+
         font.getData().setScale(4.5f);
         font.setColor(shoutColor);
         font.draw(batch, shout, centerX - 180, viewport.getWorldHeight() - 60);
@@ -50,12 +50,15 @@ public class VictoryRenderer {
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(0, 0, 0, 0.75f);
-        shapeRenderer.rect(centerX - 300, centerY - 240, 600, 460);
+
+        // Modal is now significantly taller (540px) and centered on Y
+        shapeRenderer.rect(centerX - 300, centerY - 270, 600, 540);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         batch.begin();
-        renderScoreTable(batch, font, compScore, centerX, centerY + 180);
+        // Start table at centerY + 230 to fit all 18 holes + footer comfortably
+        renderScoreTable(batch, font, compScore, centerX, centerY + 230);
 
         if (compScore.isCourseComplete()) {
             int totalDiff = compScore.getTotalToPar();
@@ -63,20 +66,21 @@ public class VictoryRenderer {
             String handicapStr = (handicapValue > 0) ? "+" + handicapValue : String.valueOf(handicapValue);
             font.getData().setScale(1.8f);
             font.setColor(Color.GOLD);
-            font.draw(batch, "YOUR HANDICAP: " + handicapStr, centerX - 150, centerY - 200);
+            font.draw(batch, "YOUR HANDICAP: " + handicapStr, centerX - 150, centerY - 180);
         }
 
         font.getData().setScale(1.5f);
         font.setColor(Color.YELLOW);
         String prompt = compScore.isCourseComplete() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
-        font.draw(batch, prompt, centerX - 210, centerY - 270);
+        font.draw(batch, prompt, centerX - 210, centerY - 240);
         batch.end();
     }
 
     private void renderScoreTable(SpriteBatch batch, BitmapFont font, CompetitiveScore compScore, float x, float y) {
         float startX = x - 260;
-        float rowH = 20f;
-        font.getData().setScale(1.0f);
+        float rowH = 20f; // Restored original spacing
+
+        font.getData().setScale(1.0f); // Restored original scale
         font.setColor(Color.LIGHT_GRAY);
         font.draw(batch, "HOLE", startX, y);
         font.draw(batch, "PAR", startX + 80, y);

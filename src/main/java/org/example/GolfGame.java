@@ -385,7 +385,7 @@ public class GolfGame extends ApplicationAdapter {
             if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
                 menuSelection = (menuSelection + 1) % 5;
 
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
                 if (menuSelection == 0) { currentState = GameState.PLAYING; initLevel(); }
                 else if (menuSelection == 1) {
                     currentState = GameState.COMPETITIVE;
