@@ -14,11 +14,11 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 public class InstructionRenderer {
 
     private float instructionScrollY = 0;
-    private final float MAX_SCROLL = 720f;
+    private final float MAX_SCROLL = 1400f; // Increased to accommodate the Clubs section
 
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport) {
         float delta = Gdx.graphics.getDeltaTime();
-        float scrollSpeed = 350f * delta;
+        float scrollSpeed = 450f * delta;
 
         if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
             instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
@@ -58,6 +58,7 @@ public class InstructionRenderer {
             font.draw(batch, "HOW TO PLAY", centerX - 140, currentY);
             currentY -= 80;
 
+            // --- CONTROLS ---
             font.getData().setScale(1.5f);
             font.setColor(Color.CYAN);
             font.draw(batch, "CONTROLS", centerX - 350, currentY);
@@ -69,13 +70,12 @@ public class InstructionRenderer {
                     "[WASD] - Aim Contact Point (Spin and loft)",
                     "[RCLICK + DRAG] - Aim Direction",
                     "[SCROLL] - Change Clubs",
-                    "[SPACE] - Hold for power/Lock in shot minigame",
+                    "[SPACE] - Hold for power / Lock in shot minigame",
                     "[LTAB] - Map Oversight View",
                     " * You can use LClick and drag to rotate, RClick to pan",
                     "[R] - Reset Ball to last position",
-                    "[N] - Next map",
-                    " * Disabled during competitive play",
-                    "[F] - User Rangefinder",
+                    "[N] - Next map (Disabled during competitive play)",
+                    "[F] - Use Rangefinder",
                     "[ESC] - Pause Menu",
                     "[UP/DOWN] - Change game speed"
             };
@@ -86,6 +86,36 @@ public class InstructionRenderer {
 
             currentY -= 50;
 
+            // --- CLUBS ---
+            font.getData().setScale(1.5f);
+            font.setColor(Color.CYAN);
+            font.draw(batch, "THE BAG (CLUBS)", centerX - 350, currentY);
+            currentY -= 40;
+
+            font.getData().setScale(1.1f);
+            font.setColor(Color.WHITE);
+            String[][] clubInfo = {
+                    {"DRIVER", "Maximum power and Tee bonus. High difficulty from the fairway."},
+                    {"WOODS (3/5)", "Long range from the fairway. Lower loft for more roll-out."},
+                    {"2-IRON", "Long and piercing flight. Very high skill requirement."},
+                    {"HYBRID", "The 'rescue' club. Easy to hit with respectable, predictable distance."},
+                    {"IRONS (5-9)", "Old faithfuls. Higher numbers mean more loft and control."},
+                    {"WEDGES (P/G/S)", "Precision clubs. Very forgiving sweet spots, high loft."},
+                    {"LOB WEDGE", "Extreme loft for clearing obstacles. Requires high precision."},
+                    {"PUTTER", "Zero loft. Designed for the green, but works for 'Texas Wedges'."}
+            };
+
+            for (String[] club : clubInfo) {
+                font.setColor(Color.GOLD);
+                font.draw(batch, club[0] + ": ", centerX - 330, currentY);
+                font.setColor(Color.WHITE);
+                font.draw(batch, club[1], centerX - 180, currentY);
+                currentY -= 35;
+            }
+
+            currentY -= 50;
+
+            // --- GAMEPLAY ---
             font.getData().setScale(1.5f);
             font.setColor(Color.CYAN);
             font.draw(batch, "GAMEPLAY", centerX - 350, currentY);
@@ -106,11 +136,14 @@ public class InstructionRenderer {
                     "to maximize power and minimize shot randomness. Hitting the",
                     "innermost sweet spot gives spin+power boosts and 100% accuracy.",
                     "You can left click to cancel the minigame at any time, and ",
-                    "adjust your aim (not aim contact) freely within the minigame",
+                    "adjust your aim freely within the minigame.",
                     "--------------------------------------------------------------",
                     "TERRAIN: Different surfaces affect ball friction and the",
                     "difficulty of the swing. A sloped surface will kick the ",
-                    "ball trajectory left or right."
+                    "ball trajectory left or right.",
+                    "--------------------------------------------------------------",
+                    "WIND: High wind speeds apply additional drag as well as",
+                    "ball displacement. Wind is more effective at higher altitudes."
             };
             for (String line : gameplay) {
                 font.draw(batch, line, centerX - 330, currentY);
