@@ -419,15 +419,19 @@ public class GolfGame extends ApplicationAdapter {
             else { previousState = currentState; currentState = GameState.PAUSED; }
         }
 
-        // ... (rest of your existing Key logic: N, R, F2, EQUALS, MINUS) ...
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) {
-            if (currentState == GameState.COMPETITIVE) {
+            // 1. If we are in COMPETITIVE mode, we strictly control the Reset/Next Hole key
+            if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
                 if (isVictory && currentHoleIndex + 1 < competitiveCourse.size()) {
                     currentHoleIndex++;
                     competitiveScore.setCurrentHoleIndex(currentHoleIndex);
+                    if (currentState == GameState.PAUSED) {
+                        currentState = GameState.COMPETITIVE;
+                    }
                     initLevel();
                 }
-            } else {
+            }
+            else {
                 if (currentState == GameState.PAUSED) currentState = previousState;
                 initLevel();
             }
@@ -437,11 +441,10 @@ public class GolfGame extends ApplicationAdapter {
         if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
             Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
         if (currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE || currentState == GameState.PRACTICE) {
-            // Keep your +/- keys
-            if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.UP))
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP))
                 gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
 
-            if (Gdx.input.isKeyJustPressed(Input.Keys.MINUS) || Gdx.input.isKeyJustPressed(Input.Keys.DOWN))
+            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN))
                 gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
         }
     }
