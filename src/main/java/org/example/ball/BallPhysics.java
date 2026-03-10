@@ -42,19 +42,16 @@ public class BallPhysics {
         float speedRef = airspeed / 20.0f;
         float dynamicLift = (speedRef * speedRef) * CL;
 
-        // Capture cross product
         temp.set(relativeVelocity).crs(spin).nor();
-        float rawCrsLen = temp.len();
-
-        // Directional check: This vector should always be perpendicular to airspeed
         temp.nor();
 
         float totalForce = -dynamicLift * (liftCoeff + sideCoeff);
-        Vector3 finalForce = temp.scl(totalForce);
+        return temp.scl(totalForce);
+    }
 
-        // Get normalized airspeed for directional comparison
-        temp2.set(relativeVelocity).nor();
-        return finalForce;
+    public static boolean checkWaterTransition(Vector3 position, Vector3 velocity, float waterLevel) {
+        float previousY = position.y - (velocity.y * 0.016f);
+        return previousY >= waterLevel && position.y < waterLevel;
     }
 
     public static void applyWaterPhysics(Vector3 position, Vector3 velocity, Vector3 spin, float waterLevel, float delta) {
@@ -66,23 +63,13 @@ public class BallPhysics {
             float speed = velocity.len();
             if (speed > 5.0f) {
                 float angleRad = (float) Math.asin(Math.abs(velocity.y) / speed);
-                float angleDeg = angleRad * MathUtils.radiansToDegrees;
-
                 float efficiency = MathUtils.cos(angleRad * 3.0f);
                 efficiency = MathUtils.clamp(efficiency, 0, 1);
                 efficiency *= efficiency;
 
                 float upwardImpulse = (speed * speed) * 0.005f * efficiency;
-
-                float oldVy = velocity.y;
                 velocity.y += upwardImpulse;
                 velocity.scl(0.85f);
-
-                String result = (velocity.y > 0) ? "SKIP SUCCESS" : "SKIP FAIL (SINK)";
-                Gdx.app.log("Physics", String.format(
-                        "MENISCUS [%s] | Spd: %.1f | Ang: %.1f | Eff: %.2f | Vy: %.2f -> %.2f",
-                        result, speed, angleDeg, efficiency, oldVy, velocity.y
-                ));
 
                 if (velocity.y > 0) return;
             }
@@ -91,19 +78,30 @@ public class BallPhysics {
         if (immersion <= 0) return;
         float speed = velocity.len();
         float waterLiftCoeff = 0.8f;
-        relativeVelocity.set(velocity);
         float surfaceSpeed = spin.len() * 0.02f;
         float spinRatio = surfaceSpeed / (speed + 0.1f);
         float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
         float dynamicLift = ((speed / 20.0f) * (speed / 20.0f)) * CL;
 
-        temp.set(relativeVelocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * waterLiftCoeff * immersion);
+        temp.set(velocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * waterLiftCoeff * immersion);
         velocity.add(temp.scl(delta));
 
         velocity.y += 6.5f * immersion * delta;
         float dragStrength = 2.4f * immersion * (1.0f + speed * 0.12f);
         velocity.scl(MathUtils.clamp(1.0f - (dragStrength * delta), 0.05f, 1.0f));
         spin.scl(MathUtils.clamp(1.0f - (12.0f * immersion * delta), 0f, 1.0f));
+    }
+
+    public static boolean handleTrunkCollision(Vector3 pos, Vector3 vel, Vector3 spin, float dx, float dz) {
+        temp.set(dx, 0, dz).nor();
+        float speedXZ = temp2.set(vel.x, 0, vel.z).len();
+        vel.x = temp.x * speedXZ;
+        vel.z = temp.z * speedXZ;
+        vel.scl(0.8f);
+        spin.scl(0.2f);
+        pos.x += temp.x * 0.05f;
+        pos.z += temp.z * 0.05f;
+        return true;
     }
 
     public static Vector3 getRollingFriction(Vector3 velocity, Vector3 normal, Terrain.TerrainType type, float gravity) {
@@ -119,31 +117,21 @@ public class BallPhysics {
     }
 
     public static Vector3 calculateBounceWithSpin(Vector3 velocity, Vector3 normal, Vector3 spin, float restitution, float friction, float softness) {
-        float initialHoriz = (float) Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-
         float vDotN = velocity.dot(normal);
-        temp.set(normal).scl(vDotN); // vNormal
+        temp.set(normal).scl(vDotN);
         Vector3 vTangent = new Vector3(velocity).sub(temp);
         Vector3 vNormalBounce = new Vector3(temp).scl(-restitution);
 
-        // 2. Spin-to-Velocity Transfer (Mechanical Bite)
         if (vTangent.len() > 0.1f) {
-            Vector3 tanDir = temp.set(vTangent).nor(); // Horizontal direction of travel
-            Vector3 sideDir = temp2.set(tanDir).crs(normal).nor(); // The "Axle" of the bounce
+            Vector3 tanDir = temp.set(vTangent).nor();
+            Vector3 sideDir = temp2.set(tanDir).crs(normal).nor();
 
-            // Project the actual spin vector onto our bounce axes
-            // How much is the ball spinning around the 'axle'? (Backspin/Topspin)
             float relativeBackspin = spin.dot(sideDir);
-
-            // How much is it spinning around the ground normal? (Sidespin/Rifling)
             float relativeSidespin = spin.dot(normal);
 
-            // Grip: Softness (grass depth) makes the ball bite more
             float grip = MathUtils.clamp(softness * 0.6f + friction * 0.2f, 0.1f, 0.95f);
-            float spinTransferMagnitude = 0.09f; // Increased slightly for visibility
+            float spinTransferMagnitude = 0.09f;
 
-            // Backspin (negative relativeBackspin) pushes the ball forward (check your sign preference here)
-            // If spin.dot(sideDir) is positive (Backspin), it should fight forward momentum
             float forwardKick = -relativeBackspin * spinTransferMagnitude * grip;
             float sideKick = relativeSidespin * spinTransferMagnitude * grip;
 
@@ -152,8 +140,7 @@ public class BallPhysics {
         }
 
         float speedLoss = (friction + softness) * 0.5f;
-        float frictionScale = MathUtils.clamp(1.0f - speedLoss, 0.4f, 0.98f);
-        vTangent.scl(frictionScale);
+        vTangent.scl(MathUtils.clamp(1.0f - speedLoss, 0.4f, 0.98f));
 
         return vTangent.add(vNormalBounce);
     }
@@ -176,9 +163,7 @@ public class BallPhysics {
             }
             if (mRot != 0) temp2.rotate(Vector3.Y, mRot);
 
-            // Monoliths are hard (Softness 0.05)
             vel.set(calculateBounceWithSpin(vel, temp2, spin, 0.45f, 0.3f, 0.05f));
-
             float dist = (float) Math.sqrt(distSq);
             pos.add(temp.set(temp2).scl(BALL_RADIUS - dist + 0.01f));
             return true;

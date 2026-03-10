@@ -76,9 +76,6 @@ public class CompetitiveScore {
         return true;
     }
 
-    /**
-     * Returns a formatted string for the HUD like "-2" or "E" or "+4"
-     */
     public String getToParString() {
         int toPar = getTotalToPar();
         if (toPar == 0) return "E";

@@ -78,7 +78,7 @@ public class HUD {
     private String shotFeedbackText = "";
     private Color shotFeedbackColor = Color.WHITE;
 
-    public AnimSpeed animSetting = AnimSpeed.SLOW;
+    public AnimSpeed animSetting = AnimSpeed.NONE;
     public GameDifficulty currentDifficulty = GameDifficulty.EASY;
     private boolean mainMenuRequested = false;
 

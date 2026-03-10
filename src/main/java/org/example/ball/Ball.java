@@ -1,16 +1,13 @@
 package org.example.ball;
 
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
-import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
-import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
-import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
-import com.badlogic.gdx.utils.Array;
 import org.example.terrain.Terrain;
+
+import java.util.List;
 
 public class Ball {
 
@@ -33,28 +30,14 @@ public class Ball {
     private static final float MAX_STEP_UP = 1.0f;
     private static final int SUB_STEPS = 4;
 
-    private final Model model;
-    private final ModelInstance instance;
     private final Vector3 position = new Vector3();
     private final Vector3 velocity = new Vector3();
     private final Vector3 spin = new Vector3();
     private final Vector3 lastStationaryPosition = new Vector3();
     private final Vector3 lastShotPosition = new Vector3();
 
-    private Model trailPointModel;
-    private ModelInstance trailInstance;
-    private final Array<TrailPoint> trail = new Array<>();
-
-    private Color activeTrailColor = new Color(Color.WHITE);
+    private final BallRenderer renderer;
     private boolean isGoodShot = false;
-
-    private static class TrailPoint {
-        Vector3 pos = new Vector3();
-        float life = 4.0f;
-        Color color = new Color();
-        float scaleMod = 1.0f;
-    }
-
     private State state = State.STATIONARY;
     private Interaction lastInteraction = Interaction.NONE;
     private float hitCooldown = 0f;
@@ -65,61 +48,51 @@ public class Ball {
     private final Vector3 vTangent = new Vector3();
 
     public Ball(Vector3 startPosition) {
-        ModelBuilder builder = new ModelBuilder();
-        model = builder.createSphere(BALL_RADIUS, BALL_RADIUS, BALL_RADIUS, 20, 20,
-                new Material(ColorAttribute.createDiffuse(Color.WHITE)),
-                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-        instance = new ModelInstance(model);
-
-        trailPointModel = builder.createSphere(0.08f, 0.08f, 0.08f, 8, 8,
-                new Material(ColorAttribute.createDiffuse(Color.WHITE), new BlendingAttribute(0.6f)),
-                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-        trailInstance = new ModelInstance(trailPointModel);
-
+        this.renderer = new BallRenderer(BALL_RADIUS);
         this.position.set(startPosition);
         this.lastStationaryPosition.set(startPosition);
         this.lastShotPosition.set(startPosition);
-        updateVisuals();
+        renderer.updateVisuals(position, state);
     }
 
     public void update(float delta, Terrain terrain, Vector3 baseWind) {
         if (state == State.STATIONARY) {
-            updateVisuals();
+            renderer.updateVisuals(position, state);
             return;
         }
 
         if (hitCooldown > 0) hitCooldown -= delta;
-        updateTrail(delta);
-        recordTrailPoint(1.0f);
+        renderer.updateTrail(delta);
+        renderer.recordTrailPoint(position, 1.0f);
 
         float subDelta = delta / SUB_STEPS;
         for (int i = 0; i < SUB_STEPS; i++) {
             processPhysicsStep(subDelta, terrain, baseWind);
             if (state == State.STATIONARY) break;
         }
-        updateVisuals();
-    }
-
-    public float getFlatDistanceToHole(Terrain terrain) {
-        if (terrain == null) return 0f;
-        Vector3 holePos = terrain.getHolePosition();
-        return Vector2.dst(position.x, position.z, holePos.x, holePos.z);
-    }
-
-    public float getShotDistance() {
-        return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
+        renderer.updateVisuals(position, state);
     }
 
     private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind) {
         float preStepY = position.y;
+        handleWaterTransition(terrain);
+        handleEnvironmentPhysics(delta, terrain, baseWind);
+        handleTreeCollisions(terrain, delta);
+        handleMonolithCollisions(terrain);
+        applyYConstraints(preStepY);
+    }
+
+    private void handleWaterTransition(Terrain terrain) {
         float waterLevel = terrain.getWaterLevel();
-
-        if (preStepY >= waterLevel && (position.y + velocity.y * delta) < waterLevel) {
+        if (BallPhysics.checkWaterTransition(position, velocity, waterLevel)) {
             lastInteraction = Interaction.WATER;
-            activeTrailColor.set(Color.CYAN);
-            spawnBurst(3, 1.5f);
+            renderer.getActiveTrailColor().set(Color.CYAN);
+            renderer.spawnBurst(position, 3, 1.5f);
         }
+    }
 
+    private void handleEnvironmentPhysics(float delta, Terrain terrain, Vector3 baseWind) {
+        float waterLevel = terrain.getWaterLevel();
         if (position.y < waterLevel + BALL_RADIUS) {
             lastInteraction = Interaction.WATER;
             BallPhysics.applyWaterPhysics(position, velocity, spin, waterLevel, delta);
@@ -135,47 +108,37 @@ public class Ball {
         } else {
             handleAirPhysicsWithSweep(delta, terrain, baseWind);
         }
+    }
 
-        handleTreeCollisions(terrain, delta);
-        handleMonolithCollisions(terrain);
-
+    private void applyYConstraints(float preStepY) {
         float stepYDelta = position.y - preStepY;
         if (Math.abs(stepYDelta) > 2.0f && hitCooldown <= 0f) {
             position.y = preStepY + MathUtils.clamp(stepYDelta, -1f, 1f);
         }
     }
 
-    private void handleMonolithCollisions(Terrain terrain) {
-        if (hitCooldown > 0) return;
-
-        for (Terrain.Monolith m : terrain.getMonoliths()) {
-            boolean hit = BallPhysics.handleMonolithCollision(
-                    position, velocity, spin,
-                    m.getPosition(), m.getWidth(), m.getHeight(), m.getDepth(), m.getRotationY()
-            );
-
-            if (hit) {
-                hitCooldown = 0.05f;
-                lastInteraction = Interaction.TERRAIN;
-                activeTrailColor.set(Color.DARK_GRAY);
-                break;
-            }
-        }
-    }
-
     private void handleAirPhysicsWithSweep(float delta, Terrain terrain, Vector3 baseWind) {
         state = State.AIR;
         Vector3 windAtHeight = BallPhysics.getWindAtHeight(baseWind, position.y);
+        applyAirForces(delta, windAtHeight);
 
+        tempV2.set(velocity).scl(delta);
+        if (!handleAirCollisions(terrain)) {
+            applyAirMovement(delta, terrain);
+        }
+        applySpinDrag(delta);
+    }
+
+    private void applyAirForces(float delta, Vector3 windAtHeight) {
         tempV1.setZero().add(BallPhysics.getGravityForce(GRAVITY))
                 .add(BallPhysics.getAirDrag(velocity, windAtHeight, AIR_DRAG_COEFF))
                 .add(BallPhysics.getMagnusForce(velocity, windAtHeight, spin, LIFT_COEFF, SIDE_COEFF));
-
         velocity.add(tempV1.scl(delta));
-        tempV2.set(velocity).scl(delta);
+    }
 
-        boolean collisionFound = false;
+    private boolean handleAirCollisions(Terrain terrain) {
         Vector3 bestNormal = new Vector3();
+        boolean collisionFound = false;
 
         for (float t = 0.33f; t <= 1.0f; t += 0.33f) {
             float checkX = position.x + (tempV2.x * t);
@@ -194,24 +157,34 @@ public class Ball {
         }
 
         if (collisionFound && hitCooldown <= 0f) {
-            Vector3 wallNormal = new Vector3(bestNormal.x, 0, bestNormal.z).nor();
-            if (wallNormal.len() < 0.1f) wallNormal.set(-velocity.x, 0, -velocity.z).nor();
-
-            velocity.set(BallPhysics.calculateBounceWithSpin(velocity, wallNormal, spin, BOUNCE_RESTITUTION, 0.4f, 0f));
-            position.add(tempV1.set(wallNormal).scl(0.15f));
-            hitCooldown = 0.05f;
-            lastInteraction = Interaction.TERRAIN;
-            activeTrailColor.lerp(Color.GRAY, 0.4f);
-        } else {
-            float nextHeight = terrain.getHeightAt(position.x + tempV2.x, position.z + tempV2.z) + BALL_RADIUS / 3;
-            if (position.y + tempV2.y < nextHeight && hitCooldown <= 0f) {
-                handleTerrainPhysics(delta, terrain, nextHeight);
-                position.add(tempV1.set(velocity).scl(delta));
-            } else {
-                position.add(tempV2);
-            }
+            applyWallBounce(bestNormal);
+            return true;
         }
+        return false;
+    }
 
+    private void applyWallBounce(Vector3 bestNormal) {
+        Vector3 wallNormal = new Vector3(bestNormal.x, 0, bestNormal.z).nor();
+        if (wallNormal.len() < 0.1f) wallNormal.set(-velocity.x, 0, -velocity.z).nor();
+
+        velocity.set(BallPhysics.calculateBounceWithSpin(velocity, wallNormal, spin, BOUNCE_RESTITUTION, 0.4f, 0f));
+        position.add(tempV1.set(wallNormal).scl(0.15f));
+        hitCooldown = 0.05f;
+        lastInteraction = Interaction.TERRAIN;
+        renderer.lerpTrailColor(Color.GRAY, 0.4f);
+    }
+
+    private void applyAirMovement(float delta, Terrain terrain) {
+        float nextHeight = terrain.getHeightAt(position.x + tempV2.x, position.z + tempV2.z) + BALL_RADIUS / 3;
+        if (position.y + tempV2.y < nextHeight && hitCooldown <= 0f) {
+            handleTerrainPhysics(delta, terrain, nextHeight);
+            position.add(tempV1.set(velocity).scl(delta));
+        } else {
+            position.add(tempV2);
+        }
+    }
+
+    private void applySpinDrag(float delta) {
         if (velocity.len() > 0.1f) {
             float spinDrag = 0.05f + (velocity.len() * velocity.len() * 0.0002f);
             spin.scl(1.0f - (spinDrag * delta));
@@ -221,38 +194,20 @@ public class Ball {
     private void handleTerrainPhysics(float delta, Terrain terrain, float terrainHeight) {
         Vector3 normal = terrain.getNormalAt(position.x, position.z).nor();
         Terrain.TerrainType type = terrain.getTerrainTypeAt(position.x, position.z);
-        boolean isWall = BallPhysics.isWallCollision(normal, 45f);
 
-        if (terrainHeight - position.y > MAX_STEP_UP) {
-            tempV1.set(normal.x, 0, normal.z).nor();
-            if (tempV1.len() < 0.1f) position.y = terrainHeight;
-            else {
-                position.add(tempV1.scl(0.4f));
-                velocity.set(BallPhysics.calculateBounceWithSpin(velocity, tempV1, spin, 0.3f, type.kineticFriction, type.softness));
-            }
-            return;
-        }
-
-        // LAUNCH CHECK: If moving away from the normal faster than gravity can keep us down
-        float vDotN = velocity.dot(normal);
-        if (state == State.ROLLING && vDotN > 1.5f && type != Terrain.TerrainType.GREEN) {
+        if (handleStepUp(terrainHeight, normal, type)) return;
+        if (shouldLaunch(normal, type)) {
             state = State.AIR;
             return;
         }
 
-        if (position.y < terrainHeight && !isWall) position.y = terrainHeight;
-
-        if (state == State.ROLLING) {
-            vNormal.set(normal).scl(vDotN);
-            velocity.sub(vNormal);
-            vTangent.set(velocity);
-            vNormal.setZero();
-        } else {
-            vNormal.set(normal).scl(vDotN);
-            vTangent.set(velocity).sub(vNormal);
+        if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f)) {
+            position.y = terrainHeight;
         }
 
-        if (state != State.ROLLING && Math.abs(vDotN) > MIN_BOUNCE_VY) {
+        calculateTerrainVelocities(normal);
+
+        if (state != State.ROLLING && Math.abs(velocity.dot(normal)) > MIN_BOUNCE_VY) {
             applyBounce(normal, type);
         } else {
             state = State.ROLLING;
@@ -263,12 +218,43 @@ public class Ball {
         checkStationaryCondition(type, normal);
     }
 
+    private boolean handleStepUp(float terrainHeight, Vector3 normal, Terrain.TerrainType type) {
+        if (terrainHeight - position.y > MAX_STEP_UP) {
+            tempV1.set(normal.x, 0, normal.z).nor();
+            if (tempV1.len() < 0.1f) position.y = terrainHeight;
+            else {
+                position.add(tempV1.scl(0.4f));
+                velocity.set(BallPhysics.calculateBounceWithSpin(velocity, tempV1, spin, 0.3f, type.kineticFriction, type.softness));
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean shouldLaunch(Vector3 normal, Terrain.TerrainType type) {
+        float vDotN = velocity.dot(normal);
+        return state == State.ROLLING && vDotN > 1.5f && type != Terrain.TerrainType.GREEN;
+    }
+
+    private void calculateTerrainVelocities(Vector3 normal) {
+        float vDotN = velocity.dot(normal);
+        if (state == State.ROLLING) {
+            vNormal.set(normal).scl(vDotN);
+            velocity.sub(vNormal);
+            vTangent.set(velocity);
+            vNormal.setZero();
+        } else {
+            vNormal.set(normal).scl(vDotN);
+            vTangent.set(velocity).sub(vNormal);
+        }
+    }
+
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
         float friction = type.kineticFriction;
         float frictionImpact = (friction - 0.2f) * 0.08f;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - frictionImpact, 0.05f, BOUNCE_RESTITUTION);
 
-        velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction ,type.softness ));
+        velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction, type.softness));
 
         float vDotN = velocity.dot(normal);
         vNormal.set(normal).scl(vDotN);
@@ -280,8 +266,8 @@ public class Ball {
         float spinLoss = 0.4f + (friction * 0.3f);
         spin.scl(MathUtils.clamp(1.0f - spinLoss, 0f, 1.0f));
 
-        if (isGoodShot) spawnBurst(5, 2.0f);
-        activeTrailColor.lerp(Color.GRAY, 0.25f);
+        if (isGoodShot) renderer.spawnBurst(position, 5, 2.0f);
+        renderer.lerpTrailColor(Color.GRAY, 0.25f);
     }
 
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, Terrain.TerrainType type, float delta) {
@@ -289,11 +275,10 @@ public class Ball {
         Vector3 friction = BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY);
 
         tangentVel.add(slopeForce.scl(delta)).add(friction.scl(delta));
-
         spin.setZero();
 
-        if (activeTrailColor.r > 0.3f || activeTrailColor.g > 0.3f) {
-            activeTrailColor.lerp(new Color(0.2f, 0.2f, 0.2f, 1f), delta * 1.5f);
+        if (renderer.getActiveTrailColor().r > 0.3f || renderer.getActiveTrailColor().g > 0.3f) {
+            renderer.lerpTrailColor(new Color(0.2f, 0.2f, 0.2f, 1f), delta * 1.5f);
         }
     }
 
@@ -304,56 +289,56 @@ public class Ball {
             velocity.setZero();
             spin.setZero();
             state = State.STATIONARY;
-            activeTrailColor.set(Color.WHITE);
+            renderer.getActiveTrailColor().set(Color.WHITE);
             lastStationaryPosition.set(position);
         }
     }
 
     private void handleTreeCollisions(Terrain terrain, float delta) {
-        for (Terrain.Tree tree : terrain.getTrees()) {
+        if (hitCooldown > 0) return;
+        List<Terrain.Tree> nearbyTrees = terrain.getTreesAt(position.x, position.z);
+        for (Terrain.Tree tree : nearbyTrees) {
             Vector3 treePos = tree.getPosition();
             float dx = position.x - treePos.x, dz = position.z - treePos.z;
             float distXZ = (float) Math.sqrt(dx * dx + dz * dz);
 
             if (distXZ < BALL_RADIUS + tree.getTrunkRadius() && position.y < treePos.y + tree.getTrunkHeight() && position.y > treePos.y) {
-                tempV1.set(dx, 0, dz).nor();
-                float speedXZ = tempV2.set(velocity.x, 0, velocity.z).len();
-                velocity.x = tempV1.x * speedXZ;
-                velocity.z = tempV1.z * speedXZ;
-                velocity.scl(0.8f);
-                spin.scl(0.2f);
-                position.x += tempV1.x * 0.05f;
-                position.z += tempV1.z * 0.05f;
-                lastInteraction = Interaction.TERRAIN;
-                activeTrailColor.set(Color.BROWN);
+                if (BallPhysics.handleTrunkCollision(position, velocity, spin, dx, dz)) {
+                    lastInteraction = Interaction.TERRAIN;
+                    renderer.getActiveTrailColor().set(Color.BROWN);
+                }
                 continue;
             }
 
             if (tree.isInsideFoliage(position, BALL_RADIUS)) {
                 lastInteraction = Interaction.LEAVES;
                 BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE);
-                activeTrailColor.lerp(Color.FOREST, 0.2f);
+                renderer.lerpTrailColor(Color.FOREST, 0.2f);
+            }
+        }
+    }
+
+    private void handleMonolithCollisions(Terrain terrain) {
+        if (hitCooldown > 0) return;
+        List<Terrain.Monolith> nearbyMonoliths = terrain.getMonolithsAt(position.x, position.z);
+        for (Terrain.Monolith m : nearbyMonoliths) {
+            boolean hit = BallPhysics.handleMonolithCollision(position, velocity, spin, m.getPosition(), m.getWidth(), m.getHeight(), m.getDepth(), m.getRotationY());
+            if (hit) {
+                hitCooldown = 0.05f;
+                lastInteraction = Interaction.TERRAIN;
+                renderer.getActiveTrailColor().set(Color.DARK_GRAY);
+                break;
             }
         }
     }
 
     public void hit(Vector3 shootDir, float power, float loft, float powerMult, MinigameResult.Rating rating) {
         if (state != State.STATIONARY) return;
-
         capturePosition();
         spin.setZero();
 
-        isGoodShot = false;
-        switch (rating) {
-            case PERFECTION -> { activeTrailColor.set(Color.PURPLE); isGoodShot = true; }
-            case SUPER -> { activeTrailColor.set(Color.PINK); isGoodShot = true; }
-            case GREAT -> { activeTrailColor.set(Color.GOLD); isGoodShot = true; }
-            case GOOD -> activeTrailColor.set(Color.GREEN);
-            case POOR -> activeTrailColor.set(Color.GRAY);
-            case WANK -> activeTrailColor.set(Color.ORANGE);
-            case SHIT -> activeTrailColor.set(Color.BROWN);
-            default -> activeTrailColor.set(Color.WHITE);
-        }
+        isGoodShot = (rating == MinigameResult.Rating.PERFECTION || rating == MinigameResult.Rating.SUPER || rating == MinigameResult.Rating.GREAT);
+        renderer.setShotRatingColor(rating);
 
         float finalSpeed = power * powerMult;
         float angleRad = loft * MathUtils.degreesToRadians;
@@ -363,96 +348,43 @@ public class Ball {
         velocity.x *= hLen;
         velocity.z *= hLen;
         velocity.scl(finalSpeed);
+
         state = (loft < 1.0f) ? State.ROLLING : State.AIR;
         hitCooldown = (state == State.ROLLING) ? 0.02f : 0.1f;
-        trail.clear();
+        renderer.resetTrail(renderer.getActiveTrailColor());
     }
 
-    public void capturePosition() {
-        lastShotPosition.set(this.position);
-    }
+    public void capturePosition() { lastShotPosition.set(this.position); }
 
     public void resetToLastPosition() {
         this.position.set(lastShotPosition);
         this.velocity.setZero();
         this.spin.setZero();
         this.state = State.STATIONARY;
-        this.trail.clear();
-        this.activeTrailColor.set(Color.WHITE);
-        updateVisuals();
+        renderer.resetTrail(Color.WHITE);
+        renderer.updateVisuals(position, state);
     }
 
-    public boolean isInWater(Terrain terrain) {
-        return position.y < terrain.getWaterLevel();
-    }
+    public boolean isInWater(Terrain terrain) { return position.y < terrain.getWaterLevel(); }
 
     public boolean checkVictory(Vector3 holePos, float holeSize) {
-        float holeRadius = holeSize / 2f;
         float distToHole = position.dst(holePos);
-        if (distToHole < holeRadius) {
+        if (distToHole < holeSize / 2f) {
             if (state == State.ROLLING || state == State.CONTACT) return velocity.len() < 12f;
             if (state == State.AIR && (position.y - BALL_RADIUS - holePos.y) < 0f) return true;
         }
         return false;
     }
 
-    private void updateVisuals() {
-        instance.transform.setToTranslation(position);
-        Color color = switch (state) {
-            case AIR -> Color.WHITE;
-            case CONTACT -> Color.GREEN;
-            case ROLLING -> Color.RED;
-            case STATIONARY -> Color.ORANGE;
-        };
-        for (Material m : instance.materials) ((ColorAttribute) m.get(ColorAttribute.Diffuse)).color.set(color);
-    }
-
-    public void render(ModelBatch batch, Environment env) {
-        batch.render(instance, env);
-    }
-
-    public void renderTrail(ModelBatch batch, Environment env) {
-        for (TrailPoint p : trail) {
-            float lifeRatio = MathUtils.clamp(p.life / 4.0f, 0f, 1f);
-            float scale = (0.2f + (lifeRatio * 0.8f)) * p.scaleMod;
-            trailInstance.transform.setToTranslation(p.pos).scale(scale, scale, scale);
-            ((ColorAttribute) trailInstance.materials.get(0).get(ColorAttribute.Diffuse)).color.set(p.color);
-            ((BlendingAttribute) trailInstance.materials.get(0).get(BlendingAttribute.Type)).opacity = lifeRatio * 0.7f;
-            batch.render(trailInstance, env);
-        }
-    }
-
-    private void updateTrail(float delta) {
-        for (int i = trail.size - 1; i >= 0; i--) {
-            trail.get(i).life -= delta;
-            if (trail.get(i).scaleMod > 1.0f) trail.get(i).life -= delta * 2f;
-            if (trail.get(i).life <= 0) trail.removeIndex(i);
-        }
-    }
-
-    private void recordTrailPoint(float scale) {
-        TrailPoint p = new TrailPoint();
-        p.pos.set(position);
-        p.color.set(activeTrailColor);
-        p.scaleMod = scale;
-        trail.add(p);
-    }
-
-    private void spawnBurst(int count, float scale) {
-        for (int i = 0; i < count; i++) {
-            recordTrailPoint(scale + MathUtils.random(-0.2f, 0.5f));
-        }
-    }
-
+    public void render(ModelBatch batch, Environment env) { renderer.render(batch, env); }
+    public void renderTrail(ModelBatch batch, Environment env) { renderer.renderTrail(batch, env); }
+    public float getFlatDistanceToHole(Terrain terrain) { return (terrain == null) ? 0 : Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z); }
+    public float getShotDistance() { return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z); }
     public Vector3 getPosition() { return position; }
     public Vector3 getVelocity() { return velocity; }
     public Vector3 getSpin() { return spin; }
     public State getState() { return state; }
     public void clearInteraction() { lastInteraction = Interaction.NONE; }
     public Interaction getLastInteraction() { return lastInteraction; }
-
-    public void dispose() {
-        model.dispose();
-        trailPointModel.dispose();
-    }
+    public void dispose() { renderer.dispose(); }
 }
