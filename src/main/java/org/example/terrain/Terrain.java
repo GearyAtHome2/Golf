@@ -34,8 +34,8 @@ public class Terrain {
 
     private Vector3 teeCenter;
     private Vector3 holePosition;
+    private Hole physicalHole;
     private ModelInstance flagInstance;
-    private ModelInstance holeMarker;
     private ModelInstance teeInstance;
     private float holeSize = 0.7f;
     private float waterLevel;
@@ -61,6 +61,9 @@ public class Terrain {
         int hz = MathUtils.clamp((int) ((holePosition.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
         this.holePosition.y = heightMap[hx][hz] + 0.04f;
 
+        // Initialize physical hole after position is set by generator
+        this.physicalHole = new Hole(holePosition, holeSize / 2f, CUP_DEPTH);
+
         int tx = MathUtils.clamp((int) ((teeCenter.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
         int tz = MathUtils.clamp((int) ((teeCenter.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
         this.teeCenter.y = heightMap[tx][tz];
@@ -79,8 +82,6 @@ public class Terrain {
             chunks.add(buildChunk(z, Math.min(z + CHUNK_Z, SIZE_Z)));
         }
 
-        Vector3 normal = getNormalAt(holePosition.x, holePosition.z);
-        createHoleMarker(holePosition, normal);
         createFlag(holePosition);
 
         if (!(generator instanceof PuttingGreenGenerator)) {
@@ -148,7 +149,6 @@ public class Terrain {
 
         for (float h : greenHeights) {
             if (Math.abs(h - averageHeight) > threshold) continue;
-
             greenMinH = Math.min(greenMinH, h);
             greenMaxH = Math.max(greenMaxH, h);
             validFound = true;
@@ -201,7 +201,7 @@ public class Terrain {
         if (waterInstance != null) batch.render(waterInstance, env);
         for (Tree t : trees) t.render(batch, env);
         for (Monolith b : monoliths) b.render(batch, env);
-        if (holeMarker != null) batch.render(holeMarker, env);
+        if (physicalHole != null) physicalHole.render(batch, env);
         if (flagInstance != null) batch.render(flagInstance, env);
         if (teeInstance != null) batch.render(teeInstance, env);
     }
@@ -224,17 +224,9 @@ public class Terrain {
 
         float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
 
-        // Physical hole radius
-        float holeRadius = (holeSize / 2f);
-        // Influence radius (e.g., 50% larger than the actual hole)
-        float influenceRadius = holeRadius * 1.25f;
-
-        if (distToHole < influenceRadius) {
-            float dipPercent = 1.0f - (distToHole / influenceRadius);
-
-            float dipAmount = (float) Math.pow(dipPercent, 2.0f) * CUP_DEPTH;
-
-            return baseHeight - dipAmount;
+        // THE GAP: Create a physical hole in the heightmap
+        if (distToHole < (holeSize / 2f)) {
+            return baseHeight - 100.0f;
         }
 
         return baseHeight;
@@ -247,15 +239,6 @@ public class Terrain {
         float hD = getHeightAt(worldX, worldZ - eps);
         float hU = getHeightAt(worldX, worldZ + eps);
         return new Vector3(hL - hR, 2.0f * eps, hD - hU).nor();
-    }
-
-    private void createHoleMarker(Vector3 pos, Vector3 normal) {
-        ModelBuilder mb = new ModelBuilder();
-        Model disc = mb.createCylinder(holeSize, 0.01f, holeSize, 20,
-                new Material(ColorAttribute.createDiffuse(Color.BLACK)),
-                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-        holeMarker = new ModelInstance(disc);
-        updateTransformToNormal(holeMarker, pos, normal, 0.005f);
     }
 
     private void createFlag(Vector3 pos) {
@@ -274,21 +257,11 @@ public class Terrain {
         updateFlagTransform(pos, 1.0f, 0f);
     }
 
-    private void updateTransformToNormal(ModelInstance instance, Vector3 pos, Vector3 normal, float yOffset) {
-        instance.transform.setToTranslation(pos);
-        Quaternion q = new Quaternion();
-        q.setFromCross(Vector3.Y, normal);
-        instance.transform.rotate(q);
-        instance.transform.translate(0, yOffset, 0);
-    }
-
     private void updateFlagTransform(Vector3 pos, float scale, float rotationY) {
         if (flagInstance == null) return;
         flagInstance.transform.setToTranslation(pos);
-        // We do NOT tilt the flag. We keep it pointing at Vector3.Y
         flagInstance.transform.rotate(Vector3.Y, rotationY);
         flagInstance.transform.scale(scale, scale, scale);
-        // Offset up by half height (cylinder is created around origin)
         flagInstance.transform.translate(0, 2.5f, 0);
     }
 
@@ -305,10 +278,8 @@ public class Terrain {
         if (flagInstance == null) return;
         float dist = cameraPosition.dst(holePosition);
         float scale = Math.min(1.0f + (Math.max(0, dist - 50f) * 0.015f), 4.0f);
-
         Vector3 dir = new Vector3(cameraPosition).sub(holePosition);
         float angle = MathUtils.atan2(dir.x, dir.z) * MathUtils.radiansToDegrees;
-
         updateFlagTransform(holePosition, scale, angle);
     }
 
@@ -335,7 +306,7 @@ public class Terrain {
         if (waterInstance != null) waterInstance.model.dispose();
         for (Tree t : trees) t.dispose();
         for (Monolith b : monoliths) b.dispose();
-        if (holeMarker != null) holeMarker.model.dispose();
+        if (physicalHole != null) physicalHole.dispose();
         if (flagInstance != null) flagInstance.model.dispose();
         if (teeInstance != null) teeInstance.model.dispose();
     }
@@ -362,8 +333,7 @@ public class Terrain {
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
                 if (x == 0 && z == 0) continue;
-                int nx = gx + x;
-                int nz = gz + z;
+                int nx = gx + x, nz = gz + z;
                 if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) nearby.addAll(treeGrid[nx][nz]);
             }
         }
@@ -377,8 +347,7 @@ public class Terrain {
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
                 if (x == 0 && z == 0) continue;
-                int nx = gx + x;
-                int nz = gz + z;
+                int nx = gx + x, nz = gz + z;
                 if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) nearby.addAll(monolithGrid[nx][nz]);
             }
         }
@@ -391,8 +360,8 @@ public class Terrain {
         int iz = MathUtils.clamp((int) ((newPos.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
         this.holePosition.y = heightMap[ix][iz] + 0.02f;
 
-        Vector3 normal = getNormalAt(holePosition.x, holePosition.z);
-        if (holeMarker != null) updateTransformToNormal(holeMarker, holePosition, normal, 0.005f);
+        if (physicalHole != null) physicalHole.dispose();
+        this.physicalHole = new Hole(holePosition, holeSize / 2f, CUP_DEPTH);
         if (flagInstance != null) updateFlagTransform(holePosition, 1.0f, 0f);
     }
 
@@ -404,14 +373,14 @@ public class Terrain {
         if (teeInstance != null) teeInstance.transform.setToTranslation(teeCenter.x, teeCenter.y + 0.075f, teeCenter.z);
     }
 
-    public void setGreenRadius(float radius) { }
-
     public Vector3 getTeePosition() { return teeCenter; }
     public Vector3 getHolePosition() { return holePosition; }
     public float getHoleSize() { return holeSize; }
     public float getWaterLevel() { return waterLevel; }
     public List<Tree> getTrees() { return trees; }
     public List<Monolith> getMonoliths() { return monoliths; }
+
+    // --- Inner Classes ---
 
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
@@ -430,6 +399,27 @@ public class Terrain {
             this.softness = softness;
             this.color = col;
         }
+    }
+
+    public static class Hole {
+        private final ModelInstance cupInstance;
+        private final Vector3 position;
+        private final float radius, depth;
+
+        public Hole(Vector3 pos, float radius, float depth) {
+            this.position = new Vector3(pos);
+            this.radius = radius;
+            this.depth = depth;
+            ModelBuilder mb = new ModelBuilder();
+            cupInstance = new ModelInstance(mb.createCylinder(radius * 2, depth, radius * 2, 20,
+                    new Material(ColorAttribute.createDiffuse(Color.BLACK)),
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+            cupInstance.transform.setToTranslation(pos.x, pos.y - (depth / 2f), pos.z);
+        }
+
+        public void render(ModelBatch b, Environment e) { b.render(cupInstance, e); }
+        public void dispose() { cupInstance.model.dispose(); }
+        public float getFloorHeight() { return position.y - depth; }
     }
 
     public static class Tree {
@@ -472,8 +462,6 @@ public class Terrain {
         public Vector3 getPosition() { return pos; }
         public float getTrunkHeight() { return tH; }
         public float getTrunkRadius() { return tR; }
-        public float getFoliageRadius() { return fR; }
-        public TreeScheme getScheme() { return scheme; }
     }
 
     public static class Monolith {

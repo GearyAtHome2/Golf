@@ -1,5 +1,6 @@
 package org.example.ball;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g3d.*;
 import com.badlogic.gdx.math.MathUtils;
@@ -45,6 +46,7 @@ public class Ball {
 
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
+    private final Vector3 tempV3 = new Vector3();
     private final Vector3 vNormal = new Vector3();
     private final Vector3 vTangent = new Vector3();
 
@@ -80,7 +82,7 @@ public class Ball {
         handleEnvironmentPhysics(delta, terrain, baseWind);
         handleTreeCollisions(terrain, delta);
         handleMonolithCollisions(terrain);
-        applyYConstraints(preStepY);
+        applyYConstraints(preStepY, terrain);
     }
 
     private void handleWaterTransition(Terrain terrain) {
@@ -99,14 +101,20 @@ public class Ball {
             BallPhysics.applyWaterPhysics(position, velocity, spin, waterLevel, delta);
         }
 
+        Vector3 holePos = terrain.getHolePosition();
+        float distToHole = Vector2.dst(position.x, position.z, holePos.x, holePos.z);
+        float holeRadius = terrain.getHoleSize() / 2f;
+        boolean isInsideHoleRadius = distToHole < holeRadius;
+
+        if (isInsideHoleRadius && position.y < holePos.y + BALL_RADIUS) {
+            handleCupPhysics(terrain, delta);
+            return;
+        }
+
         float terrainHeight = terrain.getHeightAt(position.x, position.z) + BALL_RADIUS / 3;
+        boolean nearHoleRim = distToHole < holeRadius + 0.1f;
 
-        // Check proximity to hole to disable "sticky" snapping
-        float distToHole = Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
-        boolean nearHole = distToHole < 0.32f;
-
-        // If near the hole, we don't force "touchingTerrain" just because of Y proximity
-        boolean touchingTerrain = (state == State.ROLLING && position.y <= terrainHeight + 0.1f && !nearHole)
+        boolean touchingTerrain = (state == State.ROLLING && position.y <= terrainHeight + 0.1f && !nearHoleRim)
                 || (position.y < terrainHeight - 0.2f);
 
         if (touchingTerrain) {
@@ -117,8 +125,65 @@ public class Ball {
         }
     }
 
-    private void applyYConstraints(float preStepY) {
+    private void handleCupPhysics(Terrain terrain, float delta) {
+        state = State.AIR;
+        Vector3 holePos = terrain.getHolePosition();
+        float holeRadius = terrain.getHoleSize() / 2f;
+        float cupDepth = 0.5f;
+
+        // 1. GRAVITY
+        velocity.add(0, GRAVITY * delta, 0);
+
+        float dx = holePos.x - position.x;
+        float dz = holePos.z - position.z;
+        float distFromCenter = (float) Math.sqrt(dx * dx + dz * dz);
+        float hitThreshold = holeRadius - (BALL_RADIUS * 0.5f);
+
+        // 2. COLLISION
+        if (distFromCenter > hitThreshold) {
+            vNormal.set(dx, 0, dz).nor();
+
+            if (position.y > holePos.y - 0.05f) {
+                vNormal.y = 1.0f; // 45 degree Lip
+            } else {
+                vNormal.y = 0; // Vertical Wall
+            }
+            vNormal.nor();
+
+            if (velocity.dot(vNormal) < 0) {
+                velocity.set(BallPhysics.calculateBounceWithSpin(velocity, vNormal, spin, 0.5f, 0f, 0f));
+
+                Gdx.app.log("BALL_PHYSICS", String.format("CUP_HIT | Pos:[%.3f, %.3f, %.3f] | Vel:[%.3f, %.3f, %.3f]",
+                        position.x, position.y, position.z, velocity.x, velocity.y, velocity.z));
+            }
+        }
+
+        // 3. FLOOR
+        float cupFloorY = holePos.y - cupDepth + BALL_RADIUS;
+        if (position.y + (velocity.y * delta) < cupFloorY) {
+            position.y = cupFloorY;
+            if (Math.abs(velocity.y) > MIN_BOUNCE_VY) {
+                velocity.y *= -0.25f;
+            } else {
+                velocity.y = 0;
+                velocity.x *= 0.95f;
+                velocity.z *= 0.95f;
+                if (velocity.len() < STOP_SPEED) {
+                    velocity.setZero();
+                    state = State.STATIONARY;
+                }
+            }
+        }
+
+        // 4. INTEGRATE
+        position.add(tempV1.set(velocity).scl(delta));
+    }
+
+    private void applyYConstraints(float preStepY, Terrain terrain) {
         float stepYDelta = position.y - preStepY;
+        float distToHole = Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
+        if (distToHole < terrain.getHoleSize()) return;
+
         if (Math.abs(stepYDelta) > 2.0f && hitCooldown <= 0f) {
             position.y = preStepY + MathUtils.clamp(stepYDelta, -1f, 1f);
         }
@@ -208,9 +273,8 @@ public class Ball {
             return;
         }
 
-        // Only snap to terrain height if we aren't within the "drop zone" of the hole
         float distToHole = Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
-        if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f) && distToHole > terrain.getHoleSize()) {
+        if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f) && distToHole > terrain.getHoleSize() / 2f) {
             position.y = terrainHeight;
         }
 
@@ -361,6 +425,8 @@ public class Ball {
         state = (loft < 1.0f) ? State.ROLLING : State.AIR;
         hitCooldown = (state == State.ROLLING) ? 0.02f : 0.1f;
         renderer.resetTrail(renderer.getActiveTrailColor());
+
+        Gdx.app.log("BALL_PHYSICS", String.format("HIT: Speed(%f) Loft(%f) State(%s)", finalSpeed, loft, state));
     }
 
     public void capturePosition() {
@@ -385,37 +451,9 @@ public class Ball {
         float distToHole = position.dst(holePos);
         float holeRadius = terrain.getHoleSize() / 2f;
 
-        // 1. Horizontal check
         if (distToHole < holeRadius) {
-
-            // 2. Sample 4 points around the hole (outside the 0.6f radius) to get the average "Lip Height"
-            // Using an offset of 0.8f ensures we are clear of the 0.6f hole logic.
-            float sampleOffset = 0.8f;
-            float h1 = terrain.getHeightAt(holePos.x + sampleOffset, holePos.z);
-            float h2 = terrain.getHeightAt(holePos.x - sampleOffset, holePos.z);
-            float h3 = terrain.getHeightAt(holePos.x, holePos.z + sampleOffset);
-            float h4 = terrain.getHeightAt(holePos.x, holePos.z - sampleOffset);
-
-            float averageGroundLevel = (h1 + h2 + h3 + h4) / 4f;
-
-            // 3. Comparison
-            // We want the ball center to be at least 0.15f below the average lip height
-            float dropThreshold = 0.15f;
-            boolean isBelowLip = position.y < (averageGroundLevel - dropThreshold);
-
-            // 4. Detailed Logging
-            System.out.println(String.format(
-                    "[Victory Check] Dist: %.3f | BallY: %.3f | AvgGround: %.3f | Threshold: %.3f | Success: %b",
-                    distToHole, position.y, averageGroundLevel, (averageGroundLevel - dropThreshold), isBelowLip
-            ));
-
-            if (isBelowLip) {
-                // Final check: make sure the ball isn't moving so fast it's "glitching" through
-                if (velocity.len() < 15f) {
-                    return true;
-                } else {
-                    System.out.println("[Victory Check] REJECTED: Velocity too high (" + velocity.len() + ")");
-                }
+            if (position.y < holePos.y - (BALL_RADIUS * 0.5f)) {
+                return velocity.len() < 10.0f;
             }
         }
         return false;
@@ -437,29 +475,13 @@ public class Ball {
         return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
     }
 
-    public Vector3 getPosition() {
-        return position;
-    }
+    public Vector3 getPosition() { return position; }
+    public Vector3 getVelocity() { return velocity; }
+    public Vector3 getSpin() { return spin; }
+    public State getState() { return state; }
+    public void clearInteraction() { lastInteraction = Interaction.NONE; }
+    public Interaction getLastInteraction() { return lastInteraction; }
 
-    public Vector3 getVelocity() {
-        return velocity;
-    }
-
-    public Vector3 getSpin() {
-        return spin;
-    }
-
-    public State getState() {
-        return state;
-    }
-
-    public void clearInteraction() {
-        lastInteraction = Interaction.NONE;
-    }
-
-    public Interaction getLastInteraction() {
-        return lastInteraction;
-    }
 
     public void dispose() {
         renderer.dispose();
