@@ -60,9 +60,9 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.processor = new FeatureProcessor(data, rng, off1, off2, waveAngles, waveFreqs, waveAmps, waveOffsets);
         this.cenoteGenerator = new CenoteGenerator(rng);
         this.coastlineGenerator = new CoastlineGenerator();
-        this.beachBluffsGenerator = new BeachBluffsGenerator(data, rng,waveAngles, waveFreqs, waveAmps, waveOffsets);
+        this.beachBluffsGenerator = new BeachBluffsGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
         this.craterGenerator = new CraterGenerator(rng);
-        this.whistlingIslesGenerator = new WhistlingIslesGenerator(data, rng,waveAngles, waveFreqs, waveAmps, waveOffsets);
+        this.whistlingIslesGenerator = new WhistlingIslesGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
     }
 
     public LevelData getData() {
@@ -119,8 +119,9 @@ public class ClassicGenerator implements ITerrainGenerator {
                 float distGreen = Vector3.dst(x, z, 0, gCX, gCZ, 0);
                 float protectedHeight = (flags.isPathDependent && !isElevated) ? currentHeight : getFinalRaw(distGreen, SIZE_Z * 0.22f, currentHeight);
 
+                // Use Extracted Undulation Logic
                 float greenEffectMask = (float) Math.pow(1.0f - MathUtils.clamp(distGreen / 94.0f, 0f, 1f), 4.0f);
-                protectedHeight += (calculateGreenUndulation(x, z) * greenEffectMask);
+                protectedHeight += (GreenHelper.calculateUndulation(x, z, greenWaveAngles, greenWaveOffsets) * greenEffectMask);
 
                 float teeT = MathUtils.clamp(zNorm / 0.15f, 0f, 1f);
                 heights[x][z] = MathUtils.lerp(teeSafety, protectedHeight, teeT * teeT * (3 - 2 * teeT));
@@ -156,7 +157,6 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
 
-        // 1. Resolve Archetype Overrides
         if (flags.isMonolithPlains) {
             data.setWaterLevel(-2.0f);
         } else if (flags.isCraterFields) {
@@ -176,7 +176,6 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         float water = data.getWaterLevel();
 
-        // 2. Adjust for specific algorithms
         if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY) {
             applyPathOffset(map, h, 25.0f, gBuf);
             tagChasmWalls(map);
@@ -187,15 +186,12 @@ public class ClassicGenerator implements ITerrainGenerator {
             data.setWaterLevel(water);
         }
 
-        // 3. Smoothing and Physical Adjustments
         smoothGreenBorders(map, h, flags.isPathDependent);
         if (flags.isMogulHighlands) processor.applyFairwayGaussianSmoothing(map, h);
 
         coastlineGenerator.applyFairwayWaterBuffer(map, h, water, 3.0f);
-
         coastlineGenerator.applySlopeBasedStone(map, h, 0.35f);
 
-        // 5. Finalize world objects
         finalizePositionsAndTrees(map, h, teeP, holeP, t, m, gX, gZ, water, flags.isCliffMap);
 
         if (flags.isMonolithPlains) {
@@ -273,12 +269,8 @@ public class ClassicGenerator implements ITerrainGenerator {
     private void applyPathOffset(Terrain.TerrainType[][] map, float[][] heights, float amount, boolean[][] greenBuffer) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         boolean[][] isPathMask = getPathMask(map);
-
-        // CONFIGURABLE: Horizontal distance of the ramp.
-        // Increase for a gentle slope, decrease for a steep cliff.
         final float RAMP_WIDTH = 12.0f;
 
-        // 1. First, apply the drop to the path tiles themselves
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (isPathMask[x][z] || greenBuffer[x][z]) {
@@ -287,14 +279,12 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
 
-        // 2. Second, pull the neighboring Rough down to meet the dropped path
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (!isPathMask[x][z] && !greenBuffer[x][z]) {
                     float dist = getDistanceToPath(x, z, isPathMask, RAMP_WIDTH);
 
                     if (dist < RAMP_WIDTH) {
-                        // Find the height of the nearest dropped path tile
                         float targetDroppedHeight = heights[x][z];
                         float closestDistSq = Float.MAX_VALUE;
                         int range = (int) RAMP_WIDTH + 1;
@@ -311,13 +301,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                             }
                         }
 
-                        // t=0 at the fairway edge (100% targetHeight)
-                        // t=1 at the end of the ramp (100% original rough height)
                         float t = MathUtils.clamp(dist / RAMP_WIDTH, 0f, 1f);
                         float smoothT = t * t * (3 - 2 * t);
-
-                        // Pull the rough down: targetDroppedHeight is the "bottom"
-                        // and heights[x][z] is the "top" (original rough)
                         heights[x][z] = MathUtils.lerp(targetDroppedHeight, heights[x][z], smoothT);
                     }
                 }
@@ -437,24 +422,14 @@ public class ClassicGenerator implements ITerrainGenerator {
                 map[x][z] = Terrain.TerrainType.ROUGH;
                 if (Math.abs(x - teeCenterX) < 7 && Math.abs(z - teeCenterZ) < 6) map[x][z] = Terrain.TerrainType.TEE;
                 else {
-                    float dist = Vector3.dst(x, z, 0, gX, gZ, 0);
-                    float dynamicRadius = 20f + (MathUtils.sin(MathUtils.atan2(z - gZ, x - gX) * 3 + off1) * 3.1f);
-                    if (dist <= dynamicRadius) map[x][z] = Terrain.TerrainType.GREEN;
+                    // Use Extracted Mapping Logic
+                    GreenHelper.applySingleTileGreen(map, x, z, gX, gZ, off1);
                 }
             }
         }
         if (data.getMinFairwayWidth() <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
         else
             processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
-    }
-
-    private float calculateGreenUndulation(int x, int z) {
-        float total = 0;
-        for (int i = 0; i < 4; i++) {
-            float coord = (x * MathUtils.cos(greenWaveAngles[i]) + z * MathUtils.sin(greenWaveAngles[i])) * 0.32f;
-            total += MathUtils.sin(coord + greenWaveOffsets[i]);
-        }
-        return total / 4.0f;
     }
 
     private float calculateHeightNoise(int x, int z, float freq, float und, float maxH, LevelData.TerrainAlgorithm algo) {

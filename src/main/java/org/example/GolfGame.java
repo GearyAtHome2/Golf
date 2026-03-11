@@ -26,6 +26,7 @@ import org.example.hud.HUD;
 import org.example.terrain.ClassicGenerator;
 import org.example.terrain.ITerrainGenerator;
 import org.example.terrain.Terrain;
+import org.example.terrain.features.PuttingGreenGenerator;
 import org.example.terrain.level.LevelData;
 import org.example.terrain.level.LevelDataGenerator;
 import org.example.terrain.practiceRange.DistanceSign;
@@ -36,11 +37,11 @@ import java.util.List;
 
 public class GolfGame extends ApplicationAdapter {
 
-    private enum GameState {START, PLAYING, COMPETITIVE, PRACTICE, PAUSED, INSTRUCTIONS}
+    private enum GameState {START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS}
 
     private GameState currentState = GameState.START;
     private GameState previousState = GameState.PLAYING;
-    private GameState returnState = GameState.PLAYING; // Dedicated return target
+    private GameState returnState = GameState.PLAYING;
 
     private final List<DistanceSign> rangeSigns = new ArrayList<>();
     private final List<Ball> shotHistory = new ArrayList<>();
@@ -75,7 +76,6 @@ public class GolfGame extends ApplicationAdapter {
 
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
 
-    // --- Competitive Tracking ---
     private List<LevelData> competitiveCourse = new ArrayList<>();
     private int currentHoleIndex = 0;
     private CompetitiveScore competitiveScore;
@@ -122,24 +122,12 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void initLevel(long manualSeed) {
-        // --- SAFE CLEANUP SEQUENCE ---
-        if (terrain != null) {
-            terrain.dispose();
-            terrain = null;
-        }
-        if (ball != null) {
-            ball.dispose();
-            ball = null;
-        }
+        if (terrain != null) { terrain.dispose(); terrain = null; }
+        if (ball != null) { ball.dispose(); ball = null; }
         for (DistanceSign s : rangeSigns) s.dispose();
         rangeSigns.clear();
-
         yardageMarkers.clear();
-        if (markerLineModel != null) {
-            markerLineModel.dispose();
-            markerLineModel = null;
-        }
-
+        if (markerLineModel != null) { markerLineModel.dispose(); markerLineModel = null; }
         for (Ball ghost : shotHistory) ghost.dispose();
         shotHistory.clear();
 
@@ -147,25 +135,55 @@ public class GolfGame extends ApplicationAdapter {
         hud.reset();
 
         ITerrainGenerator generator;
-        if (currentState == GameState.PRACTICE) {
+        float waterLevel = -1.0f;
+        int distance = 500;
+
+        if (currentState == GameState.PRACTICE_RANGE) {
             generator = new PracticeRangeGenerator();
             currentLevelData = null;
+            waterLevel = -2.0f;
+            distance = 500;
+            currentClub = Club.DRIVER;
+        } else if (currentState == GameState.PUTTING_GREEN) {
+            long seed = (manualSeed == -1) ? MathUtils.random(Long.MAX_VALUE) : manualSeed;
+            generator = new PuttingGreenGenerator(seed);
+            currentLevelData = null;
+            waterLevel = -5.0f;
+            distance = 160;
+            currentClub = Club.PUTTER;
         } else if (currentState == GameState.COMPETITIVE) {
             generator = initCompetitiveLevel();
+            waterLevel = currentLevelData.getWaterLevel();
+            distance = currentLevelData.getDistance();
+            currentClub = Club.DRIVER;
         } else {
             if (manualSeed != -1) currentLevelData = LevelDataGenerator.createFixedLevelData(manualSeed);
             else currentLevelData = LevelDataGenerator.createRandomLevelData();
             generator = new ClassicGenerator(currentLevelData);
+            waterLevel = currentLevelData.getWaterLevel();
+            distance = currentLevelData.getDistance();
+            currentClub = Club.DRIVER;
         }
 
-        float waterLevel = currentLevelData == null ? -1 : currentLevelData.getWaterLevel();
-        int distance = currentLevelData == null ? 500 : currentLevelData.getDistance();
         terrain = new Terrain(generator, waterLevel, distance);
+
+        if (currentState == GameState.PUTTING_GREEN) {
+            Vector3 tee = terrain.getTeePosition();
+            Vector3 hole = terrain.getHolePosition();
+
+            terrain.setTeePosition(new Vector3(tee.x, terrain.getHeightAt(tee.x, tee.z), tee.z));
+            terrain.setHolePosition(new Vector3(hole.x, terrain.getHeightAt(hole.x, hole.z), hole.z));
+        }
+
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
-        ball = new Ball(tee);
 
-        if (currentState == GameState.PRACTICE && generator instanceof PracticeRangeGenerator gen) {
+        // FIX: Snap ball to the raw terrain surface + Radius (0.13f)
+        // This makes the ball sit perfectly on the grass regardless of generator offsets
+        float surfaceY = terrain.getHeightAt(tee.x, tee.z);
+        ball = new Ball(new Vector3(tee.x, surfaceY + 0.13f, tee.z));
+
+        if (currentState == GameState.PRACTICE_RANGE && generator instanceof PracticeRangeGenerator gen) {
             for (PracticeRangeGenerator.SignData data : gen.getSignPositions()) {
                 rangeSigns.add(new DistanceSign(data.position, data.distance));
             }
@@ -173,14 +191,12 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         hasCurrentBallBeenHit = false;
-        Vector3 dirToHole = new Vector3(hole).sub(tee).nor();
-        if (dirToHole.len() < 0.1f) dirToHole.set(0, 0, 1);
 
-        camera.position.set(tee.x - dirToHole.x * 10f, tee.y + 5f, tee.z - dirToHole.z * 10f);
-        camera.lookAt(tee);
-        camera.update();
-        cameraController = new FreeCameraController(camera, 40f, tee);
-        if (currentState == GameState.PRACTICE) cameraController.setIntroActive(false);
+        // --- CAMERA SYNC ---
+        cameraController = new FreeCameraController(camera, 12f, ball.getPosition());
+        cameraController.setOrientation(hole);
+        // Force update to move camera to the calculated tx, ty, tz before render
+        cameraController.update(ball.getPosition());
 
         hud.resetShots();
         isVictory = false;
@@ -239,9 +255,16 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void updateLogic(float delta) {
-        if ((currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE || currentState == GameState.PRACTICE) && !isVictory) {
+        if ((currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE ||
+                currentState == GameState.PRACTICE_RANGE || currentState == GameState.PUTTING_GREEN) && !isVictory) {
+
             float effDelta = delta * gameSpeed;
             Vector3 currentWind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
+
+            if (currentState == GameState.PUTTING_GREEN) {
+                currentWind = zeroWind;
+            }
+
             windManager.update(effDelta, currentWind, camera.position);
 
             if (hud.wasMinigameCanceled()) {
@@ -260,9 +283,10 @@ public class GolfGame extends ApplicationAdapter {
             if (hasCurrentBallBeenHit && ball.getState() == Ball.State.STATIONARY) {
                 practiceResetTimer += delta;
                 if (practiceResetTimer >= RESET_DELAY) {
-                    if (currentState == GameState.PRACTICE) {
+                    if (currentState == GameState.PRACTICE_RANGE) {
                         archiveGhostBall();
-                        ball = new Ball(terrain.getTeePosition());
+                        Vector3 tee = terrain.getTeePosition();
+                        ball = new Ball(new Vector3(tee.x, tee.y, tee.z));
                         hasCurrentBallBeenHit = false;
                         practiceResetTimer = 0f;
                     } else if (terrain.isPointOutOfBounds(ball.getPosition().x, ball.getPosition().z)) {
@@ -277,7 +301,7 @@ public class GolfGame extends ApplicationAdapter {
                 practiceResetTimer = 0f;
             }
 
-            if (ball.checkVictory(terrain.getHolePosition(), terrain.getHoleSize())) {
+            if (ball.checkVictory(terrain)) {
                 triggerVictory();
             }
         }
@@ -336,18 +360,17 @@ public class GolfGame extends ApplicationAdapter {
         particleManager.render(modelBatch, environment);
         modelBatch.end();
 
-        if (currentLevelData != null && !isVictory) {
+        if (currentLevelData != null && !isVictory && currentState != GameState.PUTTING_GREEN) {
             windManager.render(camera, currentLevelData.getWind());
         }
     }
 
     private void renderUI() {
-        boolean isPractice = (currentState == GameState.PRACTICE);
+        boolean isPractice = (currentState == GameState.PRACTICE_RANGE || currentState == GameState.PUTTING_GREEN);
         boolean isCompetitive = (currentState == GameState.COMPETITIVE);
 
         if (currentState == GameState.INSTRUCTIONS) {
-            // HUD.renderInstructions is called in render() block,
-            // but we ensure logic is isolated.
+            hud.renderInstructions();
         } else if (isVictory) {
             hud.renderVictory(hud.getShotCount(), currentLevelData, isCompetitive ? competitiveScore : null);
         } else if (currentState == GameState.PAUSED) {
@@ -358,7 +381,6 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void handleInput() {
-        // 1. Check for Global HUD Requests
         boolean manualMenuPress = isVictory &&
                 currentState == GameState.COMPETITIVE &&
                 competitiveScore != null &&
@@ -366,78 +388,76 @@ public class GolfGame extends ApplicationAdapter {
                 Gdx.input.isKeyJustPressed(Input.Keys.M);
 
         if (hud.wasMainMenuRequested() || manualMenuPress) {
-            Gdx.app.log("STATE_CHANGE", "Returning to Main Menu");
             shotController.reset();
             hud.resetShots();
             currentState = GameState.START;
             currentHoleIndex = 0;
             isVictory = false;
-            if (markerLineModel != null) { markerLineModel.dispose(); markerLineModel = null; }
             return;
         }
 
-        // Handle Instructions Trigger from UI
         if (hud.wasInstructionsRequested()) {
             hud.clearInstructionsRequest();
             hud.resetInstructionScroll();
-            returnState = currentState; // Cache exactly where we are
+            returnState = currentState;
             currentState = GameState.INSTRUCTIONS;
-            Gdx.app.log("STATE_CHANGE", "Entering Instructions. Return Target: " + returnState);
             return;
         }
 
-        // 2. State-Specific Input Handling
         if (currentState == GameState.START) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W))
-                menuSelection = (menuSelection - 1 + 5) % 5;
+                menuSelection = (menuSelection - 1 + 6) % 6;
             if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
-                menuSelection = (menuSelection + 1) % 5;
+                menuSelection = (menuSelection + 1) % 6;
 
             if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-                if (menuSelection == 0) { currentState = GameState.PLAYING; initLevel(); }
-                else if (menuSelection == 1) {
+                if (menuSelection == 0) {
+                    currentState = GameState.PLAYING;
+                    initLevel();
+                } else if (menuSelection == 1) {
                     currentState = GameState.COMPETITIVE;
                     currentHoleIndex = 0;
                     competitiveCourse = LevelDataGenerator.generate18Holes();
                     competitiveScore = new CompetitiveScore(competitiveCourse);
                     shotController.setGuidelineEnabled(false);
                     initLevel();
-                } else if (menuSelection == 2) { currentState = GameState.PRACTICE; initLevel(); }
-                else if (menuSelection == 3) {
-                    long seed = -1;
-                    String clip = Gdx.app.getClipboard().getContents();
-                    try { if (clip != null) seed = Long.parseLong(clip.trim()); } catch (NumberFormatException ignored) {}
-                    currentState = GameState.PLAYING;
-                    initLevel(seed);
-                } else if (menuSelection == 4) {
+                } else if (menuSelection == 2) {
                     returnState = GameState.START;
                     currentState = GameState.INSTRUCTIONS;
                     hud.resetInstructionScroll();
+                } else if (menuSelection == 3) {
+                    currentState = GameState.PRACTICE_RANGE;
+                    initLevel();
+                } else if (menuSelection == 4) {
+                    currentState = GameState.PUTTING_GREEN;
+                    initLevel();
+                } else if (menuSelection == 5) {
+                    long seed = -1;
+                    String clip = Gdx.app.getClipboard().getContents();
+                    try {
+                        if (clip != null) seed = Long.parseLong(clip.trim());
+                    } catch (NumberFormatException ignored) {}
+                    currentState = GameState.PLAYING;
+                    initLevel(seed);
                 }
                 shotController.reset();
             }
             return;
         }
 
-        // 3. Instructions Navigation
         if (currentState == GameState.INSTRUCTIONS) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE)) {
-                Gdx.app.log("STATE_CHANGE", "Exiting Instructions. Returning to: " + returnState);
                 currentState = returnState;
-                return; // Guard against clobbering in block 4
             }
             return;
         }
 
-        // 4. Standard In-Game/Pause Input
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PAUSED) {
                 currentState = previousState;
-                Gdx.app.log("STATE_CHANGE", "Unpausing. Returning to: " + currentState);
             } else {
                 previousState = currentState;
                 currentState = GameState.PAUSED;
-                Gdx.app.log("STATE_CHANGE", "Pausing. Cached state: " + previousState);
             }
             return;
         }
@@ -445,8 +465,6 @@ public class GolfGame extends ApplicationAdapter {
         if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
             if (currentState != GameState.COMPETITIVE) {
                 shotController.toggleGuideline();
-            } else {
-                Gdx.app.log("INPUT", "Guideline toggling is disabled in Competitive Mode.");
             }
         }
 
@@ -465,10 +483,13 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
-            Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
 
-        if (currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE || currentState == GameState.PRACTICE) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null) {
+            Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
+        }
+
+        if (currentState == GameState.PLAYING || currentState == GameState.COMPETITIVE ||
+                currentState == GameState.PRACTICE_RANGE || currentState == GameState.PUTTING_GREEN) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) gameSpeed = Math.min(gameSpeed + 0.5f, 5.0f);
             if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) gameSpeed = Math.max(gameSpeed - 0.5f, 0.5f);
         }
@@ -482,7 +503,10 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     @Override
-    public void resize(int width, int height) { gameViewport.update(width, height); hud.resize(width, height); }
+    public void resize(int width, int height) {
+        gameViewport.update(width, height);
+        hud.resize(width, height);
+    }
 
     @Override
     public void dispose() {

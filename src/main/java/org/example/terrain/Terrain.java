@@ -8,8 +8,11 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.math.Vector2;
 import org.example.ball.ShotDifficulty;
+import org.example.terrain.features.PuttingGreenGenerator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +23,7 @@ public class Terrain {
     private final int SIZE_Z;
     private final int CHUNK_Z = 64;
     private final float SCALE = 1f;
+    private final float CUP_DEPTH = 0.5f;
 
     private ModelInstance waterInstance;
     private final List<ModelInstance> chunks = new ArrayList<>();
@@ -33,11 +37,10 @@ public class Terrain {
     private ModelInstance flagInstance;
     private ModelInstance holeMarker;
     private ModelInstance teeInstance;
-    private float holeSize = 0.6f;
+    private float holeSize = 0.7f;
     private float waterLevel;
     private float greenMinH = Float.MAX_VALUE, greenMaxH = -Float.MAX_VALUE;
 
-    // Spatial Partitioning for Performance
     private final float CELL_SIZE = 10.0f;
     private List<Tree>[][] treeGrid;
     private List<Monolith>[][] monolithGrid;
@@ -51,13 +54,17 @@ public class Terrain {
         this.teeCenter = new Vector3();
         this.holePosition = new Vector3();
 
-        // 1. Initialize data structures
         initializeGrids();
-
-        // 2. Single generation call
         generator.generate(terrainMap, heightMap, trees, monoliths, teeCenter, holePosition);
 
-        // 3. Post-generation logic
+        int hx = MathUtils.clamp((int) ((holePosition.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
+        int hz = MathUtils.clamp((int) ((holePosition.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
+        this.holePosition.y = heightMap[hx][hz] + 0.04f;
+
+        int tx = MathUtils.clamp((int) ((teeCenter.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
+        int tz = MathUtils.clamp((int) ((teeCenter.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
+        this.teeCenter.y = heightMap[tx][tz];
+
         if (generator instanceof ClassicGenerator) {
             this.waterLevel = ((ClassicGenerator) generator).getData().getWaterLevel();
         } else {
@@ -72,9 +79,13 @@ public class Terrain {
             chunks.add(buildChunk(z, Math.min(z + CHUNK_Z, SIZE_Z)));
         }
 
-        createHoleMarker(holePosition);
+        Vector3 normal = getNormalAt(holePosition.x, holePosition.z);
+        createHoleMarker(holePosition, normal);
         createFlag(holePosition);
-        createTee(teeCenter);
+
+        if (!(generator instanceof PuttingGreenGenerator)) {
+            createTee(teeCenter);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -181,7 +192,8 @@ public class Terrain {
     }
 
     private Vector3 vertex(int x, int z) {
-        return new Vector3(x * SCALE, heightMap[x][z], z * SCALE);
+        float y = heightMap[x][z];
+        return new Vector3(x * SCALE, y, z * SCALE);
     }
 
     public void render(ModelBatch batch, Environment env) {
@@ -208,32 +220,42 @@ public class Terrain {
         float h01 = heightMap[ix][iz + 1];
         float h11 = heightMap[ix + 1][iz + 1];
 
-        return MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
+        float baseHeight = MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
+
+        float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
+
+        // Physical hole radius
+        float holeRadius = (holeSize / 2f);
+        // Influence radius (e.g., 50% larger than the actual hole)
+        float influenceRadius = holeRadius * 1.25f;
+
+        if (distToHole < influenceRadius) {
+            float dipPercent = 1.0f - (distToHole / influenceRadius);
+
+            float dipAmount = (float) Math.pow(dipPercent, 2.0f) * CUP_DEPTH;
+
+            return baseHeight - dipAmount;
+        }
+
+        return baseHeight;
     }
 
     public Vector3 getNormalAt(float worldX, float worldZ) {
-        float localX = worldX + (SIZE_X * SCALE / 2f);
-        float localZ = worldZ + (SIZE_Z * SCALE / 2f);
-        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
-        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
-
-        Vector3 v00 = vertex(ix, iz);
-        Vector3 v10 = vertex(ix + 1, iz);
-        Vector3 v01 = vertex(ix, iz + 1);
-        Vector3 v11 = vertex(ix + 1, iz + 1);
-
-        Vector3 n1 = new Vector3(v11).sub(v00).crs(new Vector3(v10).sub(v00)).nor();
-        Vector3 n2 = new Vector3(v01).sub(v00).crs(new Vector3(v11).sub(v00)).nor();
-        return n1.lerp(n2, (localX / SCALE) - ix).nor();
+        float eps = 0.01f;
+        float hL = getHeightAt(worldX - eps, worldZ);
+        float hR = getHeightAt(worldX + eps, worldZ);
+        float hD = getHeightAt(worldX, worldZ - eps);
+        float hU = getHeightAt(worldX, worldZ + eps);
+        return new Vector3(hL - hR, 2.0f * eps, hD - hU).nor();
     }
 
-    private void createHoleMarker(Vector3 pos) {
+    private void createHoleMarker(Vector3 pos, Vector3 normal) {
         ModelBuilder mb = new ModelBuilder();
         Model disc = mb.createCylinder(holeSize, 0.01f, holeSize, 20,
                 new Material(ColorAttribute.createDiffuse(Color.BLACK)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         holeMarker = new ModelInstance(disc);
-        holeMarker.transform.setToTranslation(pos.x, pos.y + 0.02f, pos.z);
+        updateTransformToNormal(holeMarker, pos, normal, 0.005f);
     }
 
     private void createFlag(Vector3 pos) {
@@ -249,7 +271,25 @@ public class Terrain {
                 .rect(0.1f, 1.5f, 0f, 0.1f, 2.5f, 0f, 1.6f, 2.5f, 0f, 1.6f, 1.5f, 0f, 0f, 0f, 1f);
 
         flagInstance = new ModelInstance(mb.end());
-        flagInstance.transform.setToTranslation(pos.x, pos.y + 2.5f, pos.z);
+        updateFlagTransform(pos, 1.0f, 0f);
+    }
+
+    private void updateTransformToNormal(ModelInstance instance, Vector3 pos, Vector3 normal, float yOffset) {
+        instance.transform.setToTranslation(pos);
+        Quaternion q = new Quaternion();
+        q.setFromCross(Vector3.Y, normal);
+        instance.transform.rotate(q);
+        instance.transform.translate(0, yOffset, 0);
+    }
+
+    private void updateFlagTransform(Vector3 pos, float scale, float rotationY) {
+        if (flagInstance == null) return;
+        flagInstance.transform.setToTranslation(pos);
+        // We do NOT tilt the flag. We keep it pointing at Vector3.Y
+        flagInstance.transform.rotate(Vector3.Y, rotationY);
+        flagInstance.transform.scale(scale, scale, scale);
+        // Offset up by half height (cylinder is created around origin)
+        flagInstance.transform.translate(0, 2.5f, 0);
     }
 
     private void createTee(Vector3 pos) {
@@ -258,7 +298,7 @@ public class Terrain {
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         teeInstance = new ModelInstance(teeModel);
-        teeInstance.transform.setToTranslation(pos.x, pos.y - 0.15f, pos.z);
+        teeInstance.transform.setToTranslation(pos.x, pos.y + 0.075f, pos.z);
     }
 
     public void updateFlag(Vector3 cameraPosition) {
@@ -269,9 +309,7 @@ public class Terrain {
         Vector3 dir = new Vector3(cameraPosition).sub(holePosition);
         float angle = MathUtils.atan2(dir.x, dir.z) * MathUtils.radiansToDegrees;
 
-        flagInstance.transform.setToScaling(scale, scale, scale);
-        flagInstance.transform.rotate(Vector3.Y, angle);
-        flagInstance.transform.setTranslation(holePosition.x, holePosition.y + (2.5f * scale), holePosition.z);
+        updateFlagTransform(holePosition, scale, angle);
     }
 
     private void createWaterPlane() {
@@ -320,14 +358,53 @@ public class Terrain {
     public List<Tree> getTreesAt(float worldX, float worldZ) {
         int gx = MathUtils.clamp((int)((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
         int gz = MathUtils.clamp((int)((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
-        return treeGrid[gx][gz];
+        List<Tree> nearby = new ArrayList<>(treeGrid[gx][gz]);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x == 0 && z == 0) continue;
+                int nx = gx + x;
+                int nz = gz + z;
+                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) nearby.addAll(treeGrid[nx][nz]);
+            }
+        }
+        return nearby;
     }
 
     public List<Monolith> getMonolithsAt(float worldX, float worldZ) {
         int gx = MathUtils.clamp((int)((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
         int gz = MathUtils.clamp((int)((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
-        return monolithGrid[gx][gz];
+        List<Monolith> nearby = new ArrayList<>(monolithGrid[gx][gz]);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x == 0 && z == 0) continue;
+                int nx = gx + x;
+                int nz = gz + z;
+                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) nearby.addAll(monolithGrid[nx][nz]);
+            }
+        }
+        return nearby;
     }
+
+    public void setHolePosition(Vector3 newPos) {
+        this.holePosition.set(newPos);
+        int ix = MathUtils.clamp((int) ((newPos.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
+        int iz = MathUtils.clamp((int) ((newPos.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
+        this.holePosition.y = heightMap[ix][iz] + 0.02f;
+
+        Vector3 normal = getNormalAt(holePosition.x, holePosition.z);
+        if (holeMarker != null) updateTransformToNormal(holeMarker, holePosition, normal, 0.005f);
+        if (flagInstance != null) updateFlagTransform(holePosition, 1.0f, 0f);
+    }
+
+    public void setTeePosition(Vector3 newPos) {
+        this.teeCenter.set(newPos);
+        int ix = MathUtils.clamp((int) ((newPos.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
+        int iz = MathUtils.clamp((int) ((newPos.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
+        this.teeCenter.y = heightMap[ix][iz];
+        if (teeInstance != null) teeInstance.transform.setToTranslation(teeCenter.x, teeCenter.y + 0.075f, teeCenter.z);
+    }
+
+    public void setGreenRadius(float radius) { }
 
     public Vector3 getTeePosition() { return teeCenter; }
     public Vector3 getHolePosition() { return holePosition; }
@@ -343,10 +420,8 @@ public class Terrain {
         SAND(2.5f, 12.0f, 2.5f, 1.8f, 0.9f, new Color(0.85f, 0.8f, 0.5f, 1f)),
         GREEN(0.2f, 0.1f, 1.05f, 0.9f, 0.6f, new Color(0.1f, 0.6f, 0.1f, 1f)),
         STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.02f, new Color(0.18f, 0.18f, 0.2f, 1f));
-
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
         public final Color color;
-
         TerrainType(float kf, float rr, float sm, float diff, float softness, Color col) {
             this.kineticFriction = kf;
             this.rollingResistance = rr;
@@ -363,54 +438,38 @@ public class Terrain {
         private final float tH, tR, fR;
         private final TreeScheme scheme;
         private float actualFoliageHeight;
-
         public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng) {
             this.pos = new Vector3(x, y, z);
             this.tH = th; this.tR = tr; this.fR = fr;
             this.scheme = scheme;
-
             ModelBuilder mb = new ModelBuilder();
             Material barkMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomBark()));
             Material leafMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage()));
-
-            trunk = new ModelInstance(mb.createCylinder(tr * 2, th, tr * 2, 16, barkMat,
-                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+            trunk = new ModelInstance(mb.createCylinder(tr * 2, th, tr * 2, 16, barkMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
             trunk.transform.setToTranslation(x, y + th / 2, z);
-
             if (scheme == TreeScheme.FIR) {
-                float skirtMultiplier = 0.6f + (rng.nextFloat() * (0.91f - 0.6f));
+                float skirtMultiplier = 0.6f + (rng.nextFloat() * 0.31f);
                 this.actualFoliageHeight = (th * skirtMultiplier) + (fr * 2);
-                Model coneModel = mb.createCone(fr * 2.5f, actualFoliageHeight, fr * 2.5f, 16, leafMat,
-                        VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-                foliage = new ModelInstance(coneModel);
-                float topY = y + th + (fr * 2);
-                float centerY = topY - (actualFoliageHeight / 2f);
-                foliage.transform.setToTranslation(x, centerY, z);
+                foliage = new ModelInstance(mb.createCone(fr * 2.5f, actualFoliageHeight, fr * 2.5f, 16, leafMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+                foliage.transform.setToTranslation(x, y + th + (fr * 2) - (actualFoliageHeight / 2f), z);
             } else {
                 this.actualFoliageHeight = fr * 2;
-                Model sphereModel = mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16, leafMat,
-                        VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-                foliage = new ModelInstance(sphereModel);
+                foliage = new ModelInstance(mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16, leafMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
                 foliage.transform.setToTranslation(x, y + th + fr, z);
             }
         }
-
         public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
             if (scheme == TreeScheme.FIR) {
                 float topY = pos.y + tH + (fR * 2);
                 float baseY = topY - actualFoliageHeight;
                 if (ballPos.y > topY + ballRadius || ballPos.y < baseY - ballRadius) return false;
                 float relativeY = MathUtils.clamp((topY - ballPos.y) / actualFoliageHeight, 0, 1);
-                float coneRadiusAtHeight = (relativeY * (fR * 1.25f)) + ballRadius;
-                return Vector3.dst(ballPos.x, 0, ballPos.z, pos.x, 0, pos.z) < coneRadiusAtHeight;
-            } else {
-                return ballPos.dst(pos.x, pos.y + tH + fR, pos.z) < (fR + ballRadius);
-            }
+                return Vector3.dst(ballPos.x, 0, ballPos.z, pos.x, 0, pos.z) < (relativeY * (fR * 1.25f)) + ballRadius;
+            } else return ballPos.dst(pos.x, pos.y + tH + fR, pos.z) < (fR + ballRadius);
         }
-
         public void render(ModelBatch b, Environment e) { b.render(trunk, e); b.render(foliage, e); }
         public void dispose() { trunk.model.dispose(); foliage.model.dispose(); }
-        public Vector3 getPosition() { return pos; } // Direct reference to avoid GC
+        public Vector3 getPosition() { return pos; }
         public float getTrunkHeight() { return tH; }
         public float getTrunkRadius() { return tR; }
         public float getFoliageRadius() { return fR; }
@@ -422,26 +481,17 @@ public class Terrain {
         private final Vector3 pos;
         private final float width, height, depth;
         private float rotationY;
-
         public Monolith(float x, float y, float z, float w, float h, float d, float rotation) {
             this.pos = new Vector3(x, y, z);
             this.width = w; this.height = h; this.depth = d; this.rotationY = rotation;
-
             ModelBuilder mb = new ModelBuilder();
-            Material monolithMaterial = new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f)));
-            instance = new ModelInstance(mb.createBox(w, h, d, monolithMaterial,
-                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+            instance = new ModelInstance(mb.createBox(w, h, d, new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f))), VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
             updateTransform();
         }
-
-        private void updateTransform() {
-            instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z);
-            instance.transform.rotate(Vector3.Y, rotationY);
-        }
-
+        private void updateTransform() { instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z); instance.transform.rotate(Vector3.Y, rotationY); }
         public void render(ModelBatch b, Environment e) { b.render(instance, e); }
         public void dispose() { if (instance.model != null) instance.model.dispose(); }
-        public Vector3 getPosition() { return pos; } // Direct reference to avoid GC
+        public Vector3 getPosition() { return pos; }
         public float getWidth() { return width; }
         public float getHeight() { return height; }
         public float getDepth() { return depth; }
@@ -456,11 +506,8 @@ public class Terrain {
         AUTUMN_MAPLE(new Color(0.25f, 0.2f, 0.15f, 1f), new Color(0.35f, 0.3f, 0.25f, 1f), new Color(0.8f, 0.2f, 0.1f, 1f), new Color(1f, 0.6f, 0.0f, 1f)),
         CHERRY_BLOSSOM(new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f), new Color(1f, 0.7f, 0.75f, 1f), new Color(1f, 0.85f, 0.9f, 1f)),
         DEAD_GRAY(new Color(0.2f, 0.2f, 0.2f, 1f), new Color(0.4f, 0.4f, 0.4f, 1f), new Color(0.1f, 0.1f, 0.1f, 1f), new Color(0.3f, 0.3f, 0.3f, 1f));
-
         private final Color barkMin, barkMax, leafMin, leafMax;
-        TreeScheme(Color bMin, Color bMax, Color lMin, Color lMax) {
-            this.barkMin = bMin; this.barkMax = bMax; this.leafMin = lMin; this.leafMax = lMax;
-        }
+        TreeScheme(Color bMin, Color bMax, Color lMin, Color lMax) { this.barkMin = bMin; this.barkMax = bMax; this.leafMin = lMin; this.leafMax = lMax; }
         public Color getRandomBark() { return barkMin.cpy().lerp(barkMax, MathUtils.random()); }
         public Color getRandomFoliage() { return leafMin.cpy().lerp(leafMax, MathUtils.random()); }
     }

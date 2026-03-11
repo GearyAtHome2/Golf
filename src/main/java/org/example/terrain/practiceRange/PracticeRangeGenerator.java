@@ -38,7 +38,7 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
 
         // Tee is back in the center (x=0), but we'll ensure height is above water
         teePos.set(0, 0.38f, teeZ);
-        holePos.set(0, 0, (depth - 50f) - halfDepth);
+        holePos.set(0, 0, (depth - 50f) - halfDepth +2);
 
         signPositions.clear();
         monoliths.clear(); // Clear existing buildings before adding new ones

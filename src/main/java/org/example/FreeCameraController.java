@@ -164,4 +164,14 @@ public class FreeCameraController {
             introActive = false;
         }
     }
+
+    public void setOrientation(Vector3 target) {
+        // Calculate the vector from target (hole) to the ball
+        // This aligns the camera to look "through" the ball at the hole
+        Vector3 dir = new Vector3(target).sub(currentLookAt).nor();
+        this.yaw = MathUtils.atan2(-dir.x, -dir.z) * MathUtils.radiansToDegrees;
+        this.pitch = 15f;
+        this.targetPitch = 15f;
+        this.introActive = false; // Disable intro so it doesn't drift away
+    }
 }

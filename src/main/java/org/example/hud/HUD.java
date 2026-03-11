@@ -113,13 +113,13 @@ public class HUD {
         font.draw(batch, "GEARY GOLF", centerX - 180, centerY + 180);
 
         font.getData().setScale(1.5f);
-        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 60);
-        drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY + 10);
-        drawOption(selection == 2, true, "PRACTICE RANGE", centerX - 80, centerY - 40);
-
+        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 80);
+        drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY + 40);
+        drawOption(selection == 2, true, "INSTRUCTIONS", centerX - 80, centerY);
+        drawOption(selection == 3, true, "PRACTICE RANGE", centerX - 80, centerY -40);
+        drawOption(selection == 4, true, "PUTTING GREEN", centerX - 80, centerY - 80);
         String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
-        drawOption(selection == 3, hasValidSeed, seedText, centerX - 80, centerY - 90);
-        drawOption(selection == 4, true, "INSTRUCTIONS", centerX - 80, centerY - 140);
+        drawOption(selection == 5, hasValidSeed, seedText, centerX - 80, centerY - 120);
 
         font.getData().setScale(1f);
         font.setColor(Color.GRAY);
@@ -272,7 +272,11 @@ public class HUD {
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore) {
         float topY = viewport.getWorldHeight() - 40;
         font.getData().setScale(1.5f);
-        if (isPractice) { font.setColor(Color.CYAN); font.draw(batch, "PRACTICE RANGE", 40, topY); }
+        if (isPractice) {
+            font.setColor(Color.CYAN);
+            String practiceLabel = "PRACTICE";
+            font.draw(batch, practiceLabel, 40, topY);
+        }
         else if (levelData != null) {
             font.setColor(Color.GOLD);
             String header = levelData.getArchetype().name().replace("_", " ") + (compScore != null ? " - HOLE " + compScore.getCurrentHoleNumber() : "");
@@ -344,13 +348,13 @@ public class HUD {
     }
 
     public void reset() {
-        minigameController.reset(); // You'll need to add this to MinigameController too
+        minigameController.reset();
         hazardTimer = 0;
         shotFeedbackTimer = 0;
         distanceDisplayTimer = 0;
         mainMenuRequested = false;
         instructionsRequested = false;
-        spinDot.set(0, 0); // Optional: reset spin too?
+        spinDot.set(0, 0);
     }
 
     public void updateSpinInput(float d) {

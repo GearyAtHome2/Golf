@@ -12,6 +12,7 @@ import java.util.List;
 public class Ball {
 
     public enum State {AIR, CONTACT, ROLLING, STATIONARY}
+
     public enum Interaction {NONE, LEAVES, WATER, TERRAIN}
 
     public static final float BALL_RADIUS = 0.2f;
@@ -99,7 +100,13 @@ public class Ball {
         }
 
         float terrainHeight = terrain.getHeightAt(position.x, position.z) + BALL_RADIUS / 3;
-        boolean touchingTerrain = (state == State.ROLLING && position.y <= terrainHeight + 0.1f)
+
+        // Check proximity to hole to disable "sticky" snapping
+        float distToHole = Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
+        boolean nearHole = distToHole < 0.32f;
+
+        // If near the hole, we don't force "touchingTerrain" just because of Y proximity
+        boolean touchingTerrain = (state == State.ROLLING && position.y <= terrainHeight + 0.1f && !nearHole)
                 || (position.y < terrainHeight - 0.2f);
 
         if (touchingTerrain) {
@@ -201,7 +208,9 @@ public class Ball {
             return;
         }
 
-        if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f)) {
+        // Only snap to terrain height if we aren't within the "drop zone" of the hole
+        float distToHole = Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
+        if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f) && distToHole > terrain.getHoleSize()) {
             position.y = terrainHeight;
         }
 
@@ -354,7 +363,9 @@ public class Ball {
         renderer.resetTrail(renderer.getActiveTrailColor());
     }
 
-    public void capturePosition() { lastShotPosition.set(this.position); }
+    public void capturePosition() {
+        lastShotPosition.set(this.position);
+    }
 
     public void resetToLastPosition() {
         this.position.set(lastShotPosition);
@@ -365,26 +376,92 @@ public class Ball {
         renderer.updateVisuals(position, state);
     }
 
-    public boolean isInWater(Terrain terrain) { return position.y < terrain.getWaterLevel(); }
+    public boolean isInWater(Terrain terrain) {
+        return position.y < terrain.getWaterLevel();
+    }
 
-    public boolean checkVictory(Vector3 holePos, float holeSize) {
+    public boolean checkVictory(Terrain terrain) {
+        Vector3 holePos = terrain.getHolePosition();
         float distToHole = position.dst(holePos);
-        if (distToHole < holeSize / 2f) {
-            if (state == State.ROLLING || state == State.CONTACT) return velocity.len() < 12f;
-            if (state == State.AIR && (position.y - BALL_RADIUS - holePos.y) < 0f) return true;
+        float holeRadius = terrain.getHoleSize() / 2f;
+
+        // 1. Horizontal check
+        if (distToHole < holeRadius) {
+
+            // 2. Sample 4 points around the hole (outside the 0.6f radius) to get the average "Lip Height"
+            // Using an offset of 0.8f ensures we are clear of the 0.6f hole logic.
+            float sampleOffset = 0.8f;
+            float h1 = terrain.getHeightAt(holePos.x + sampleOffset, holePos.z);
+            float h2 = terrain.getHeightAt(holePos.x - sampleOffset, holePos.z);
+            float h3 = terrain.getHeightAt(holePos.x, holePos.z + sampleOffset);
+            float h4 = terrain.getHeightAt(holePos.x, holePos.z - sampleOffset);
+
+            float averageGroundLevel = (h1 + h2 + h3 + h4) / 4f;
+
+            // 3. Comparison
+            // We want the ball center to be at least 0.15f below the average lip height
+            float dropThreshold = 0.15f;
+            boolean isBelowLip = position.y < (averageGroundLevel - dropThreshold);
+
+            // 4. Detailed Logging
+            System.out.println(String.format(
+                    "[Victory Check] Dist: %.3f | BallY: %.3f | AvgGround: %.3f | Threshold: %.3f | Success: %b",
+                    distToHole, position.y, averageGroundLevel, (averageGroundLevel - dropThreshold), isBelowLip
+            ));
+
+            if (isBelowLip) {
+                // Final check: make sure the ball isn't moving so fast it's "glitching" through
+                if (velocity.len() < 15f) {
+                    return true;
+                } else {
+                    System.out.println("[Victory Check] REJECTED: Velocity too high (" + velocity.len() + ")");
+                }
+            }
         }
         return false;
     }
 
-    public void render(ModelBatch batch, Environment env) { renderer.render(batch, env); }
-    public void renderTrail(ModelBatch batch, Environment env) { renderer.renderTrail(batch, env); }
-    public float getFlatDistanceToHole(Terrain terrain) { return (terrain == null) ? 0 : Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z); }
-    public float getShotDistance() { return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z); }
-    public Vector3 getPosition() { return position; }
-    public Vector3 getVelocity() { return velocity; }
-    public Vector3 getSpin() { return spin; }
-    public State getState() { return state; }
-    public void clearInteraction() { lastInteraction = Interaction.NONE; }
-    public Interaction getLastInteraction() { return lastInteraction; }
-    public void dispose() { renderer.dispose(); }
+    public void render(ModelBatch batch, Environment env) {
+        renderer.render(batch, env);
+    }
+
+    public void renderTrail(ModelBatch batch, Environment env) {
+        renderer.renderTrail(batch, env);
+    }
+
+    public float getFlatDistanceToHole(Terrain terrain) {
+        return (terrain == null) ? 0 : Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
+    }
+
+    public float getShotDistance() {
+        return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
+    }
+
+    public Vector3 getPosition() {
+        return position;
+    }
+
+    public Vector3 getVelocity() {
+        return velocity;
+    }
+
+    public Vector3 getSpin() {
+        return spin;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public void clearInteraction() {
+        lastInteraction = Interaction.NONE;
+    }
+
+    public Interaction getLastInteraction() {
+        return lastInteraction;
+    }
+
+    public void dispose() {
+        renderer.dispose();
+    }
 }
