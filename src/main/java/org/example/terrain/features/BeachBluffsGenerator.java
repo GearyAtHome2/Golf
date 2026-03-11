@@ -43,40 +43,81 @@ public class BeachBluffsGenerator {
         }
 
         float beachH = water + 4.0f;
+
         for (int x = 0; x < SX; x++) {
             for (int z = 0; z < SZ; z++) {
                 if (TerrainUtils.isUnmodifiable(map[x][z])) continue;
-                float h = water - 1.0f; Terrain.TerrainType type = Terrain.TerrainType.ROUGH;
+
+                float h = water - 1.0f;
+                Terrain.TerrainType type = Terrain.TerrainType.ROUGH;
                 float wobble = generateMultiWaveNoise(x * 0.8f, z * 0.8f, 0.15f) * 5.0f;
 
-                for (Vector3 b : points) {
+                for (int i = 0; i < points.size(); i++) {
+                    Vector3 b = points.get(i);
                     float d = Vector2.dst(x, z, b.x, b.z);
-                    float fR = (12f + (b.y * 0.3f)) + (wobble * 0.5f), rR = fR + 15f + wobble, bR = rR + 17f;
+
+                    boolean isGreenBluff = (i == 1);
+                    // 1 in 40 chance for a "Stone Nub" (excluding tee and green)
+                    boolean isNub = (i > 1) && (new Random((long)(b.x * b.z)).nextInt(40) == 0);
+
+                    float baseRadius = isGreenBluff ? 25.0f : 14f;
+                    float roughPadding = isGreenBluff ? 20f : 10f;
+                    float beachPadding = 15.0f;
+
+                    float fR = (baseRadius + (b.y * 0.3f)) + (wobble * 0.5f);
+                    float rR = fR + roughPadding + (wobble * 0.5f);
+                    float bR = rR + beachPadding;
 
                     if (d < rR) {
                         float curH = MathUtils.lerp(beachH, b.y, 1.0f - (float) Math.pow(d / rR, 14.0f));
-                        if (curH > h) { h = curH; type = (d < fR) ? Terrain.TerrainType.FAIRWAY : Terrain.TerrainType.ROUGH; }
+                        if (curH > h) {
+                            h = curH;
+
+                            if (isNub) {
+                                type = Terrain.TerrainType.STONE;
+                            } else if (d < fR) {
+                                type = Terrain.TerrainType.FAIRWAY;
+                            } else {
+                                // For standard islands: Everything between Fairway and the Beach is Stone.
+                                // This creates the cliff wall you want.
+                                type = Terrain.TerrainType.STONE;
+                            }
+                        }
                     } else if (d < bR) {
                         float curH = MathUtils.lerp(beachH, water - 1.0f, (d - rR) / (bR - rR));
-                        if (curH > h) { h = curH; type = (curH > water) ? Terrain.TerrainType.SAND : Terrain.TerrainType.ROUGH; }
+                        if (curH > h) {
+                            h = curH;
+
+                            // VERTEX BUFFER: Force stone for the first 1.5 units of the beach transition.
+                            // This ensures the "bottom" vertex of the cliff-side triangles is Stone,
+                            // preventing sand from interpolating up the cliff face.
+                            if (d < rR + 1.5f) {
+                                type = Terrain.TerrainType.STONE;
+                            } else {
+                                type = (curH > water) ? Terrain.TerrainType.SAND : Terrain.TerrainType.ROUGH;
+                            }
+                        }
                     }
                 }
-                heights[x][z] = h; map[x][z] = type;
+                heights[x][z] = h;
+                map[x][z] = type;
             }
         }
     }
 
     private boolean isSpaceForBluff(float x, float z, List<Vector3> points, float min) {
-        for (Vector3 b : points) if (Vector2.dst(x, z, b.x, b.z) < min) return false;
+        for (Vector3 b : points) {
+            if (Vector2.dst(x, z, b.x, b.z) < min) return false;
+        }
         return true;
     }
-
 
     public float generateMultiWaveNoise(float x, float z, float bF) {
         float total = 0, totalA = 0;
         for (int i = 0; i < 10; i++) {
             float coord = (x * MathUtils.cos(waveAngles[i]) + z * MathUtils.sin(waveAngles[i])) * (bF * waveFreqs[i]);
-            total += MathUtils.sin(coord + waveOffsets[i]) * waveAmps[i]; totalA += waveAmps[i];
+            total += MathUtils.sin(coord + waveOffsets[i]) * waveAmps[i];
+            totalA += waveAmps[i];
         }
         return total / totalA;
     }

@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = LevelData.Archetype.SHADOW_CANYON;
+        selectedType = LevelData.Archetype.ROUGH_HOUGH_BLUFFS;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -345,7 +345,7 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.1f + r.nextFloat() * 0.1f;
                 islands = 0.0f;
                 cohesion = 1f;
-                distance = Math.round(300 + r.nextFloat() * 100);
+                distance = Math.round(400 + r.nextFloat() * 100);
                 par = 4;
                 break;
             case STANDARD_LINKS:
