@@ -57,15 +57,19 @@ public class BeachBluffsGenerator {
                     float d = Vector2.dst(x, z, b.x, b.z);
 
                     boolean isGreenBluff = (i == 1);
-                    // 1 in 40 chance for a "Stone Nub" (excluding tee and green)
                     boolean isNub = (i > 1) && (new Random((long)(b.x * b.z)).nextInt(40) == 0);
 
-                    float baseRadius = isGreenBluff ? 25.0f : 14f;
-                    float roughPadding = isGreenBluff ? 20f : 10f;
+                    float baseRadius = isGreenBluff ? 22.0f : 14f;
+
+                    // The distance between the fairway and the start of the cliff
+                    float fringePadding = isGreenBluff ? 12f : 8f;
+                    // How far out the cliff actually goes
+                    float roughPadding = isGreenBluff ? 16f : 8f;
                     float beachPadding = 15.0f;
 
                     float fR = (baseRadius + (b.y * 0.3f)) + (wobble * 0.5f);
-                    float rR = fR + roughPadding + (wobble * 0.5f);
+                    float fringeR = fR + fringePadding + (wobble * 0.2f); // The rough border
+                    float rR = fringeR + roughPadding + (wobble * 0.5f);
                     float bR = rR + beachPadding;
 
                     if (d < rR) {
@@ -77,9 +81,11 @@ public class BeachBluffsGenerator {
                                 type = Terrain.TerrainType.STONE;
                             } else if (d < fR) {
                                 type = Terrain.TerrainType.FAIRWAY;
+                            } else if (d < fringeR) {
+                                // This restores your rough border around the fairways
+                                type = Terrain.TerrainType.ROUGH;
                             } else {
-                                // For standard islands: Everything between Fairway and the Beach is Stone.
-                                // This creates the cliff wall you want.
+                                // This is the cliff face itself
                                 type = Terrain.TerrainType.STONE;
                             }
                         }
@@ -87,10 +93,6 @@ public class BeachBluffsGenerator {
                         float curH = MathUtils.lerp(beachH, water - 1.0f, (d - rR) / (bR - rR));
                         if (curH > h) {
                             h = curH;
-
-                            // VERTEX BUFFER: Force stone for the first 1.5 units of the beach transition.
-                            // This ensures the "bottom" vertex of the cliff-side triangles is Stone,
-                            // preventing sand from interpolating up the cliff face.
                             if (d < rR + 1.5f) {
                                 type = Terrain.TerrainType.STONE;
                             } else {
