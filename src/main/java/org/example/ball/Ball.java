@@ -31,12 +31,14 @@ public class Ball {
 
     private static final float MAX_STEP_UP = 1.0f;
     private static final int SUB_STEPS = 4;
+    private static final float TRAIL_DIST_STEP = 0.25f; // Records a point every 25cm
 
     private final Vector3 position = new Vector3();
     private final Vector3 velocity = new Vector3();
     private final Vector3 spin = new Vector3();
     private final Vector3 lastStationaryPosition = new Vector3();
     private final Vector3 lastShotPosition = new Vector3();
+    private final Vector3 lastTrailPos = new Vector3();
 
     private final BallRenderer renderer;
     private boolean isGoodShot = false;
@@ -55,25 +57,40 @@ public class Ball {
         this.position.set(startPosition);
         this.lastStationaryPosition.set(startPosition);
         this.lastShotPosition.set(startPosition);
+        this.lastTrailPos.set(startPosition);
         renderer.updateVisuals(position, state);
     }
 
     public void update(float delta, Terrain terrain, Vector3 baseWind) {
-        if (state == State.STATIONARY) {
-            renderer.updateVisuals(position, state);
+        // 1. ALWAYS update the trail clock first
+        renderer.updateTrail(delta);
+
+        // 2. Update visuals (the ball position/color)
+        renderer.updateVisuals(position, state);
+
+        // 3. If stationary, check if we can skip the heavy physics logic.
+        // We only return early if the ball is still AND the trail has fully evaporated.
+        if (state == State.STATIONARY && !renderer.hasVisibleTrail()) {
             return;
         }
 
+        // Log the delta when the ball is in flight to catch spikes
+        Gdx.app.log("BALL_DEBUG", "Delta: " + delta + " | FPS: " + Gdx.graphics.getFramesPerSecond());
+
         if (hitCooldown > 0) hitCooldown -= delta;
-        renderer.updateTrail(delta);
-        renderer.recordTrailPoint(position, 1.0f);
 
         float subDelta = delta / SUB_STEPS;
         for (int i = 0; i < SUB_STEPS; i++) {
             processPhysicsStep(subDelta, terrain, baseWind);
+
+            // Record trail points based on distance traveled
+            if (position.dst2(lastTrailPos) > (TRAIL_DIST_STEP * TRAIL_DIST_STEP)) {
+                renderer.recordTrailPoint(position, 1.0f);
+                lastTrailPos.set(position);
+            }
+
             if (state == State.STATIONARY) break;
         }
-        renderer.updateVisuals(position, state);
     }
 
     private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind) {
@@ -348,7 +365,6 @@ public class Ball {
         Vector3 friction = BallPhysics.getRollingFriction(tangentVel, normal, type, GRAVITY);
 
         tangentVel.add(slopeForce.scl(delta)).add(friction.scl(delta));
-        spin.setZero();
 
         if (renderer.getActiveTrailColor().r > 0.3f || renderer.getActiveTrailColor().g > 0.3f) {
             renderer.lerpTrailColor(new Color(0.2f, 0.2f, 0.2f, 1f), delta * 1.5f);
@@ -425,6 +441,7 @@ public class Ball {
         state = (loft < 1.0f) ? State.ROLLING : State.AIR;
         hitCooldown = (state == State.ROLLING) ? 0.02f : 0.1f;
         renderer.resetTrail(renderer.getActiveTrailColor());
+        lastTrailPos.set(position);
 
         Gdx.app.log("BALL_PHYSICS", String.format("HIT: Speed(%f) Loft(%f) State(%s)", finalSpeed, loft, state));
     }

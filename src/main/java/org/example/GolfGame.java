@@ -455,9 +455,13 @@ public class GolfGame extends ApplicationAdapter {
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PAUSED) {
                 currentState = previousState;
+                cameraController.setPaused(false);
             } else {
+
+
                 previousState = currentState;
                 currentState = GameState.PAUSED;
+                cameraController.setPaused(true);
             }
             return;
         }

@@ -26,32 +26,45 @@ public class FreeCameraController {
     private final Vector3 tempTargetPos = new Vector3();
 
     private final float mouseSensitivity = 0.3f;
-    private boolean isOverhead = false;
+    private final float fineTuneDivider = 5.0f;
+    boolean isOverhead = false;
+    private boolean isPaused = false;
 
     public FreeCameraController(PerspectiveCamera camera, float initialDistance, Vector3 startLookAt) {
         this.camera = camera;
         this.distance = initialDistance;
         this.targetDistance = 12f;
         this.currentLookAt.set(startLookAt);
+        Gdx.input.setCursorCatched(true);
     }
 
-    public void setIntroActive(boolean active) {
-        this.introActive = active;
+    public void setPaused(boolean paused) {
+        this.isPaused = paused;
+        Gdx.input.setCursorCatched(!paused);
     }
 
     public boolean handleScroll(float amountY) {
+        if (isPaused) return false;
+
         if (isOverhead) {
             overheadZoom += amountY * 25.0f;
             overheadZoom = MathUtils.clamp(overheadZoom, 50f, 1200f);
-        } else {
+            return true;
+        }
+
+        if (Gdx.input.isButtonPressed(Buttons.RIGHT)) {
             targetDistance += amountY * 3.0f;
             targetDistance = MathUtils.clamp(targetDistance, 2.1f, 150f);
+            return true;
         }
-        return true;
+
+        return false;
     }
 
     public void update(Vector3 ballPos) {
         float delta = Gdx.graphics.getDeltaTime();
+        if (isPaused) return;
+
         isOverhead = Gdx.input.isKeyPressed(Input.Keys.TAB);
 
         if (isOverhead) {
@@ -62,7 +75,6 @@ public class FreeCameraController {
                 currentLookAt.set(ballPos);
                 camera.up.set(0, 1f, 0);
             }
-
             updateNormalMode(ballPos, delta);
             wasOverheadLastFrame = false;
         }
@@ -76,37 +88,33 @@ public class FreeCameraController {
             introActive = false;
         }
 
-        // 1. Handle Input
-        if (Gdx.input.isButtonPressed(Buttons.LEFT)) {
-            yaw += -Gdx.input.getDeltaX() * mouseSensitivity;
-        } else if (Gdx.input.isButtonPressed(Buttons.RIGHT)) {
-            float panScale = overheadZoom * 1.4f / Gdx.graphics.getHeight();
+        // Fetch deltas once to ensure consistency
+        float deltaX = Gdx.input.getDeltaX();
+        float deltaY = Gdx.input.getDeltaY();
 
+        // LOGIC GATE: Prioritize one action at a time to prevent "Ghost Rotation"
+        if (Gdx.input.isButtonPressed(Buttons.LEFT)) {
+            // PANNING ONLY
+            float panScale = (overheadZoom / Gdx.graphics.getHeight()) * 1.5f;
             float radYaw = -MathUtils.degreesToRadians * yaw;
             float sinYaw = MathUtils.sin(radYaw);
             float cosYaw = MathUtils.cos(radYaw);
 
-            // Forward vector (pointing "away" from camera on XZ plane)
             float forwardX = -sinYaw;
             float forwardZ = -cosYaw;
-
-            // Right vector (perpendicular to forward)
-            // Corrected signs to ensure screen-right matches world-right relative to view
             float rightX = -cosYaw;
             float rightZ = sinYaw;
 
-            float mouseX = Gdx.input.getDeltaX();
-            float mouseY = Gdx.input.getDeltaY();
-
-            // Apply movement
-            overheadCenter.x += (rightX * mouseX * panScale) + (forwardX * mouseY * panScale);
-            overheadCenter.z += (rightZ * mouseX * panScale) + (forwardZ * mouseY * panScale);
+            overheadCenter.x += (rightX * deltaX * panScale) + (forwardX * deltaY * panScale);
+            overheadCenter.z += (rightZ * deltaX * panScale) + (forwardZ * deltaY * panScale);
+        }
+        else if (Gdx.input.isButtonPressed(Buttons.RIGHT)) {
+            // ROTATION ONLY
+            yaw += -deltaX * mouseSensitivity;
         }
 
-        // 2. Calculate Position (Using your specific 70 degree pitchRad)
         float pitchRad = 70f * MathUtils.degreesToRadians;
         float yawRad = -MathUtils.degreesToRadians * yaw;
-
         float verticalDist = overheadZoom * MathUtils.sin(pitchRad);
         float horizontalDist = overheadZoom * MathUtils.cos(pitchRad);
 
@@ -116,36 +124,33 @@ public class FreeCameraController {
 
         tempTargetPos.set(tx, ty, tz);
 
-        // 3. Remove Lerp for active movement to stop the "laggy" feel
-        // We only lerp if we just switched to overhead, otherwise we snap for precision
-        if (camera.position.dst(tempTargetPos) > 50f) {
-            camera.position.lerp(tempTargetPos, 8f * delta);
-        } else {
+        // Snap immediately during interaction for a crisp feel, lerp only on entry
+        if (Gdx.input.isButtonPressed(Buttons.LEFT) || Gdx.input.isButtonPressed(Buttons.RIGHT)) {
             camera.position.set(tempTargetPos);
+        } else {
+            camera.position.lerp(tempTargetPos, 8f * delta);
         }
 
         camera.up.set(0, 1, 0);
         camera.lookAt(overheadCenter);
     }
 
-    public boolean isOverhead() {
-        introActive = false;
-        return isOverhead;
-    }
-
     private void updateNormalMode(Vector3 ballPos, float delta) {
         float dstToTarget = camera.position.dst(tempTargetPos);
         float lerpBase = introActive ? 1.5f : 6.0f;
         float lerpSpeed = lerpBase * delta;
-        float lookSpeed = (introActive && dstToTarget > 15f) ? 0.8f : 6.0f;
-        currentLookAt.lerp(ballPos, lookSpeed * delta);
+        float lookSpeed = (introActive && dstToTarget > 15f) ? 0.8f : 8.0f;
 
+        currentLookAt.lerp(ballPos, lookSpeed * delta);
         distance = MathUtils.lerp(distance, targetDistance, lerpSpeed);
         pitch = MathUtils.lerp(pitch, targetPitch, lerpSpeed);
 
-        if (Gdx.input.isButtonPressed(Buttons.RIGHT) && !introActive) {
-            yaw += -Gdx.input.getDeltaX() * mouseSensitivity;
-            targetPitch = MathUtils.clamp(targetPitch + (-Gdx.input.getDeltaY() * mouseSensitivity), -10f, 85f);
+        if (!introActive) {
+            boolean isFineTuning = Gdx.input.isButtonPressed(Buttons.RIGHT);
+            float currentSensitivity = isFineTuning ? mouseSensitivity / fineTuneDivider : mouseSensitivity;
+
+            yaw += -Gdx.input.getDeltaX() * currentSensitivity;
+            targetPitch = MathUtils.clamp(targetPitch + (-Gdx.input.getDeltaY() * currentSensitivity), -10f, 85f);
         }
 
         float radYaw = -MathUtils.degreesToRadians * yaw;
@@ -166,12 +171,18 @@ public class FreeCameraController {
     }
 
     public void setOrientation(Vector3 target) {
-        // Calculate the vector from target (hole) to the ball
-        // This aligns the camera to look "through" the ball at the hole
         Vector3 dir = new Vector3(target).sub(currentLookAt).nor();
         this.yaw = MathUtils.atan2(-dir.x, -dir.z) * MathUtils.radiansToDegrees;
         this.pitch = 15f;
         this.targetPitch = 15f;
-        this.introActive = false; // Disable intro so it doesn't drift away
+        this.introActive = false;
+    }
+
+    public float getYaw() {
+        return yaw;
+    }
+
+    public boolean isOverhead() {
+        return isOverhead;
     }
 }
