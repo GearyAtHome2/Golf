@@ -8,7 +8,6 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.math.Vector2;
 import org.example.ball.ShotDifficulty;
@@ -46,6 +45,8 @@ public class Terrain {
     private List<Monolith>[][] monolithGrid;
     private int gridCols, gridRows;
 
+    private final Vector3 tempV1 = new Vector3();
+
     public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
         this.SIZE_Z = dynamicSizeZ;
         this.waterLevel = initialWaterLevel;
@@ -61,7 +62,6 @@ public class Terrain {
         int hz = MathUtils.clamp((int) ((holePosition.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
         this.holePosition.y = heightMap[hx][hz] + 0.04f;
 
-        // Initialize physical hole after position is set by generator
         this.physicalHole = new Hole(holePosition, holeSize / 2f, CUP_DEPTH);
 
         int tx = MathUtils.clamp((int) ((teeCenter.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
@@ -207,6 +207,9 @@ public class Terrain {
     }
 
     public float getHeightAt(float worldX, float worldZ) {
+        float rimRadius = holeSize / 2.0f;
+        float sinkDepth = 0.5f;
+
         float localX = worldX + (SIZE_X * SCALE / 2f);
         float localZ = worldZ + (SIZE_Z * SCALE / 2f);
         int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
@@ -221,24 +224,42 @@ public class Terrain {
         float h11 = heightMap[ix + 1][iz + 1];
 
         float baseHeight = MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
-
         float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
 
-        // THE GAP: Create a physical hole in the heightmap
-        if (distToHole < (holeSize / 2f)) {
-            return baseHeight - 100.0f;
+        if (distToHole < rimRadius) {
+            // FUNNEL PHYSICS: Linear depth from rim (0) to center (sinkDepth)
+            float ratio = distToHole / rimRadius;
+            return baseHeight - (sinkDepth * (1.0f - ratio));
         }
 
         return baseHeight;
     }
 
     public Vector3 getNormalAt(float worldX, float worldZ) {
-        float eps = 0.01f;
-        float hL = getHeightAt(worldX - eps, worldZ);
-        float hR = getHeightAt(worldX + eps, worldZ);
-        float hD = getHeightAt(worldX, worldZ - eps);
-        float hU = getHeightAt(worldX, worldZ + eps);
-        return new Vector3(hL - hR, 2.0f * eps, hD - hU).nor();
+        float rimRadius = holeSize / 2.0f;
+        float influenceRange = 0.15f;
+        float pullStrength = 0.4f;
+        float sampleEps = 0.02f;
+
+        float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
+
+        float hL = getHeightAt(worldX - sampleEps, worldZ);
+        float hR = getHeightAt(worldX + sampleEps, worldZ);
+        float hD = getHeightAt(worldX, worldZ - sampleEps);
+        float hU = getHeightAt(worldX, worldZ + sampleEps);
+
+        Vector3 normal = new Vector3(hL - hR, 2.0f * sampleEps, hD - hU).nor();
+
+        if (distToHole > rimRadius && distToHole < rimRadius + influenceRange) {
+            float t = 1.0f - ((distToHole - rimRadius) / influenceRange);
+            tempV1.set(holePosition.x - worldX, 0, holePosition.z - worldZ).nor();
+
+            normal.x += tempV1.x * t * pullStrength;
+            normal.z += tempV1.z * t * pullStrength;
+            normal.nor();
+        }
+
+        return normal;
     }
 
     private void createFlag(Vector3 pos) {
@@ -380,8 +401,6 @@ public class Terrain {
     public List<Tree> getTrees() { return trees; }
     public List<Monolith> getMonoliths() { return monoliths; }
 
-    // --- Inner Classes ---
-
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
         FAIRWAY(0.4f, 0.2f, 1.05f, 1.0f, 0.2f, new Color(0.1f, 0.4f, 0.1f, 1f)),
@@ -411,10 +430,17 @@ public class Terrain {
             this.radius = radius;
             this.depth = depth;
             ModelBuilder mb = new ModelBuilder();
-            cupInstance = new ModelInstance(mb.createCylinder(radius * 2, depth, radius * 2, 20,
+
+            // Create the cone
+            Model coneModel = mb.createCone(radius * 2, depth, radius * 2, 24,
                     new Material(ColorAttribute.createDiffuse(Color.BLACK)),
-                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+                    VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+
+            cupInstance = new ModelInstance(coneModel);
+
+            // FLIP THE CONE: Rotate 180 degrees around Z or X to make it a cup
             cupInstance.transform.setToTranslation(pos.x, pos.y - (depth / 2f), pos.z);
+            cupInstance.transform.rotate(Vector3.X, 180);
         }
 
         public void render(ModelBatch b, Environment e) { b.render(cupInstance, e); }

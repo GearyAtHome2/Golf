@@ -178,11 +178,6 @@ public class GolfGame extends ApplicationAdapter {
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
 
-        // FIX: Snap ball to the raw terrain surface + Radius (0.13f)
-        // This makes the ball sit perfectly on the grass regardless of generator offsets
-        float surfaceY = terrain.getHeightAt(tee.x, tee.z);
-        ball = new Ball(new Vector3(tee.x, surfaceY + 0.13f, tee.z), particleManager);
-
         if (currentState == GameState.PRACTICE_RANGE && generator instanceof PracticeRangeGenerator gen) {
             for (PracticeRangeGenerator.SignData data : gen.getSignPositions()) {
                 rangeSigns.add(new DistanceSign(data.position, data.distance));
@@ -190,12 +185,18 @@ public class GolfGame extends ApplicationAdapter {
             createYardageMarkers(gen);
         }
 
+        // --- FIXED SPAWN LOGIC ---
+        if (currentState == GameState.PUTTING_GREEN) {
+            ball = new Ball(new Vector3(tee.x, tee.y + 0.5f, tee.z), particleManager);
+            ball.setState(Ball.State.AIR);
+        } else {
+            ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager);
+        }
+
         hasCurrentBallBeenHit = false;
 
-        // --- CAMERA SYNC ---
         cameraController = new FreeCameraController(camera, 12f, ball.getPosition());
         cameraController.setOrientation(hole);
-        // Force update to move camera to the calculated tx, ty, tz before render
         cameraController.update(ball.getPosition());
 
         hud.resetShots();
@@ -271,9 +272,12 @@ public class GolfGame extends ApplicationAdapter {
                 shotController.reset();
             }
 
-            if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain)) {
-                hud.incrementShots();
-                hasCurrentBallBeenHit = true;
+            // Only allow shooting if the ball is actually stationary.
+            if (ball.getState() == Ball.State.STATIONARY) {
+                if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain)) {
+                    hud.incrementShots();
+                    hasCurrentBallBeenHit = true;
+                }
             }
 
             ball.update(effDelta, terrain, currentWind);
@@ -286,7 +290,7 @@ public class GolfGame extends ApplicationAdapter {
                     if (currentState == GameState.PRACTICE_RANGE) {
                         archiveGhostBall();
                         Vector3 tee = terrain.getTeePosition();
-                        ball = new Ball(new Vector3(tee.x, tee.y, tee.z), particleManager);
+                        ball = new Ball(new Vector3(tee.x, tee.y+0.17f, tee.z), particleManager);
                         hasCurrentBallBeenHit = false;
                         practiceResetTimer = 0f;
                     } else if (terrain.isPointOutOfBounds(ball.getPosition().x, ball.getPosition().z)) {
@@ -321,6 +325,7 @@ public class GolfGame extends ApplicationAdapter {
     private void resetBallToLastShot() {
         if (ball != null) {
             ball.resetToLastPosition();
+            ball.setState(Ball.State.STATIONARY);
             hasCurrentBallBeenHit = false;
             isVictory = false;
             practiceResetTimer = 0f;
@@ -457,8 +462,6 @@ public class GolfGame extends ApplicationAdapter {
                 currentState = previousState;
                 cameraController.setPaused(false);
             } else {
-
-
                 previousState = currentState;
                 currentState = GameState.PAUSED;
                 cameraController.setPaused(true);

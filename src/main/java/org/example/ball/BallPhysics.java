@@ -8,14 +8,12 @@ import static org.example.ball.Ball.BALL_RADIUS;
 
 public class BallPhysics {
 
-    // Internal scratchpad vectors for intermediate math
     private static final Vector3 temp = new Vector3();
     private static final Vector3 temp2 = new Vector3();
     private static final Vector3 relativeVelocity = new Vector3();
     private static final Vector3 vTangent = new Vector3();
     private static final Vector3 vNormalBounce = new Vector3();
 
-    // Result vectors used specifically for returns to avoid 'new Vector3()'
     private static final Vector3 outGravity = new Vector3();
     private static final Vector3 outWind = new Vector3();
     private static final Vector3 outDrag = new Vector3();
@@ -43,16 +41,12 @@ public class BallPhysics {
     public static Vector3 getMagnusForce(Vector3 velocity, Vector3 wind, Vector3 spin, float liftCoeff, float sideCoeff) {
         relativeVelocity.set(velocity).sub(wind);
         float airspeed = relativeVelocity.len();
-
         if (airspeed < 1f || spin.len() < 0.1f) return outMagnus.setZero();
-
         float surfaceSpeed = spin.len() * 0.02f;
         float spinRatio = surfaceSpeed / airspeed;
         float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
-
         float speedRef = airspeed / 20.0f;
         float dynamicLift = (speedRef * speedRef) * CL;
-
         temp.set(relativeVelocity).crs(spin).nor();
         float totalForce = -dynamicLift * (liftCoeff + sideCoeff);
         return outMagnus.set(temp).scl(totalForce);
@@ -64,24 +58,8 @@ public class BallPhysics {
     }
 
     public static void applyWaterPhysics(Vector3 position, Vector3 velocity, Vector3 spin, float waterLevel, float delta) {
-        float previousY = position.y - (velocity.y * delta);
         float depth = waterLevel - position.y;
         float immersion = MathUtils.clamp((depth + BALL_RADIUS) / (BALL_RADIUS * 2f), 0f, 1f);
-
-        if (previousY >= waterLevel && position.y < waterLevel && velocity.y < 0) {
-            float speed = velocity.len();
-            if (speed > 5.0f) {
-                float angleRad = (float) Math.asin(Math.abs(velocity.y) / speed);
-                float efficiency = MathUtils.cos(angleRad * 3.0f);
-                efficiency = MathUtils.clamp(efficiency, 0, 1) * efficiency;
-
-                float upwardImpulse = (speed * speed) * 0.005f * efficiency;
-                velocity.y += upwardImpulse;
-                velocity.scl(0.85f);
-                if (velocity.y > 0) return;
-            }
-        }
-
         if (immersion <= 0) return;
         float speed = velocity.len();
         float waterLiftCoeff = 0.8f;
@@ -89,10 +67,8 @@ public class BallPhysics {
         float spinRatio = surfaceSpeed / (speed + 0.1f);
         float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
         float dynamicLift = ((speed / 20.0f) * (speed / 20.0f)) * CL;
-
         temp.set(velocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * waterLiftCoeff * immersion);
         velocity.add(temp.scl(delta));
-
         velocity.y += 6.5f * immersion * delta;
         float dragStrength = 2.4f * immersion * (1.0f + speed * 0.12f);
         velocity.scl(MathUtils.clamp(1.0f - (dragStrength * delta), 0.05f, 1.0f));
@@ -127,22 +103,51 @@ public class BallPhysics {
         float vDotN = velocity.dot(normal);
         temp.set(normal).scl(vDotN);
         vTangent.set(velocity).sub(temp);
-        vNormalBounce.set(temp).scl(-restitution);
 
-        if (vTangent.len() > 0.1f) {
+        // 1. VERTICAL BOUNCE DECOUPLING
+        // Calculate a "micro-bounce" threshold. If impact is very soft, we kill the bounce energy.
+        float absVDotN = Math.abs(vDotN);
+        float bounceEfficiency = 1.0f;
+
+        if (absVDotN < 1.5f) {
+            // Non-linear drop-off: very light hits lose vertical energy exponentially
+            bounceEfficiency = MathUtils.clamp(absVDotN / 1.5f, 0f, 1.0f);
+            bounceEfficiency = bounceEfficiency * bounceEfficiency;
+        }
+
+        // Apply softness-based absorption (Rough/Sand absorbs more than Greens)
+        float absorption = 1.0f - (softness * 0.7f);
+        float finalRestitution = restitution * absorption * bounceEfficiency;
+
+        // Force a "snap to rolling" if the resulting bounce is too pathetic to matter
+        if (absVDotN * finalRestitution < 0.25f) {
+            vNormalBounce.setZero();
+        } else {
+            vNormalBounce.set(temp).scl(-finalRestitution);
+        }
+
+        // 2. HORIZONTAL "GRAB"
+        if (vTangent.len() > 0.05f) {
             Vector3 tanDir = temp.set(vTangent).nor();
             Vector3 sideDir = temp2.set(tanDir).crs(normal).nor();
+
             float relativeBackspin = spin.dot(sideDir);
             float relativeSidespin = spin.dot(normal);
 
-            float grip = MathUtils.clamp(softness * 0.6f + friction * 0.2f, 0.1f, 0.95f);
-            float spinTransferMagnitude = 0.09f;
-            vTangent.add(tanDir.scl(-relativeBackspin * spinTransferMagnitude * grip));
-            vTangent.add(sideDir.scl(relativeSidespin * spinTransferMagnitude * grip));
+            // Grip logic: softness helps spin take hold, but keep it subtle
+            float grip = MathUtils.clamp(softness * 0.5f + friction * 0.3f, 0.05f, 0.9f);
+            float spinTransfer = 0.08f * grip;
+
+            vTangent.add(tanDir.scl(-relativeBackspin * spinTransfer));
+            vTangent.add(sideDir.scl(relativeSidespin * spinTransfer));
+
+            // Proportional Speed Loss: Dampen horizontal speed based on impact force
+            // but cap it so it never feels like the ball hits a wall (unless it's deep rough)
+            float frictionLoss = (friction * 0.1f) + (softness * 0.2f);
+            float impactDamping = MathUtils.clamp(absVDotN / 10.0f, 0.05f, 0.4f);
+            vTangent.scl(1.0f - (frictionLoss * impactDamping));
         }
 
-        float speedLoss = (friction + softness) * 0.5f;
-        vTangent.scl(MathUtils.clamp(1.0f - speedLoss, 0.4f, 0.98f));
         return outBounce.set(vTangent).add(vNormalBounce);
     }
 
