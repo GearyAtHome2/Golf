@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.ROUGH_HOUGH_BLUFFS;
+//        selectedType = LevelData.Archetype.ROUGH_HOUGH_BLUFFS;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---

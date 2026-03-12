@@ -27,6 +27,21 @@ public class ParticleManager {
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
     }
 
+    /**
+     * Specifically for SUPER and PERFECTION shot glamour.
+     * This keeps these "fake" particles out of the Ball's trail buffer.
+     */
+    public void spawnRatingBurst(Vector3 pos, Color color, int count, float forceScale) {
+        for (int i = 0; i < count; i++) {
+            // Lower gravity for "glamour" particles so they float/linger more than dirt
+            GameParticle p = new GameParticle(pos, color, boxModel, 0, 1.5f, DEFAULT_GRAVITY * 0.5f);
+            p.velocity.set(MathUtils.random(-1f, 1f), MathUtils.random(0.5f, 2f), MathUtils.random(-1f, 1f))
+                    .nor()
+                    .scl(MathUtils.random(2f, 5f) * forceScale);
+            particles.add(p);
+        }
+    }
+
     public void handleBallInteraction(Ball ball, Terrain terrain) {
         Ball.Interaction interaction = ball.getLastInteraction();
         if (interaction == Ball.Interaction.NONE) return;
@@ -45,15 +60,12 @@ public class ParticleManager {
                 boolean isSkimming = verticalSpeed < speed * 0.35f;
 
                 if (isSkimming) {
-                    // Rooster tail: Particles spray backwards and up
                     Vector3 skimDir = ball.getVelocity().cpy().nor().scl(-0.4f).add(0, 0.7f, 0).nor();
                     spawnDirectional(ball.getPosition(), skimDir, params.color, params.count / 2, speed * 0.25f, 0.7f);
                 } else {
-                    // Impact splash: Circular crown
                     spawnSplash(ball.getPosition(), params.color, params.count, speed * params.forceMult);
                 }
             } else {
-                // Default directional burst (Grass, Sand, etc)
                 Vector3 splashDir = ball.getVelocity().cpy().nor().scl(-1).add(0, 0.5f, 0).nor();
                 spawnDirectional(ball.getPosition(), splashDir, params.color, params.count, speed * params.forceMult, params.life);
             }
@@ -62,9 +74,6 @@ public class ParticleManager {
         ball.clearInteraction();
     }
 
-    /**
-     * Restored generic spawn method for external calls or internal shorthand.
-     */
     public void spawn(Vector3 pos, Color color, int count, float force, float lifeBase, float gravity) {
         for (int i = 0; i < count; i++) {
             particles.add(new GameParticle(pos, color, boxModel, force, lifeBase, gravity));
@@ -193,8 +202,10 @@ public class ParticleManager {
         public boolean update(float delta, Terrain terrain) {
             lifeTime -= delta;
             if (lifeTime <= 0) return false;
+
             velocity.y -= gravity * delta;
             pos.add(velocity.x * delta, velocity.y * delta, velocity.z * delta);
+
             float terrainHeight = terrain.getHeightAt(pos.x, pos.z);
             if (pos.y < terrainHeight + PARTICLE_SIZE) {
                 pos.y = terrainHeight + PARTICLE_SIZE;
@@ -202,9 +213,12 @@ public class ParticleManager {
                 velocity.x *= GROUND_FRICTION;
                 velocity.z *= GROUND_FRICTION;
             }
+
             float scale = Math.max(0, lifeTime / maxLife);
+
             instance.transform.setToTranslation(pos);
             instance.transform.scale(scale, scale, scale);
+
             return true;
         }
     }

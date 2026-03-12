@@ -181,7 +181,7 @@ public class GolfGame extends ApplicationAdapter {
         // FIX: Snap ball to the raw terrain surface + Radius (0.13f)
         // This makes the ball sit perfectly on the grass regardless of generator offsets
         float surfaceY = terrain.getHeightAt(tee.x, tee.z);
-        ball = new Ball(new Vector3(tee.x, surfaceY + 0.13f, tee.z));
+        ball = new Ball(new Vector3(tee.x, surfaceY + 0.13f, tee.z), particleManager);
 
         if (currentState == GameState.PRACTICE_RANGE && generator instanceof PracticeRangeGenerator gen) {
             for (PracticeRangeGenerator.SignData data : gen.getSignPositions()) {
@@ -286,7 +286,7 @@ public class GolfGame extends ApplicationAdapter {
                     if (currentState == GameState.PRACTICE_RANGE) {
                         archiveGhostBall();
                         Vector3 tee = terrain.getTeePosition();
-                        ball = new Ball(new Vector3(tee.x, tee.y, tee.z));
+                        ball = new Ball(new Vector3(tee.x, tee.y, tee.z), particleManager);
                         hasCurrentBallBeenHit = false;
                         practiceResetTimer = 0f;
                     } else if (terrain.isPointOutOfBounds(ball.getPosition().x, ball.getPosition().z)) {
