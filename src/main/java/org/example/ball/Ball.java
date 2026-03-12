@@ -116,6 +116,24 @@ public class Ball {
         handleEnvironmentPhysics(delta, terrain, baseWind);
         PhysicsProfiler.endSection("EnvPhysics");
 
+        // RESTORED: Initial flight glamour stream logic
+        if (state == State.AIR && isInitialFlight) {
+            float velMag = velocity.len();
+            Color trailColor = renderer.getActiveTrailColor();
+
+            if (shotRating == MinigameResult.Rating.PERFECTION) {
+                float throb = MathUtils.sin(timeElapsed * 10f);
+                float throbFactor = 1.0f + (throb * 0.7f);
+                float force = MathUtils.clamp(velMag / 20f, 0.4f, 1.2f) * throbFactor;
+                int count = (throb > 0.4f) ? 4 : (velMag > 15f ? 2 : 1);
+                particleManager.spawnRatingBurst(position, trailColor, count, force);
+            } else if (shotRating == MinigameResult.Rating.SUPER) {
+                if (MathUtils.random() < 0.25f) particleManager.spawnRatingBurst(position, trailColor, 1, 0.4f);
+            } else if (shotRating == MinigameResult.Rating.GREAT) {
+                if (MathUtils.random() < 0.07f) particleManager.spawnRatingBurst(position, trailColor, 1, 0.3f);
+            }
+        }
+
         handleTreeCollisions(terrain, delta);
         handleMonolithCollisions(terrain);
         applyYConstraints(preStepY, terrain);
@@ -231,7 +249,6 @@ public class Ball {
         if (handleStepUp(terrainHeight, normal, type)) return;
         if (shouldLaunch(normal, type)) { state = State.AIR; return; }
 
-        // Terrain floor constraint
         if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f)) {
             position.y = terrainHeight;
         }
@@ -275,6 +292,19 @@ public class Ball {
     }
 
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
+        // RESTORED: Landing glamour logic
+        if (isInitialFlight) {
+            int landingCount = switch (shotRating) {
+                case PERFECTION -> 8;
+                case SUPER -> 5;
+                case GREAT -> 3;
+                default -> 0;
+            };
+            if (landingCount > 0) {
+                particleManager.spawnRatingBurst(position, renderer.getActiveTrailColor(), landingCount, 1.2f);
+            }
+        }
+
         isInitialFlight = false;
         float friction = type.kineticFriction;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - ((friction - 0.2f) * 0.08f), 0.05f, BOUNCE_RESTITUTION);
@@ -339,6 +369,18 @@ public class Ball {
         this.isGoodShot = (rating == MinigameResult.Rating.PERFECTION || rating == MinigameResult.Rating.SUPER || rating == MinigameResult.Rating.GREAT);
         this.isInitialFlight = true;
         renderer.setShotRatingColor(rating);
+
+        // RESTORED: Initial hit burst logic
+        int burstCount = switch (rating) {
+            case PERFECTION -> 15;
+            case SUPER -> 10;
+            case GREAT -> 5;
+            default -> 0;
+        };
+        if (burstCount > 0) {
+            particleManager.spawnRatingBurst(position, renderer.getActiveTrailColor(), burstCount, (power / 50f) * 2.0f);
+        }
+
         float finalSpeed = power * powerMult;
         float angleRad = loft * MathUtils.degreesToRadians;
         velocity.set(shootDir).nor();
@@ -366,8 +408,7 @@ public class Ball {
         Vector3 holePos = terrain.getHolePosition();
         float dist = position.dst(holePos);
         float holeRadius = terrain.getHoleSize() / 2f;
-
-        return dist < holeRadius && position.y < holePos.y-0.2;
+        return dist < holeRadius && position.y < holePos.y - 0.2f;
     }
 
     public Vector3 getPosition() { return position; }
