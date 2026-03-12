@@ -40,7 +40,6 @@ public class FreeCameraController {
 
     public void setPaused(boolean paused) {
         this.isPaused = paused;
-        Gdx.input.setCursorCatched(!paused);
     }
 
     public boolean handleScroll(float amountY) {

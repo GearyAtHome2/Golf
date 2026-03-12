@@ -244,6 +244,13 @@ public class GolfGame extends ApplicationAdapter {
         gameViewport.apply();
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
+        boolean showMouse = (currentState == GameState.START
+                || currentState == GameState.PAUSED
+                || currentState == GameState.INSTRUCTIONS
+                || isVictory);
+
+        Gdx.input.setCursorCatched(!showMouse);
+
         if (currentState == GameState.START) {
             hud.renderStartMenu(menuSelection);
         } else if (currentState == GameState.INSTRUCTIONS) {
