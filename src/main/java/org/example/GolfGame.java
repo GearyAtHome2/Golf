@@ -24,6 +24,7 @@ import org.example.gameManagers.GhostManager;
 import org.example.gameManagers.LevelManager;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
+import org.example.hud.ClubInfoManager; // New Import
 import org.example.hud.HUD;
 import org.example.terrain.ClassicGenerator;
 import org.example.terrain.ITerrainGenerator;
@@ -67,6 +68,7 @@ public class GolfGame extends ApplicationAdapter {
     private WindManager windManager;
     private boolean isVictory = false;
     private float gameSpeed = 1.0f;
+    private boolean showClubInfo = false; // New toggle field
 
     private Model highlightModel;
     private ModelInstance highlightInstance;
@@ -310,6 +312,11 @@ public class GolfGame extends ApplicationAdapter {
             hud.renderPauseMenu(isPractice, currentLevelData);
         } else {
             hud.renderPlayingHUD(gameSpeed, currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null);
+
+            // Updated to pass only the club object as required by the new HUD method
+            if (showClubInfo) {
+                hud.renderClubInfo(currentClub);
+            }
         }
     }
 
@@ -390,6 +397,7 @@ public class GolfGame extends ApplicationAdapter {
             }
         }
 
+        if (Gdx.input.isKeyJustPressed(Input.Keys.I)) showClubInfo = !showClubInfo; // Toggle club info box
         if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE) shotController.toggleGuideline();
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
         if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null) Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));

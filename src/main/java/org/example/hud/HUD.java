@@ -65,6 +65,7 @@ public class HUD {
     private final MinigameController minigameController = new MinigameController();
     private final InstructionRenderer instructionRenderer = new InstructionRenderer();
     private final VictoryRenderer victoryRenderer = new VictoryRenderer();
+    private final ClubInfoRenderer clubInfoRenderer = new ClubInfoRenderer();
 
     private int shotCount = 0;
     private float lastDisplayedSpin = 0f;
@@ -116,7 +117,7 @@ public class HUD {
         drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 80);
         drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY + 40);
         drawOption(selection == 2, true, "INSTRUCTIONS", centerX - 80, centerY);
-        drawOption(selection == 3, true, "PRACTICE RANGE", centerX - 80, centerY -40);
+        drawOption(selection == 3, true, "PRACTICE RANGE", centerX - 80, centerY - 40);
         drawOption(selection == 4, true, "PUTTING GREEN", centerX - 80, centerY - 80);
         String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
         drawOption(selection == 5, hasValidSeed, seedText, centerX - 80, centerY - 120);
@@ -220,6 +221,33 @@ public class HUD {
                 shotFeedbackColor = res.rating.color.cpy();
                 shotFeedbackText = res.rating.getRandomPhrase() + " (" + (int) (res.powerMod * 100) + "%)";
             }
+        }
+    }
+
+    /**
+     * Replaces the previous placeholder or broken implementation.
+     * Uses ClubInfoManager to fetch data and ensures the SpriteBatch is closed.
+     */
+    public void renderClubInfo(Club club) {
+        // Ensure 2D projection is set before drawing
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+
+        clubInfoRenderer.render(
+                batch,
+                shapeRenderer,
+                font,
+                viewport,
+                club.name(),
+                ClubInfoManager.getClubDescription(club),
+                ClubInfoManager.getCarryDistanceInfo(club),
+                ClubInfoManager.getPowerInfo(club),
+                ClubInfoManager.getLoftInfo(club)
+        );
+
+        // ClubInfoRenderer.render() leaves the batch open; we must close it here.
+        if (batch.isDrawing()) {
+            batch.end();
         }
     }
 
