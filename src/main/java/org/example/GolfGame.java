@@ -80,6 +80,7 @@ public class GolfGame extends ApplicationAdapter {
 
     @Override
     public void create() {
+        com.badlogic.gdx.graphics.Texture.setAssetManager(null);
         modelBatch = new ModelBatch();
         hud = new HUD();
         levelManager = new LevelManager();

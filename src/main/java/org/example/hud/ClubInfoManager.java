@@ -12,28 +12,28 @@ public class ClubInfoManager {
                     "A versatile long-range option. Ideal for reaching par 5s in two or safe tee shots on narrow fairways.";
             case WOOD_5 -> "Much more predictable and consistent than the 3-Wood, with a higher loft and lower power.";
             case IRON_2 ->
-                    "The specialist's choice. Hits a low, piercing 'stinger' that ignores the wind but requires a perfect strike.";
+                    "The specialist's choice. Can hit some expertly shaped shots in the right hands.";
             case HYBRID_3 ->
-                    "A rescue club designed for versatility. Easier to launch than a long iron, even when buried in the rough.";
+                    "A rescue club designed for versatility. Easy to launch, considering the distance.";
             case IRON_5 ->
                     "The bridge between power and precision. Good for long approaches where you still need a bit of stop.";
             case IRON_6 ->
-                    "A standard mid-iron. Reliable for finding the center of the green from a decent distance out.";
+                    "Geary's favourite club. Reliable for finding the green from a decent distance out.";
             case IRON_7 ->
-                    "The go-to club for scoring. High enough to clear obstacles, yet long enough to cover significant ground.";
+                    "High enough to clear obstacles, long enough to cover significant ground.";
             case IRON_8 ->
-                    "A short-iron that begins to prioritize vertical descent over forward roll for better control.";
+                    "A short-iron that balances vertical angle with forward roll for good control.";
             case IRON_9 ->
                     "Designed to attack the pin. The steep angle of descent helps the ball settle quickly near the target.";
             case PWEDGE ->
-                    "The primary scoring wedge. Perfect for full shots into the green with high backspin and accuracy.";
+                    "The primary scoring wedge. Perfect for full shots into the green with high backspin.";
             case GWEDGE ->
-                    "Fills the gap between your pitching and sand wedges. Excellent for controlled, mid-range pitch shots.";
+                    "Fills the gap between your pitching and sand wedges. Excellent for controlled, short-range pitches onto the green.";
             case SWEDGE ->
-                    "Features a heavy sole and high loft. Essential for escaping bunkers and thick grass hazards.";
+                    "Great for escaping deep pits and bunkers.";
             case LWEDGE ->
-                    "The ultimate 'flop' club. High risk, high reward shots that stop dead, but require extreme precision.";
-            case PUTTER -> "Precision engineered for the green. No loft, no spin—just a pure roll toward the cup.";
+                    "Floppy boy. Extremely high loft, just watch out for the wind.";
+            case PUTTER -> "Precision engineered for the green. No loft, no spin, just a pure roll toward the cup.";
             default -> "A standard utility club for various course conditions.";
         };
     }

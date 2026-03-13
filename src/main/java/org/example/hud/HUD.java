@@ -19,6 +19,8 @@ import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 
 public class HUD {
+    private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
+
     private float hazardTimer = 0;
     private String hazardText = "";
     private Color hazardColor = Color.WHITE;
@@ -87,7 +89,21 @@ public class HUD {
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
         font = new BitmapFont();
+        font.getRegion().getTexture().setFilter(
+                com.badlogic.gdx.graphics.Texture.TextureFilter.Linear,
+                com.badlogic.gdx.graphics.Texture.TextureFilter.Linear
+        );
+
         viewport = new ScreenViewport();
+    }
+
+    private void drawShadowedText(String text, float x, float y, Color color) {
+        float alpha = color.a;
+        font.setColor(0, 0, 0, alpha * 0.7f);
+        font.draw(batch, text, x + 1, y - 1);
+
+        font.setColor(color);
+        font.draw(batch, text, x, y);
     }
 
     public void incrementShots() { shotCount++; }
@@ -96,42 +112,7 @@ public class HUD {
     public void resize(int width, int height) { viewport.update(width, height, true); }
 
     public void renderStartMenu(int selection) {
-        batch.setProjectionMatrix(viewport.getCamera().combined);
-        batch.begin();
-        float centerX = viewport.getWorldWidth() / 2f;
-        float centerY = viewport.getWorldHeight() / 2f;
-
-        String clipboardContent = Gdx.app.getClipboard().getContents();
-        boolean hasValidSeed = false;
-        if (clipboardContent != null && !clipboardContent.isEmpty()) {
-            try {
-                Long.parseLong(clipboardContent.trim());
-                hasValidSeed = true;
-            } catch (NumberFormatException ignored) {}
-        }
-
-        font.getData().setScale(3f);
-        font.draw(batch, "GEARY GOLF", centerX - 180, centerY + 180);
-
-        font.getData().setScale(1.5f);
-        drawOption(selection == 0, true, "PLAY GAME", centerX - 80, centerY + 80);
-        drawOption(selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY + 40);
-        drawOption(selection == 2, true, "INSTRUCTIONS", centerX - 80, centerY);
-        drawOption(selection == 3, true, "PRACTICE RANGE", centerX - 80, centerY - 40);
-        drawOption(selection == 4, true, "PUTTING GREEN", centerX - 80, centerY - 80);
-        String seedText = hasValidSeed ? "PLAY SEED [" + clipboardContent.trim() + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
-        drawOption(selection == 5, hasValidSeed, seedText, centerX - 80, centerY - 120);
-
-        font.getData().setScale(1f);
-        font.setColor(Color.GRAY);
-        font.draw(batch, "Use UP/DOWN to select, ENTER to start", centerX - 130, centerY - 240);
-        batch.end();
-    }
-
-    private void drawOption(boolean selected, boolean enabled, String text, float x, float y) {
-        if (!enabled) font.setColor(Color.DARK_GRAY);
-        else font.setColor(selected ? Color.YELLOW : Color.WHITE);
-        font.draw(batch, (selected && enabled ? "> " : "  ") + text, x, y);
+        mainMenuRenderer.render(batch, font, viewport, selection);
     }
 
     public void renderPauseMenu(boolean isPractice, LevelData levelData) {
@@ -150,22 +131,20 @@ public class HUD {
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
         font.getData().setScale(2.5f);
-        font.setColor(Color.WHITE);
-        font.draw(batch, "PAUSED", centerX - 80, viewport.getWorldHeight() - 100);
+        drawShadowedText("PAUSED", centerX - 80, viewport.getWorldHeight() - 100, Color.WHITE);
+
         font.getData().setScale(1.2f);
-        font.setColor(Color.YELLOW);
-        font.draw(batch, "--- SETTINGS ---", centerX - 80, centerY + 60);
-        font.setColor(Color.WHITE);
-        font.draw(batch, "[A] ANIMATION: " + animSetting.name(), centerX - 120, centerY + 20);
-        font.draw(batch, "[D] DIFFICULTY: " + currentDifficulty.name(), centerX - 120, centerY - 20);
+        drawShadowedText("--- SETTINGS ---", centerX - 80, centerY + 60, Color.YELLOW);
+        drawShadowedText("[A] ANIMATION: " + animSetting.name(), centerX - 120, centerY + 20, Color.WHITE);
+        drawShadowedText("[D] DIFFICULTY: " + currentDifficulty.name(), centerX - 120, centerY - 20, Color.WHITE);
+
         font.setColor(Color.GRAY);
         font.draw(batch, "----------------", centerX - 80, centerY - 60);
-        font.setColor(Color.WHITE);
-        font.draw(batch, "[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [I] HELP", 50, 100);
+        drawShadowedText("[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [I] HELP", 50, 100, Color.WHITE);
+
         if (seedFeedbackTimer > 0) {
             seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
-            font.setColor(Color.GREEN);
-            font.draw(batch, "SEED COPIED", 50, 150);
+            drawShadowedText("SEED COPIED", 50, 150, Color.GREEN);
         }
         batch.end();
     }
@@ -224,12 +203,37 @@ public class HUD {
         }
     }
 
-    /**
-     * Replaces the previous placeholder or broken implementation.
-     * Uses ClubInfoManager to fetch data and ensures the SpriteBatch is closed.
-     */
+    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore) {
+        float topY = viewport.getWorldHeight() - 40;
+        font.getData().setScale(1.5f);
+
+        if (isPractice) {
+            drawShadowedText("PRACTICE", 40, topY, Color.CYAN);
+        } else if (levelData != null) {
+            String header = levelData.getArchetype().name().replace("_", " ") + (compScore != null ? " - HOLE " + compScore.getCurrentHoleNumber() : "");
+            drawShadowedText(header, 40, topY, Color.GOLD);
+            drawShadowedText("Par " + levelData.getPar(), 40, topY - 40, Color.WHITE);
+            if (compScore != null) {
+                drawShadowedText("TO PAR: " + compScore.getToParString(), 40, topY - 80, Color.YELLOW);
+            }
+        }
+
+        float shotsY = (!isPractice && levelData != null) ? (compScore != null ? topY - 120 : topY - 80) : topY - 40;
+        drawShadowedText("Shots: " + shotCount, 40, shotsY, Color.WHITE);
+
+        float rightX = viewport.getWorldWidth() - 250;
+        drawShadowedText("Club: " + club.name().replace("_", " "), rightX, 140, Color.WHITE);
+
+        float currentSpinMag = ball.getSpin().len();
+        Color spinColor = currentSpinMag > 0.1f ? (currentSpinMag > lastDisplayedSpin ? Color.GREEN : Color.RED) : Color.GRAY;
+        drawShadowedText(String.format("Spin: %.1fk RPM", (currentSpinMag * 100f) / 1000f), rightX, 100, spinColor);
+        lastDisplayedSpin = currentSpinMag;
+
+        drawShadowedText(String.format("Speed: %.1fx", speed), rightX, 60, Color.WHITE);
+    }
+
+    // ... [Keep renderClubInfo, renderShotDistance, renderDistanceDisplay, etc. as they are] ...
     public void renderClubInfo(Club club) {
-        // Ensure 2D projection is set before drawing
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
@@ -245,7 +249,6 @@ public class HUD {
                 ClubInfoManager.getLoftInfo(club)
         );
 
-        // ClubInfoRenderer.render() leaves the batch open; we must close it here.
         if (batch.isDrawing()) {
             batch.end();
         }
@@ -255,15 +258,16 @@ public class HUD {
         float toRender = 0;
         Ball.State state = ball.getState();
         boolean isMoving = (state == Ball.State.AIR || state == Ball.State.ROLLING || state == Ball.State.CONTACT);
-        if (isMoving) { toRender = ball.getShotDistance(); font.setColor(Color.WHITE); }
-        else if (shotDistanceDisplayTimer > 0) {
+        if (isMoving) {
+            toRender = ball.getShotDistance();
+            font.getData().setScale(1.4f);
+            drawShadowedText(String.format("SHOT DISTANCE: %.1f yds", toRender), viewport.getWorldWidth() - 300, 200, Color.WHITE);
+        } else if (shotDistanceDisplayTimer > 0) {
             toRender = persistentShotDistance;
             shotDistanceDisplayTimer -= delta;
-            font.setColor(1f, 0.85f, 0f, MathUtils.clamp(shotDistanceDisplayTimer, 0, 1));
-        }
-        if (toRender > 0.1f) {
             font.getData().setScale(1.4f);
-            font.draw(batch, String.format("SHOT DISTANCE: %.1f yds", toRender), viewport.getWorldWidth() - 300, 200);
+            Color fadeColor = new Color(1f, 0.85f, 0f, MathUtils.clamp(shotDistanceDisplayTimer, 0, 1));
+            drawShadowedText(String.format("SHOT DISTANCE: %.1f yds", toRender), viewport.getWorldWidth() - 300, 200, fadeColor);
         }
     }
 
@@ -271,8 +275,8 @@ public class HUD {
         if (distanceDisplayTimer > 0) {
             distanceDisplayTimer -= delta;
             font.getData().setScale(1.8f);
-            font.setColor(1, 1, 0, Math.min(1, distanceDisplayTimer));
-            font.draw(batch, distanceText, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() - 50);
+            Color fadeYellow = new Color(1, 1, 0, Math.min(1, distanceDisplayTimer));
+            drawShadowedText(distanceText, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() - 50, fadeYellow);
         }
     }
 
@@ -292,50 +296,24 @@ public class HUD {
         if (shotFeedbackTimer > 0) {
             shotFeedbackTimer -= delta;
             font.getData().setScale(2.5f * (shotFeedbackTimer / 1.5f + 0.5f));
-            font.setColor(shotFeedbackColor.r, shotFeedbackColor.g, shotFeedbackColor.b, Math.min(1, shotFeedbackTimer * 2));
-            font.draw(batch, shotFeedbackText, viewport.getWorldWidth() / 2f - 150, viewport.getWorldHeight() / 2f + 150);
+            Color fadeColor = new Color(shotFeedbackColor.r, shotFeedbackColor.g, shotFeedbackColor.b, Math.min(1, shotFeedbackTimer * 2));
+            drawShadowedText(shotFeedbackText, viewport.getWorldWidth() / 2f - 150, viewport.getWorldHeight() / 2f + 150, fadeColor);
         }
-    }
-
-    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore) {
-        float topY = viewport.getWorldHeight() - 40;
-        font.getData().setScale(1.5f);
-        if (isPractice) {
-            font.setColor(Color.CYAN);
-            String practiceLabel = "PRACTICE";
-            font.draw(batch, practiceLabel, 40, topY);
-        }
-        else if (levelData != null) {
-            font.setColor(Color.GOLD);
-            String header = levelData.getArchetype().name().replace("_", " ") + (compScore != null ? " - HOLE " + compScore.getCurrentHoleNumber() : "");
-            font.draw(batch, header, 40, topY);
-            font.setColor(Color.WHITE);
-            font.draw(batch, "Par " + levelData.getPar(), 40, topY - 40);
-            if (compScore != null) { font.setColor(Color.YELLOW); font.draw(batch, "TO PAR: " + compScore.getToParString(), 40, topY - 80); }
-        }
-        font.setColor(Color.WHITE);
-        float shotsY = (!isPractice && levelData != null) ? (compScore != null ? topY - 120 : topY - 80) : topY - 40;
-        font.draw(batch, "Shots: " + shotCount, 40, shotsY);
-        float rightX = viewport.getWorldWidth() - 250;
-        font.draw(batch, "Club: " + club.name(), rightX, 140);
-        float currentSpinMag = ball.getSpin().len();
-        font.setColor(currentSpinMag > 0.1f ? (currentSpinMag > lastDisplayedSpin ? Color.GREEN : Color.RED) : Color.GRAY);
-        font.draw(batch, String.format("Spin: %.1fk RPM", (currentSpinMag * 100f) / 1000f), rightX, 100);
-        lastDisplayedSpin = currentSpinMag;
-        font.setColor(Color.WHITE);
-        font.draw(batch, String.format("Speed: %.1fx", speed), rightX, 60);
     }
 
     private void renderShotDebug(Vector3 ballPos, Vector3 aimDir, Terrain terrain) {
         ShotDifficulty diff = terrain.getShotDifficulty(ballPos.x, ballPos.z, aimDir);
         Vector3 normal = terrain.getNormalAt(ballPos.x, ballPos.z);
         float sidePush = normal.dot(new Vector3(aimDir).crs(Vector3.Y).nor());
-        font.getData().setScale(1f); font.setColor(Color.YELLOW);
+        font.getData().setScale(1f);
         float dy = 250;
-        font.draw(batch, "--- PRE-SHOT DEBUG ---", 40, dy);
-        font.draw(batch, "Terrain: " + terrain.getTerrainTypeAt(ballPos.x, ballPos.z) + " (x" + String.format("%.2f", diff.terrainDifficulty) + ")", 40, dy - 20);
-        font.draw(batch, String.format("Slope Multiplier: %.2fx", diff.slopeDifficulty), 40, dy - 40);
-        if (Math.abs(sidePush) > 0.05f) { font.setColor(sidePush > 0 ? Color.RED : Color.CYAN); font.draw(batch, String.format("Terrain Kick: %s (%.2f)", (sidePush > 0 ? "RIGHT" : "LEFT"), sidePush), 40, dy - 60); }
+        drawShadowedText("--- PRE-SHOT DEBUG ---", 40, dy, Color.YELLOW);
+        drawShadowedText("Terrain: " + terrain.getTerrainTypeAt(ballPos.x, ballPos.z) + " (x" + String.format("%.2f", diff.terrainDifficulty) + ")", 40, dy - 20, Color.YELLOW);
+        drawShadowedText(String.format("Slope Multiplier: %.2fx", diff.slopeDifficulty), 40, dy - 40, Color.YELLOW);
+        if (Math.abs(sidePush) > 0.05f) {
+            Color kickColor = sidePush > 0 ? Color.RED : Color.CYAN;
+            drawShadowedText(String.format("Terrain Kick: %s (%.2f)", (sidePush > 0 ? "RIGHT" : "LEFT"), sidePush), 40, dy - 60, kickColor);
+        }
     }
 
     public void logShotInitiated(Vector3 ballPos, Club club, Terrain terrain, ShotDifficulty diff, float powerMod) {
@@ -356,7 +334,7 @@ public class HUD {
             shapeRenderer.triangle(uiX + MathUtils.cos(angle) * radius, uiY + MathUtils.sin(angle) * radius, uiX + MathUtils.cos(angle + 2.6f) * 15, uiY + MathUtils.sin(angle + 2.6f) * 15, uiX + MathUtils.cos(angle - 2.6f) * 15, uiY + MathUtils.sin(angle - 2.6f) * 15);
             shapeRenderer.end();
         }
-        batch.begin(); font.getData().setScale(1.2f); font.draw(batch, String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10); batch.end();
+        batch.begin(); font.getData().setScale(1.2f); drawShadowedText(String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10, Color.WHITE); batch.end();
     }
 
     public void showWaterHazard() { this.hazardText = "WATER HAZARD"; this.hazardColor = Color.CYAN; this.hazardTimer = 1.0f; }
@@ -366,8 +344,8 @@ public class HUD {
         if (hazardTimer > 0) {
             hazardTimer -= delta;
             font.getData().setScale(3.0f * (1.0f + (MathUtils.sin(hazardTimer * 10f) * 0.1f)));
-            font.setColor(hazardColor.r, hazardColor.g, hazardColor.b, MathUtils.clamp(hazardTimer * 2f, 0, 1));
-            font.draw(batch, hazardText, viewport.getWorldWidth() / 2f - 200, viewport.getWorldHeight() / 2f + 100);
+            Color fadeColor = new Color(hazardColor.r, hazardColor.g, hazardColor.b, MathUtils.clamp(hazardTimer * 2f, 0, 1));
+            drawShadowedText(hazardText, viewport.getWorldWidth() / 2f - 200, viewport.getWorldHeight() / 2f + 100, fadeColor);
         }
     }
 
