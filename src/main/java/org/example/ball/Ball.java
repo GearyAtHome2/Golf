@@ -394,8 +394,10 @@ public class Ball {
     }
 
     public void capturePosition() { lastShotPosition.set(this.position); }
+
     public void resetToLastPosition() {
         this.position.set(lastShotPosition);
+        this.lastStationaryPosition.set(lastShotPosition);
         velocity.setZero();
         spin.setZero();
         this.state = State.STATIONARY;
