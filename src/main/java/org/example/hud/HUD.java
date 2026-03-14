@@ -11,6 +11,7 @@ import com.badlogic.gdx.math.*;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
+import org.example.GameConfig;
 import org.example.ball.Ball;
 import org.example.ball.CompetitiveScore;
 import org.example.ball.MinigameResult;
@@ -25,23 +26,12 @@ public class HUD {
     private String hazardText = "";
     private Color hazardColor = Color.WHITE;
     private boolean instructionsRequested = false;
+    private boolean cameraConfigRequested = false;
 
     private float persistentShotDistance = 0f;
     private float maxDistanceSeen = 0f;
     private float shotDistanceDisplayTimer = 0f;
     private boolean ballWasActive = false;
-
-    public enum GameDifficulty {
-        EASY(0.3f), MEDIUM(0.75f), HARD(1.0f);
-        public final float speedMult;
-        GameDifficulty(float speed) { this.speedMult = speed; }
-    }
-
-    public enum AnimSpeed {
-        NONE(0f), SLOW(0.6f), FAST(1.4f);
-        public final float mult;
-        AnimSpeed(float mult) { this.mult = mult; }
-    }
 
     public static class ModAnimation {
         public String text;
@@ -63,9 +53,11 @@ public class HUD {
     private final ShapeRenderer shapeRenderer;
     private final BitmapFont font;
     private final Viewport viewport;
+    private final GameConfig config;
 
     private final MinigameController minigameController = new MinigameController();
     private final InstructionRenderer instructionRenderer = new InstructionRenderer();
+    private final CameraConfigRenderer cameraConfigRenderer = new CameraConfigRenderer();
     private final VictoryRenderer victoryRenderer = new VictoryRenderer();
     private final ClubInfoRenderer clubInfoRenderer = new ClubInfoRenderer();
 
@@ -81,11 +73,10 @@ public class HUD {
     private String shotFeedbackText = "";
     private Color shotFeedbackColor = Color.WHITE;
 
-    public AnimSpeed animSetting = AnimSpeed.NONE;
-    public GameDifficulty currentDifficulty = GameDifficulty.EASY;
     private boolean mainMenuRequested = false;
 
-    public HUD() {
+    public HUD(GameConfig config) {
+        this.config = config;
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
         font = new BitmapFont();
@@ -116,36 +107,38 @@ public class HUD {
     }
 
     public void renderPauseMenu(boolean isPractice, LevelData levelData) {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.A)) animSetting = AnimSpeed.values()[(animSetting.ordinal() + 1) % AnimSpeed.values().length];
-        if (Gdx.input.isKeyJustPressed(Input.Keys.D)) currentDifficulty = GameDifficulty.values()[(currentDifficulty.ordinal() + 1) % GameDifficulty.values().length];
+        if (Gdx.input.isKeyJustPressed(Input.Keys.A)) {
+            config.animSpeed = GameConfig.AnimSpeed.values()[(config.animSpeed.ordinal() + 1) % GameConfig.AnimSpeed.values().length];
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.D)) {
+            config.difficulty = GameConfig.Difficulty.values()[(config.difficulty.ordinal() + 1) % GameConfig.Difficulty.values().length];
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
+            config.particlesEnabled = !config.particlesEnabled;
+        }
+
         if (Gdx.input.isKeyJustPressed(Input.Keys.M)) mainMenuRequested = true;
         if (Gdx.input.isKeyJustPressed(Input.Keys.I)) instructionsRequested = true;
-
-        if (!isPractice && Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
-            Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
-            seedFeedbackTimer = 1.0f;
-        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.O)) cameraConfigRequested = true;
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
+
         font.getData().setScale(2.5f);
         drawShadowedText("PAUSED", centerX - 80, viewport.getWorldHeight() - 100, Color.WHITE);
 
         font.getData().setScale(1.2f);
-        drawShadowedText("--- SETTINGS ---", centerX - 80, centerY + 60, Color.YELLOW);
-        drawShadowedText("[A] ANIMATION: " + animSetting.name(), centerX - 120, centerY + 20, Color.WHITE);
-        drawShadowedText("[D] DIFFICULTY: " + currentDifficulty.name(), centerX - 120, centerY - 20, Color.WHITE);
+        drawShadowedText("--- SETTINGS ---", centerX - 80, centerY + 120, Color.YELLOW);
+        drawShadowedText("[A] ANIMATION: " + config.animSpeed.name(), centerX - 120, centerY + 80, Color.WHITE);
+        drawShadowedText("[D] DIFFICULTY: " + config.difficulty.name(), centerX - 120, centerY + 40, Color.WHITE);
+        drawShadowedText("[L] PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"), centerX - 120, centerY, config.particlesEnabled ? Color.GREEN : Color.RED);
 
         font.setColor(Color.GRAY);
-        font.draw(batch, "----------------", centerX - 80, centerY - 60);
-        drawShadowedText("[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [I] HELP", 50, 100, Color.WHITE);
+        font.draw(batch, "----------------", centerX - 80, centerY - 40);
+        drawShadowedText("[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [I] HELP  |  [O] CAM CONFIG", 50, 100, Color.WHITE);
 
-        if (seedFeedbackTimer > 0) {
-            seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
-            drawShadowedText("SEED COPIED", 50, 150, Color.GREEN);
-        }
         batch.end();
     }
 
@@ -193,7 +186,7 @@ public class HUD {
         batch.end();
 
         if (minigameController.isActive()) {
-            minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, animSetting, currentDifficulty, shapeRenderer, batch, font, viewport);
+            minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport);
             if (minigameController.isNeedleStopped() && minigameController.getGlowTimer() >= 0.98f) {
                 MinigameResult res = minigameController.getResult();
                 shotFeedbackTimer = 1.5f;
@@ -229,10 +222,9 @@ public class HUD {
         drawShadowedText(String.format("Spin: %.1fk RPM", (currentSpinMag * 100f) / 1000f), rightX, 100, spinColor);
         lastDisplayedSpin = currentSpinMag;
 
-        drawShadowedText(String.format("Speed: %.1fx", speed), rightX, 60, Color.WHITE);
+        drawShadowedText(String.format("Speed: %.1fx", config.getGameSpeed()), rightX, 60, Color.WHITE);
     }
 
-    // ... [Keep renderClubInfo, renderShotDistance, renderDistanceDisplay, etc. as they are] ...
     public void renderClubInfo(Club club) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
@@ -317,7 +309,7 @@ public class HUD {
     }
 
     public void logShotInitiated(Vector3 ballPos, Club club, Terrain terrain, ShotDifficulty diff, float powerMod) {
-        minigameController.start(ballPos, club, diff, powerMod, animSetting, currentDifficulty);
+        minigameController.start(ballPos, club, diff, powerMod, config.animSpeed, config.difficulty);
         this.maxDistanceSeen = 0f;
     }
 
@@ -360,6 +352,7 @@ public class HUD {
         distanceDisplayTimer = 0;
         mainMenuRequested = false;
         instructionsRequested = false;
+        cameraConfigRequested = false;
         spinDot.set(0, 0);
     }
 
@@ -375,6 +368,12 @@ public class HUD {
     public boolean wasInstructionsRequested() { return instructionsRequested; }
     public void clearInstructionsRequest() { instructionsRequested = false; }
     public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
+
+    public void renderCameraConfig() { cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config); }
+    public boolean wasCameraConfigRequested() { return cameraConfigRequested; }
+    public void clearCameraConfigRequest() { cameraConfigRequested = false; }
+    public void resetCameraConfigScroll() { cameraConfigRenderer.resetScroll(); }
+
     public boolean isMinigameComplete() { return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null; }
     public boolean wasMinigameCanceled() { return minigameController.wasCanceled(); }
     public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }

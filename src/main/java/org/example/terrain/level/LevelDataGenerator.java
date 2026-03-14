@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.MOGUL_HIGHLANDS;/**/
+//        selectedType = LevelData.Archetype.MOGUL_HIGHLANDS;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -205,8 +205,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.25f + r.nextFloat() * 0.06f;
                 islands = 0f;
                 cohesion = 0.9f;
-                distance = Math.round(400 + r.nextFloat() * 200);
-                par = distance < 500 ? 4 : 5;
+                distance = Math.round(500 + r.nextFloat() * 200);
+                par = distance < 600 ? 4 : 5;
                 break;
             case MONOLITH_PLAINS:
                 baseDifficultyIndex = 5f;
@@ -223,7 +223,7 @@ public class LevelDataGenerator {
                 hillFreq = 0.008f;
                 maxH = 15f;
                 distance = Math.round(600 + r.nextFloat() * 200);
-                par = distance < 650 ? 4 : 5;
+                par = distance < 690 ? 4 : 5;
                 break;
             case MOGUL_HIGHLANDS:
                 baseDifficultyIndex = 6f;
@@ -240,8 +240,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.16f + r.nextFloat() * 0.08f;
                 islands = 0.3f;
                 cohesion = 0.6f;
-                distance = Math.round(600 + r.nextFloat() * 100);
-                par = distance < 650 ? 4 : 5;
+                distance = Math.round(650 + r.nextFloat() * 100);
+                par = distance < 700 ? 4 : 5;
                 break;
             case SHADOW_CANYON:
                 baseDifficultyIndex = 7f;

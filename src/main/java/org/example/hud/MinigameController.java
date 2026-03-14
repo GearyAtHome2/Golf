@@ -14,6 +14,7 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
+import org.example.GameConfig;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.Terrain;
@@ -39,7 +40,7 @@ public class MinigameController {
     private Color glowColor = new Color(0, 0, 0, 0);
     private final Vector3 activeBallPos = new Vector3();
 
-    public void start(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod, HUD.AnimSpeed animSetting, HUD.GameDifficulty gameDiff) {
+    public void start(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff) {
         this.activeDiff = diff;
         this.activePowerMod = powerMod;
         this.activeBallPos.set(ballPos);
@@ -53,16 +54,16 @@ public class MinigameController {
         engine.reset(club.baseDifficulty);
         activeAnims.clear();
 
-        if (animSetting == HUD.AnimSpeed.NONE) {
+        if (animSetting == GameConfig.AnimSpeed.NONE) {
             engine.barWidthMult = (1.0f / activeDiff.terrainDifficulty) * (1.0f / activeDiff.clubDifficulty) * (1.0f / activeDiff.swingDifficulty);
             step = 4;
-            needleSpeed = activePowerMod * 1.5f * gameDiff.speedMult;
+            needleSpeed = activePowerMod * 1.5f * gameDiff.needleSpeedMult;
         } else {
             timer = (0.7f / animSetting.mult);
         }
     }
 
-    public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot, HUD.AnimSpeed animSetting, HUD.GameDifficulty gameDiff, ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font, Viewport viewport) {
+    public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff, ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font, Viewport viewport) {
         if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             cancel();
             return;
@@ -72,7 +73,7 @@ public class MinigameController {
 
         if (!needleStopped) {
             timer += delta;
-            float stepDuration = (animSetting == HUD.AnimSpeed.NONE) ? 0.01f : (0.7f / animSetting.mult);
+            float stepDuration = (animSetting == GameConfig.AnimSpeed.NONE) ? 0.01f : (0.7f / animSetting.mult);
             Vector3 normal = terrain.getNormalAt(activeBallPos.x, activeBallPos.z);
             Vector3 rightOfAim = new Vector3(camera.direction).crs(Vector3.Y).nor();
             
@@ -99,7 +100,7 @@ public class MinigameController {
         minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);
     }
 
-    private void advanceStep(HUD.AnimSpeed animSetting, HUD.GameDifficulty gameDiff) {
+    private void advanceStep(GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff) {
         step++;
         timer = 0;
         String text = "";
@@ -108,9 +109,9 @@ public class MinigameController {
             case 1 -> { mult = activeDiff.terrainDifficulty; text = "TERRAIN x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
             case 2 -> { mult = activeDiff.clubDifficulty; text = "WEIGHT x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
             case 3 -> { mult = activeDiff.swingDifficulty; text = "PRECISION x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 4 -> { text = "GO!"; needleSpeed = activePowerMod * 1.5f * gameDiff.speedMult; }
+            case 4 -> { text = "GO!"; needleSpeed = activePowerMod * 1.5f * gameDiff.needleSpeedMult; }
         }
-        if (animSetting != HUD.AnimSpeed.NONE) {
+        if (animSetting != GameConfig.AnimSpeed.NONE) {
             Color c = (mult <= 1.05f) ? Color.GREEN : Color.RED;
             if (step == 4) c = Color.GOLD;
             activeAnims.add(new HUD.ModAnimation(text, c));
