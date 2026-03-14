@@ -11,9 +11,6 @@ public class CoastlineGenerator {
     public CoastlineGenerator() {
     }
 
-    /* --- NOISE & SMOOTHING --- */
-    /* --- COASTLINE & SLOPE --- */
-
     public float applyIslandCoastline(int x, int z, float zN, float curH, Terrain.TerrainType type, float water, float o1, float o2) {
         float thresh = 0.45f + MathUtils.sin(x * 0.05f + o1) * 0.04f + MathUtils.cos(x * 0.4f + o2) * 0.01f;
         boolean playable = !TerrainUtils.isUnmodifiable(type) && type != Terrain.TerrainType.FAIRWAY;

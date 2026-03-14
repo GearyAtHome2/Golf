@@ -465,7 +465,7 @@ public class Terrain {
             } else {
                 this.actualFoliageHeight = fr * 2;
                 foliage = new ModelInstance(mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16, leafMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
-                foliage.transform.setToTranslation(x, y + th + fr, z);
+                foliage.transform.setToTranslation(x, y + th+fr/4, z);
             }
         }
         public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {

@@ -18,7 +18,8 @@ public class LevelData {
         PLUNGE_CENOTES,
         ROUGH_HOUGH_BLUFFS,
         WETLANDS,
-        WHISTLING_ISLES
+        WHISTLING_ISLES,
+        BIG_GRAPE_VINEYARDS
     }
 
     public enum TerrainAlgorithm {
@@ -30,6 +31,7 @@ public class LevelData {
         SUNKEN_FAIRWAY,
         CRAGGY_RIDGES,
         DUNES,
+        ROLLING_DUNES,
         PLATEAU
     }
 
