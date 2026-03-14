@@ -180,8 +180,8 @@ public class LevelDataGenerator {
                 break;
             case BUSH_WORLD:
                 baseDifficultyIndex = 3f;
-                treeH = 4.0f;
-                foliageR = 3.5f;
+                treeH = 6.0f;
+                foliageR = 3f;
                 trunkR = 0.5f;
                 windMin = 2f;
                 windMax = 15f;
@@ -383,8 +383,8 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
                 bunkerCount = 1 + r.nextInt(4);
-                distance = Math.round(400 + r.nextFloat() * 350);
-                par = distance < 450 ? 3 : distance < 650 ? 4 : 5;
+                distance = Math.round(500 + r.nextFloat() * 350);
+                par = distance < 600 ? 3 : distance < 750 ? 4 : 5;
                 break;
         }
 

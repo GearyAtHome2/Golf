@@ -458,7 +458,7 @@ public class Ball {
         Vector3 holePos = terrain.getHolePosition();
         float dist = position.dst(holePos);
         float holeRadius = terrain.getHoleSize() / 2f;
-        return dist < holeRadius && position.y < holePos.y - 0.22f;
+        return dist < holeRadius * 1.5 && position.y < holePos.y - 0.3f;
     }
 
     public Vector3 getPosition() { return position; }

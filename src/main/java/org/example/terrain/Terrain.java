@@ -107,14 +107,14 @@ public class Terrain {
         float offsetZ = (SIZE_Z * SCALE) / 2f;
 
         for (Tree t : trees) {
-            int gx = MathUtils.clamp((int)((t.pos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
-            int gz = MathUtils.clamp((int)((t.pos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
+            int gx = MathUtils.clamp((int) ((t.pos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
+            int gz = MathUtils.clamp((int) ((t.pos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
             treeGrid[gx][gz].add(t);
         }
 
         for (Monolith m : monoliths) {
-            int gx = MathUtils.clamp((int)((m.pos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
-            int gz = MathUtils.clamp((int)((m.pos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
+            int gx = MathUtils.clamp((int) ((m.pos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
+            int gz = MathUtils.clamp((int) ((m.pos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
             monolithGrid[gx][gz].add(m);
         }
     }
@@ -134,7 +134,8 @@ public class Terrain {
         }
 
         if (greenHeights.isEmpty()) {
-            greenMinH = 0; greenMaxH = 10;
+            greenMinH = 0;
+            greenMaxH = 10;
             return;
         }
 
@@ -158,8 +159,13 @@ public class Terrain {
         }
     }
 
-    public float getMaxDistanceX() { return (SIZE_X * SCALE) / 2f; }
-    public float getMaxDistanceZ() { return (SIZE_Z * SCALE) / 2f; }
+    public float getMaxDistanceX() {
+        return (SIZE_X * SCALE) / 2f;
+    }
+
+    public float getMaxDistanceZ() {
+        return (SIZE_Z * SCALE) / 2f;
+    }
 
     public boolean isPointOutOfBounds(float worldX, float worldZ) {
         return Math.abs(worldX) > getMaxDistanceX() || Math.abs(worldZ) > getMaxDistanceZ();
@@ -227,43 +233,59 @@ public class Terrain {
      */
     public float getHeightAt(float worldX, float worldZ) {
         float baseHeight = getSurfaceHeightAt(worldX, worldZ);
-
         float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
         float rimRadius = holeSize / 2.0f;
 
-        if (distToHole < rimRadius) {
-            float ratio = distToHole / rimRadius;
-            // The sink happens relative to the surface height AT the hole center
-            return baseHeight - (CUP_DEPTH * (1.0f - ratio));
+        float floorBoundary = rimRadius * 0.8f;   // Inner flat bottom
+        float outerBoundary = rimRadius * 1.2f;   // Outer lip transition
+        float targetDepth = 0.4f;
+
+        // 1. Hole bottom: Completely flat at target depth
+        if (distToHole <= floorBoundary) {
+            return baseHeight - targetDepth;
+        }
+
+        // 2. The Steep Slope: Linear interpolation between 0.8R and 1.2R
+        if (distToHole < outerBoundary) {
+            float t = (distToHole - floorBoundary) / (outerBoundary - floorBoundary);
+            return baseHeight - (targetDepth * (1.0f - t));
         }
 
         return baseHeight;
     }
 
     public Vector3 getNormalAt(float worldX, float worldZ) {
-        float rimRadius = holeSize / 2.0f;
-        float influenceRange = 0.15f;
-        float pullStrength = 0.4f;
-        float sampleEps = 0.02f;
+        return getNormalAt(worldX, worldZ, true);
+    }
 
+    public Vector3 getNormalAt(float worldX, float worldZ, boolean forPhysics) {
+        float rimRadius = holeSize / 2.0f;
+        float sampleEps = 0.005f; // Smaller epsilon for more accurate slope detection at the rim
         float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
 
-        // We use getHeightAt here because the normal needs to represent the "pit"
-        // to suck the ball in physically.
+        // Standard central difference for normal calculation
         float hL = getHeightAt(worldX - sampleEps, worldZ);
         float hR = getHeightAt(worldX + sampleEps, worldZ);
         float hD = getHeightAt(worldX, worldZ - sampleEps);
         float hU = getHeightAt(worldX, worldZ + sampleEps);
 
-        Vector3 normal = new Vector3(hL - hR, 2.0f * sampleEps, hD - hU).nor();
+        // Standard weight for visual/natural terrain
+        float yWeight = 2.0f;
 
-        if (distToHole > rimRadius && distToHole < rimRadius + influenceRange) {
-            float t = 1.0f - ((distToHole - rimRadius) / influenceRange);
-            tempV1.set(holePosition.x - worldX, 0, holePosition.z - worldZ).nor();
+        if (forPhysics && distToHole < rimRadius * 1.2f && distToHole > rimRadius * 0.8f) {
+            yWeight = 1.5f; // Amplifies the X/Z slope components significantly
+        }
 
-            normal.x += tempV1.x * t * pullStrength;
-            normal.z += tempV1.z * t * pullStrength;
-            normal.nor();
+        Vector3 normal = new Vector3(hL - hR, yWeight * sampleEps, hD - hU).nor();
+
+        // Safety: If on the flat bottom, use the visual surface normal
+        // to prevent jitter or the ball "sinking" through the floor
+        if (forPhysics && distToHole <= rimRadius * 0.8f) {
+            float bL = getSurfaceHeightAt(worldX - sampleEps, worldZ);
+            float bR = getSurfaceHeightAt(worldX + sampleEps, worldZ);
+            float bD = getSurfaceHeightAt(worldX, worldZ - sampleEps);
+            float bU = getSurfaceHeightAt(worldX, worldZ + sampleEps);
+            normal.set(bL - bR, 2.0f * sampleEps, bD - bU).nor();
         }
 
         return normal;
@@ -355,8 +377,8 @@ public class Terrain {
     }
 
     public List<Tree> getTreesAt(float worldX, float worldZ) {
-        int gx = MathUtils.clamp((int)((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
-        int gz = MathUtils.clamp((int)((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
+        int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
+        int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
         List<Tree> nearby = new ArrayList<>(treeGrid[gx][gz]);
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
@@ -369,8 +391,8 @@ public class Terrain {
     }
 
     public List<Monolith> getMonolithsAt(float worldX, float worldZ) {
-        int gx = MathUtils.clamp((int)((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
-        int gz = MathUtils.clamp((int)((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
+        int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
+        int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
         List<Monolith> nearby = new ArrayList<>(monolithGrid[gx][gz]);
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
@@ -385,7 +407,7 @@ public class Terrain {
     public void setHolePosition(Vector3 newPos) {
         this.holePosition.set(newPos.x, getSurfaceHeightAt(newPos.x, newPos.z), newPos.z);
         if (physicalHole != null) physicalHole.dispose();
-        this.physicalHole = new Hole(holePosition, getNormalAt(holePosition.x, holePosition.z), holeSize / 2f);
+        this.physicalHole = new Hole(holePosition, getNormalAt(holePosition.x, holePosition.z, false), holeSize / 2f);
         if (flagInstance != null) updateFlagTransform(holePosition, 1.0f, 0f);
     }
 
@@ -394,12 +416,29 @@ public class Terrain {
         if (teeInstance != null) teeInstance.transform.setToTranslation(teeCenter.x, teeCenter.y + 0.075f, teeCenter.z);
     }
 
-    public Vector3 getTeePosition() { return teeCenter; }
-    public Vector3 getHolePosition() { return holePosition; }
-    public float getHoleSize() { return holeSize; }
-    public float getWaterLevel() { return waterLevel; }
-    public List<Tree> getTrees() { return trees; }
-    public List<Monolith> getMonoliths() { return monoliths; }
+    public Vector3 getTeePosition() {
+        return teeCenter;
+    }
+
+    public Vector3 getHolePosition() {
+        return holePosition;
+    }
+
+    public float getHoleSize() {
+        return holeSize;
+    }
+
+    public float getWaterLevel() {
+        return waterLevel;
+    }
+
+    public List<Tree> getTrees() {
+        return trees;
+    }
+
+    public List<Monolith> getMonoliths() {
+        return monoliths;
+    }
 
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
@@ -410,6 +449,7 @@ public class Terrain {
         STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.02f, new Color(0.18f, 0.18f, 0.2f, 1f));
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
         public final Color color;
+
         TerrainType(float kf, float rr, float sm, float diff, float softness, Color col) {
             this.kineticFriction = kf;
             this.rollingResistance = rr;
@@ -422,6 +462,7 @@ public class Terrain {
 
     public static class Hole {
         private final ModelInstance cupInstance;
+
         public Hole(Vector3 pos, Vector3 surfaceNormal, float radius) {
             ModelBuilder mb = new ModelBuilder();
             Model discModel = mb.createCylinder(radius * 2f, 0.01f, radius * 2f, 24,
@@ -436,8 +477,14 @@ public class Terrain {
             Vector3 finalPos = new Vector3(pos).add(new Vector3(surfaceNormal).scl(0.005f));
             cupInstance.transform.setTranslation(finalPos);
         }
-        public void render(ModelBatch b, Environment e) { b.render(cupInstance, e); }
-        public void dispose() { cupInstance.model.dispose(); }
+
+        public void render(ModelBatch b, Environment e) {
+            b.render(cupInstance, e);
+        }
+
+        public void dispose() {
+            cupInstance.model.dispose();
+        }
     }
 
     public static class Tree {
@@ -519,7 +566,7 @@ public class Terrain {
 
             if (distSq < (collisionRadius * collisionRadius)) {
                 if (ballPos.y < pos.y + tH && ballPos.y > pos.y) {
-                     Gdx.app.log("PHYSICS", "Trunk Hit detected at: " + ballPos);
+                    Gdx.app.log("PHYSICS", "Trunk Hit detected at: " + ballPos);
                     return true;
                 }
             }
@@ -588,10 +635,21 @@ public class Terrain {
             foliage.model.dispose();
         }
 
-        public Vector3 getPosition() { return pos; }
-        public float getTrunkHeight() { return tH; }
-        public float getTrunkRadius() { return tR; }
-        public TreeScheme getScheme() { return scheme; }
+        public Vector3 getPosition() {
+            return pos;
+        }
+
+        public float getTrunkHeight() {
+            return tH;
+        }
+
+        public float getTrunkRadius() {
+            return tR;
+        }
+
+        public TreeScheme getScheme() {
+            return scheme;
+        }
     }
 
     public static class Monolith {
@@ -599,21 +657,50 @@ public class Terrain {
         private final Vector3 pos;
         private final float width, height, depth;
         private float rotationY;
+
         public Monolith(float x, float y, float z, float w, float h, float d, float rotation) {
             this.pos = new Vector3(x, y, z);
-            this.width = w; this.height = h; this.depth = d; this.rotationY = rotation;
+            this.width = w;
+            this.height = h;
+            this.depth = d;
+            this.rotationY = rotation;
             ModelBuilder mb = new ModelBuilder();
             instance = new ModelInstance(mb.createBox(w, h, d, new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f))), VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
             updateTransform();
         }
-        private void updateTransform() { instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z); instance.transform.rotate(Vector3.Y, rotationY); }
-        public void render(ModelBatch b, Environment e) { b.render(instance, e); }
-        public void dispose() { if (instance.model != null) instance.model.dispose(); }
-        public Vector3 getPosition() { return pos; }
-        public float getWidth() { return width; }
-        public float getHeight() { return height; }
-        public float getDepth() { return depth; }
-        public float getRotationY() { return rotationY; }
+
+        private void updateTransform() {
+            instance.transform.setToTranslation(pos.x, pos.y + height / 2f, pos.z);
+            instance.transform.rotate(Vector3.Y, rotationY);
+        }
+
+        public void render(ModelBatch b, Environment e) {
+            b.render(instance, e);
+        }
+
+        public void dispose() {
+            if (instance.model != null) instance.model.dispose();
+        }
+
+        public Vector3 getPosition() {
+            return pos;
+        }
+
+        public float getWidth() {
+            return width;
+        }
+
+        public float getHeight() {
+            return height;
+        }
+
+        public float getDepth() {
+            return depth;
+        }
+
+        public float getRotationY() {
+            return rotationY;
+        }
     }
 
     public enum TreeScheme {
@@ -634,7 +721,12 @@ public class Terrain {
             this.leafMax = lMax;
         }
 
-        public Color getRandomBark() { return barkMin.cpy().lerp(barkMax, MathUtils.random()); }
-        public Color getRandomFoliage() { return leafMin.cpy().lerp(leafMax, MathUtils.random()); }
+        public Color getRandomBark() {
+            return barkMin.cpy().lerp(barkMax, MathUtils.random());
+        }
+
+        public Color getRandomFoliage() {
+            return leafMin.cpy().lerp(leafMax, MathUtils.random());
+        }
     }
 }
