@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Quaternion;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.features.PuttingGreenGenerator;
 
@@ -58,15 +59,14 @@ public class Terrain {
         initializeGrids();
         generator.generate(terrainMap, heightMap, trees, monoliths, teeCenter, holePosition);
 
-        int hx = MathUtils.clamp((int) ((holePosition.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
-        int hz = MathUtils.clamp((int) ((holePosition.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
-        this.holePosition.y = heightMap[hx][hz] + 0.04f;
+        // Capture the surface height for positioning
+        float surfaceY = getSurfaceHeightAt(holePosition.x, holePosition.z);
+        this.holePosition.set(holePosition.x, surfaceY, holePosition.z);
 
-        this.physicalHole = new Hole(holePosition, holeSize / 2f, CUP_DEPTH);
+        // Initialize the Hole with the correct surface normal and radius
+        this.physicalHole = new Hole(holePosition, getNormalAt(holePosition.x, holePosition.z), holeSize / 2f);
 
-        int tx = MathUtils.clamp((int) ((teeCenter.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
-        int tz = MathUtils.clamp((int) ((teeCenter.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
-        this.teeCenter.y = heightMap[tx][tz];
+        this.teeCenter.y = getSurfaceHeightAt(teeCenter.x, teeCenter.z);
 
         if (generator instanceof ClassicGenerator) {
             this.waterLevel = ((ClassicGenerator) generator).getData().getWaterLevel();
@@ -206,10 +206,7 @@ public class Terrain {
         if (teeInstance != null) batch.render(teeInstance, env);
     }
 
-    public float getHeightAt(float worldX, float worldZ) {
-        float rimRadius = holeSize / 2.0f;
-        float sinkDepth = 0.5f;
-
+    public float getSurfaceHeightAt(float worldX, float worldZ) {
         float localX = worldX + (SIZE_X * SCALE / 2f);
         float localZ = worldZ + (SIZE_Z * SCALE / 2f);
         int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
@@ -223,13 +220,23 @@ public class Terrain {
         float h01 = heightMap[ix][iz + 1];
         float h11 = heightMap[ix + 1][iz + 1];
 
-        float baseHeight = MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
+        return MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
+    }
+
+    /**
+     * Corrected height logic. We use the holePosition's Y (the surface)
+     * as the starting point for the sink depth.
+     */
+    public float getHeightAt(float worldX, float worldZ) {
+        float baseHeight = getSurfaceHeightAt(worldX, worldZ);
+
         float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
+        float rimRadius = holeSize / 2.0f;
 
         if (distToHole < rimRadius) {
-            // FUNNEL PHYSICS: Linear depth from rim (0) to center (sinkDepth)
             float ratio = distToHole / rimRadius;
-            return baseHeight - (sinkDepth * (1.0f - ratio));
+            // The sink happens relative to the surface height AT the hole center
+            return baseHeight - (CUP_DEPTH * (1.0f - ratio));
         }
 
         return baseHeight;
@@ -243,6 +250,8 @@ public class Terrain {
 
         float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
 
+        // We use getHeightAt here because the normal needs to represent the "pit"
+        // to suck the ball in physically.
         float hL = getHeightAt(worldX - sampleEps, worldZ);
         float hR = getHeightAt(worldX + sampleEps, worldZ);
         float hD = getHeightAt(worldX, worldZ - sampleEps);
@@ -376,21 +385,14 @@ public class Terrain {
     }
 
     public void setHolePosition(Vector3 newPos) {
-        this.holePosition.set(newPos);
-        int ix = MathUtils.clamp((int) ((newPos.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
-        int iz = MathUtils.clamp((int) ((newPos.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
-        this.holePosition.y = heightMap[ix][iz] + 0.02f;
-
+        this.holePosition.set(newPos.x, getSurfaceHeightAt(newPos.x, newPos.z), newPos.z);
         if (physicalHole != null) physicalHole.dispose();
-        this.physicalHole = new Hole(holePosition, holeSize / 2f, CUP_DEPTH);
+        this.physicalHole = new Hole(holePosition, getNormalAt(holePosition.x, holePosition.z), holeSize / 2f);
         if (flagInstance != null) updateFlagTransform(holePosition, 1.0f, 0f);
     }
 
     public void setTeePosition(Vector3 newPos) {
-        this.teeCenter.set(newPos);
-        int ix = MathUtils.clamp((int) ((newPos.x + (SIZE_X * SCALE / 2f)) / SCALE), 0, SIZE_X - 1);
-        int iz = MathUtils.clamp((int) ((newPos.z + (SIZE_Z * SCALE / 2f)) / SCALE), 0, SIZE_Z - 1);
-        this.teeCenter.y = heightMap[ix][iz];
+        this.teeCenter.set(newPos.x, getSurfaceHeightAt(newPos.x, newPos.z), newPos.z);
         if (teeInstance != null) teeInstance.transform.setToTranslation(teeCenter.x, teeCenter.y + 0.075f, teeCenter.z);
     }
 
@@ -422,30 +424,22 @@ public class Terrain {
 
     public static class Hole {
         private final ModelInstance cupInstance;
-        private final Vector3 position;
-        private final float radius, depth;
-
-        public Hole(Vector3 pos, float radius, float depth) {
-            this.position = new Vector3(pos);
-            this.radius = radius;
-            this.depth = depth;
+        public Hole(Vector3 pos, Vector3 surfaceNormal, float radius) {
             ModelBuilder mb = new ModelBuilder();
-
-            // Create the cone
-            Model coneModel = mb.createCone(radius * 2, depth, radius * 2, 24,
-                    new Material(ColorAttribute.createDiffuse(Color.BLACK)),
+            Model discModel = mb.createCylinder(radius * 2f, 0.01f, radius * 2f, 24,
+                    new Material(ColorAttribute.createDiffuse(new Color(0.02f, 0.02f, 0.02f, 1f))),
                     VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
 
-            cupInstance = new ModelInstance(coneModel);
-
-            // FLIP THE CONE: Rotate 180 degrees around Z or X to make it a cup
-            cupInstance.transform.setToTranslation(pos.x, pos.y - (depth / 2f), pos.z);
-            cupInstance.transform.rotate(Vector3.X, 180);
+            cupInstance = new ModelInstance(discModel);
+            cupInstance.transform.idt();
+            Quaternion q = new Quaternion();
+            q.setFromCross(Vector3.Y, surfaceNormal);
+            cupInstance.transform.rotate(q);
+            Vector3 finalPos = new Vector3(pos).add(new Vector3(surfaceNormal).scl(0.005f));
+            cupInstance.transform.setTranslation(finalPos);
         }
-
         public void render(ModelBatch b, Environment e) { b.render(cupInstance, e); }
         public void dispose() { cupInstance.model.dispose(); }
-        public float getFloorHeight() { return position.y - depth; }
     }
 
     public static class Tree {

@@ -27,13 +27,8 @@ public class ParticleManager {
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
     }
 
-    /**
-     * Specifically for SUPER and PERFECTION shot glamour.
-     * This keeps these "fake" particles out of the Ball's trail buffer.
-     */
     public void spawnRatingBurst(Vector3 pos, Color color, int count, float forceScale) {
         for (int i = 0; i < count; i++) {
-            // Lower gravity for "glamour" particles so they float/linger more than dirt
             GameParticle p = new GameParticle(pos, color, boxModel, 0, 1.5f, DEFAULT_GRAVITY * 0.5f);
             p.velocity.set(MathUtils.random(-1f, 1f), MathUtils.random(0.5f, 2f), MathUtils.random(-1f, 1f))
                     .nor()
