@@ -1,5 +1,6 @@
 package org.example.terrain;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.VertexAttributes;
@@ -7,10 +8,7 @@ import com.badlogic.gdx.graphics.g3d.*;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
-import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Vector3;
-import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.math.Quaternion;
+import com.badlogic.gdx.math.*;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.features.PuttingGreenGenerator;
 
@@ -447,27 +445,108 @@ public class Terrain {
         private final Vector3 pos;
         private final float tH, tR, fR;
         private final TreeScheme scheme;
+        private final float mapRotation; // Store for collision logic
         private float actualFoliageHeight;
-        public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng) {
+
+        public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng, float mapRotation) {
             this.pos = new Vector3(x, y, z);
-            this.tH = th; this.tR = tr; this.fR = fr;
+            this.tH = th;
+            this.tR = tr;
+            this.fR = fr;
             this.scheme = scheme;
+            this.mapRotation = mapRotation;
+
             ModelBuilder mb = new ModelBuilder();
             Material barkMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomBark()));
             Material leafMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage()));
-            trunk = new ModelInstance(mb.createCylinder(tr * 2, th, tr * 2, 16, barkMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+
+            // --- Trunk Construction ---
+            mb.begin();
+            long attributes = VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal;
+            MeshPartBuilder part = mb.part("trunk", GL20.GL_TRIANGLES, attributes, barkMat);
+
+            // Vertical Post
+            part.cylinder(tr * 2, th, tr * 2, 16);
+
+            // Add Horizontal T-Bar for Grapevines
+            float armWidth = fr * 3.0f;
+            if (scheme == TreeScheme.GRAPEVINE) {
+                float armThickness = tr * 1.4f;
+                Matrix4 transform = new Matrix4();
+                transform.translate(0, th / 2f, 0).rotate(0, 0, 1, 90);
+                part.setVertexTransform(transform);
+                part.cylinder(armThickness, armWidth, armThickness, 12);
+                part.setVertexTransform(null);
+            }
+
+            trunk = new ModelInstance(mb.end());
             trunk.transform.setToTranslation(x, y + th / 2, z);
+            trunk.transform.rotate(0, 1, 0, mapRotation);
+
+            // --- Foliage Construction ---
             if (scheme == TreeScheme.FIR) {
                 float skirtMultiplier = 0.6f + (rng.nextFloat() * 0.31f);
                 this.actualFoliageHeight = (th * skirtMultiplier) + (fr * 2);
-                foliage = new ModelInstance(mb.createCone(fr * 2.5f, actualFoliageHeight, fr * 2.5f, 16, leafMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+                foliage = new ModelInstance(mb.createCone(fr * 2.5f, actualFoliageHeight, fr * 2.5f, 16, leafMat, attributes));
                 foliage.transform.setToTranslation(x, y + th + (fr * 2) - (actualFoliageHeight / 2f), z);
+                foliage.transform.rotate(0, 1, 0, mapRotation);
+            } else if (scheme == TreeScheme.GRAPEVINE) {
+                float varW = 0.9f + (rng.nextFloat() * 0.3f);
+                float varH = 0.8f + (rng.nextFloat() * 0.4f);
+
+                float vineWidth = armWidth * varW;
+                float vineHeight = tr * 1.6f * varH;
+                float vineDepth = tr * 2.2f * varH;
+                this.actualFoliageHeight = vineHeight;
+
+                foliage = new ModelInstance(mb.createBox(vineWidth, vineHeight, vineDepth, leafMat, attributes));
+                foliage.transform.setToTranslation(x, y + th + (vineHeight / 2f), z);
+
+                // Apply map rotation plus per-tree jitter
+                foliage.transform.rotate(0, 1, 0, mapRotation + (rng.nextFloat() - 0.5f) * 12f);
+                foliage.transform.rotate(1, 0, 0, (rng.nextFloat() - 0.5f) * 3f);
             } else {
                 this.actualFoliageHeight = fr * 2;
-                foliage = new ModelInstance(mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16, leafMat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
-                foliage.transform.setToTranslation(x, y + th+fr/4, z);
+                foliage = new ModelInstance(mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16, leafMat, attributes));
+                foliage.transform.setToTranslation(x, y + th + fr / 4f, z);
+                foliage.transform.rotate(0, 1, 0, mapRotation);
             }
         }
+
+        public boolean checkTrunkCollision(Vector3 ballPos, float ballRadius) {
+            float collisionRadius = tR + ballRadius;
+            float distSq = Vector2.dst2(ballPos.x, ballPos.z, pos.x, pos.z);
+
+            if (distSq < (collisionRadius * collisionRadius)) {
+                if (ballPos.y < pos.y + tH && ballPos.y > pos.y) {
+                     Gdx.app.log("PHYSICS", "Trunk Hit detected at: " + ballPos);
+                    return true;
+                }
+            }
+
+            if (scheme == TreeScheme.GRAPEVINE) {
+                float localX = (ballPos.x - pos.x);
+                float localZ = (ballPos.z - pos.z);
+
+                float cos = MathUtils.cosDeg(-mapRotation);
+                float sin = MathUtils.sinDeg(-mapRotation);
+
+                float rotatedX = localX * cos - localZ * sin;
+                float rotatedZ = localX * sin + localZ * cos;
+
+                float armHalfWidth = (fR * 3.0f) / 2f;
+                float armThickness = (tR * 0.7f) + ballRadius;
+
+                if (Math.abs(ballPos.y - (pos.y + tH)) < armThickness) {
+                    if (Math.abs(rotatedX) < armHalfWidth + ballRadius &&
+                            Math.abs(rotatedZ) < armThickness) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
             if (scheme == TreeScheme.FIR) {
                 float topY = pos.y + tH + (fR * 2);
@@ -475,13 +554,44 @@ public class Terrain {
                 if (ballPos.y > topY + ballRadius || ballPos.y < baseY - ballRadius) return false;
                 float relativeY = MathUtils.clamp((topY - ballPos.y) / actualFoliageHeight, 0, 1);
                 return Vector3.dst(ballPos.x, 0, ballPos.z, pos.x, 0, pos.z) < (relativeY * (fR * 1.25f)) + ballRadius;
-            } else return ballPos.dst(pos.x, pos.y + tH + fR, pos.z) < (fR + ballRadius);
+            } else if (scheme == TreeScheme.GRAPEVINE) {
+                // Rotate ball into tree's local space for box check
+                float localX = (ballPos.x - pos.x);
+                float localZ = (ballPos.z - pos.z);
+                float cos = MathUtils.cosDeg(-mapRotation);
+                float sin = MathUtils.sinDeg(-mapRotation);
+                float rotatedX = localX * cos - localZ * sin;
+                float rotatedZ = localX * sin + localZ * cos;
+
+                float vineHalfWidth = (fR * 3.5f) / 2f;
+                float vineHalfHeight = (actualFoliageHeight) / 2f;
+                float vineHalfDepth = (fR * 1.5f) / 2f;
+
+                float foliageCenterY = pos.y + tH + vineHalfHeight;
+                float dy = Math.abs(ballPos.y - foliageCenterY);
+
+                return Math.abs(rotatedX) < (vineHalfWidth + ballRadius) &&
+                        dy < (vineHalfHeight + ballRadius) &&
+                        Math.abs(rotatedZ) < (vineHalfDepth + ballRadius);
+            } else {
+                return ballPos.dst(pos.x, pos.y + tH + fR, pos.z) < (fR + ballRadius);
+            }
         }
-        public void render(ModelBatch b, Environment e) { b.render(trunk, e); b.render(foliage, e); }
-        public void dispose() { trunk.model.dispose(); foliage.model.dispose(); }
+
+        public void render(ModelBatch b, Environment e) {
+            b.render(trunk, e);
+            b.render(foliage, e);
+        }
+
+        public void dispose() {
+            trunk.model.dispose();
+            foliage.model.dispose();
+        }
+
         public Vector3 getPosition() { return pos; }
         public float getTrunkHeight() { return tH; }
         public float getTrunkRadius() { return tR; }
+        public TreeScheme getScheme() { return scheme; }
     }
 
     public static class Monolith {
@@ -513,9 +623,17 @@ public class Terrain {
         FIR(new Color(0.2f, 0.15f, 0.1f, 1f), new Color(0.3f, 0.25f, 0.2f, 1f), new Color(0.05f, 0.2f, 0.05f, 1f), new Color(0.1f, 0.3f, 0.1f, 1f)),
         AUTUMN_MAPLE(new Color(0.25f, 0.2f, 0.15f, 1f), new Color(0.35f, 0.3f, 0.25f, 1f), new Color(0.8f, 0.2f, 0.1f, 1f), new Color(1f, 0.6f, 0.0f, 1f)),
         CHERRY_BLOSSOM(new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f), new Color(1f, 0.7f, 0.75f, 1f), new Color(1f, 0.85f, 0.9f, 1f)),
-        DEAD_GRAY(new Color(0.2f, 0.2f, 0.2f, 1f), new Color(0.4f, 0.4f, 0.4f, 1f), new Color(0.1f, 0.1f, 0.1f, 1f), new Color(0.3f, 0.3f, 0.3f, 1f));
+        DEAD_GRAY(new Color(0.2f, 0.2f, 0.2f, 1f), new Color(0.4f, 0.4f, 0.4f, 1f), new Color(0.1f, 0.1f, 0.1f, 1f), new Color(0.3f, 0.3f, 0.3f, 1f)),
+        GRAPEVINE(new Color(0.30f, 0.22f, 0.18f, 1f), new Color(0.40f, 0.30f, 0.25f, 1f), new Color(0.15f, 0.45f, 0.05f, 1f), new Color(0.25f, 0.55f, 0.15f, 1f));
         private final Color barkMin, barkMax, leafMin, leafMax;
-        TreeScheme(Color bMin, Color bMax, Color lMin, Color lMax) { this.barkMin = bMin; this.barkMax = bMax; this.leafMin = lMin; this.leafMax = lMax; }
+
+        TreeScheme(Color bMin, Color bMax, Color lMin, Color lMax) {
+            this.barkMin = bMin;
+            this.barkMax = bMax;
+            this.leafMin = lMin;
+            this.leafMax = lMax;
+        }
+
         public Color getRandomBark() { return barkMin.cpy().lerp(barkMax, MathUtils.random()); }
         public Color getRandomFoliage() { return leafMin.cpy().lerp(leafMax, MathUtils.random()); }
     }

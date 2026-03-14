@@ -364,23 +364,33 @@ public class Ball {
 
     private void handleTreeCollisions(Terrain terrain, float delta) {
         if (hitCooldown > 0) return;
+
         List<Terrain.Tree> nearbyTrees = terrain.getTreesAt(position.x, position.z);
         for (Terrain.Tree tree : nearbyTrees) {
             Vector3 treePos = tree.getPosition();
-            float dx = position.x - treePos.x, dz = position.z - treePos.z;
-            float distXZ = (float) Math.sqrt(dx * dx + dz * dz);
-            if (distXZ < BALL_RADIUS + tree.getTrunkRadius() && position.y < treePos.y + tree.getTrunkHeight() && position.y > treePos.y) {
+
+            if (tree.checkTrunkCollision(position, BALL_RADIUS)) {
+                float dx = position.x - treePos.x;
+                float dz = position.z - treePos.z;
+
                 if (BallPhysics.handleTrunkCollision(position, velocity, spin, dx, dz)) {
                     lastInteraction = Interaction.TERRAIN;
                     isGoodShot = false;
+                    hitCooldown = 0.1f; // Ensure we don't double-hit the same frame
                     particleManager.spawnRatingBurst(position, Color.BROWN, 4, 1.0f);
                 }
                 continue;
             }
+
             if (tree.isInsideFoliage(position, BALL_RADIUS)) {
                 lastInteraction = Interaction.LEAVES;
-                BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE);
-                if (MathUtils.random() < 0.1f) particleManager.spawnRatingBurst(position, Color.FOREST, 1, 0.3f);
+
+                BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU,
+                        DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE);
+
+                if (MathUtils.random() < 0.1f) {
+                    particleManager.spawnRatingBurst(position, Color.FOREST, 1, 0.3f);
+                }
             }
         }
     }

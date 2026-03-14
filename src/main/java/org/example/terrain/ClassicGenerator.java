@@ -233,41 +233,33 @@ public class ClassicGenerator implements ITerrainGenerator {
     private void generateVineyardTrees(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, int teeZ, int teeX, float water, boolean isCliff) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
-
         float maxSlopeForFlatness = 0.05f;
+        float mapBaseRotation = (rng.nextFloat() - 0.5f) * 10f;
 
-        for (int tx = 4; tx < SIZE_X - 4; tx += 10) {
-            for (int tz = 4; tz < SIZE_Z - 4; tz += 4) {
+        for (int tx = 4; tx < SIZE_X - 4; tx += 4) {
+            for (int tz = 4; tz < SIZE_Z - 4; tz += 10) {
                 float worldY = heights[tx][tz];
 
-                // 1. Basic safety checks
                 if (worldY < water + 0.1f || map[tx][tz] != Terrain.TerrainType.ROUGH) continue;
                 if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
 
-                // 2. Gradual Probability Falloff
                 float zNorm = (float) tz / (SIZE_Z - 1);
                 float probability = 1.0f;
-
-                // Near Start: 0.05 (0%) to 0.15 (100%)
                 if (zNorm < 0.15f) {
                     probability = MathUtils.clamp((zNorm - 0.05f) / 0.10f, 0f, 1f);
-                }
-                // Near End: 0.85 (100%) to 0.95 (0%)
-                else if (zNorm > 0.75f) {
+                } else if (zNorm > 0.75f) {
                     probability = MathUtils.clamp(1.0f - (zNorm - 0.75f) / 0.10f, 0f, 1f);
                 }
 
-                // Apply probability roll
                 if (rng.nextFloat() > (probability * probability)) continue;
 
-                // 3. Flatness Check
                 float dx = heights[tx + 1][tz] - worldY;
                 float dz = heights[tx][tz + 1] - worldY;
                 float slopeMag = (float) Math.sqrt(dx * dx + dz * dz);
 
                 if (slopeMag < maxSlopeForFlatness) {
-                    // Small jitter for organic feel
-                    float offsetX = (rng.nextFloat() - 0.5f) * 1.5f;
+                    // Reduced the jitter on X to keep the "line" of the trellis straighter
+                    float offsetX = (rng.nextFloat() - 0.5f) * 0.5f;
                     float offsetZ = (rng.nextFloat() - 0.5f) * 1.0f;
 
                     float finalX = (tx + offsetX) * SCALE - (SIZE_X * SCALE / 2f);
@@ -283,7 +275,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                             data.getTrunkRadius(),
                             data.getFoliageRadius(),
                             data.getTreeScheme(),
-                            rng
+                            rng,
+                            mapBaseRotation
                     ));
                 }
             }
@@ -295,11 +288,14 @@ public class ClassicGenerator implements ITerrainGenerator {
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
         int treeCount = (int) (SIZE_Z * data.getTreeDensity() * 2.5f);
 
+        float mapBaseRotation = rng.nextFloat() * 360f;
+
         for (int i = 0; i < treeCount; i++) {
             int tx = rng.nextInt(SIZE_X - 1), tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
             if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
             if (worldY < water + 0.1f || (map[tx][tz] != Terrain.TerrainType.ROUGH)) continue;
+
             float slope = (float) Math.sqrt(Math.pow(heights[tx + 1][tz] - worldY, 2) + Math.pow(heights[tx][tz + 1] - worldY, 2));
             if (slope > 1.2f) continue;
 
@@ -311,9 +307,22 @@ public class ClassicGenerator implements ITerrainGenerator {
                 } else if (dist < crater.radius * 2.0f)
                     treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
             }
+
             if (rng.nextFloat() > treeChance) continue;
+
             float tH = (isCliff ? cliffDelta : data.getTreeHeight()) * (0.8f + rng.nextFloat() * 0.3f);
-            trees.add(new Terrain.Tree((tx * SCALE) - (SIZE_X * SCALE / 2f), worldY, (tz * SCALE) - (SIZE_Z * SCALE / 2f), tH, data.getTrunkRadius(), data.getFoliageRadius(), data.getTreeScheme(), rng));
+
+            trees.add(new Terrain.Tree(
+                    (tx * SCALE) - (SIZE_X * SCALE / 2f),
+                    worldY,
+                    (tz * SCALE) - (SIZE_Z * SCALE / 2f),
+                    tH,
+                    data.getTrunkRadius(),
+                    data.getFoliageRadius(),
+                    data.getTreeScheme(),
+                    rng,
+                    mapBaseRotation
+            ));
         }
     }
 

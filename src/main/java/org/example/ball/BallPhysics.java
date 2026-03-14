@@ -76,15 +76,35 @@ public class BallPhysics {
     }
 
     public static boolean handleTrunkCollision(Vector3 pos, Vector3 vel, Vector3 spin, float dx, float dz) {
+        // 1. Calculate the surface normal (outward from the trunk)
         temp.set(dx, 0, dz).nor();
-        float speedXZ = temp2.set(vel.x, 0, vel.z).len();
-        vel.x = temp.x * speedXZ;
-        vel.z = temp.z * speedXZ;
-        vel.scl(0.8f);
-        spin.scl(0.2f);
-        pos.x += temp.x * 0.05f;
-        pos.z += temp.z * 0.05f;
-        return true;
+
+        // 2. Calculate the dot product of velocity and normal
+        // This tells us how much of the velocity is heading "into" the tree
+        float dot = vel.dot(temp);
+
+        // 3. Only bounce if the ball is moving TOWARD the trunk
+        // (dot < 0 means the ball and normal are pointing in opposite-ish directions)
+        if (dot < 0) {
+            // Standard reflection: v_out = v_in - 2 * (v_in . n) * n
+            // We multiply by 1.6f instead of 2.0f to simulate energy loss (0.6 restitution)
+            float bounciness = 1.6f;
+            vel.mulAdd(temp, -dot * bounciness);
+
+            // 4. Energy loss and spin dampening
+            // We already applied some energy loss via 'bounciness',
+            // but we can scale the whole vector for friction/impact loss.
+            vel.scl(0.85f);
+            spin.scl(0.3f);
+
+            // 5. Anti-stuck: Push the ball slightly out of the collision volume
+            pos.x += temp.x * 0.1f;
+            pos.z += temp.z * 0.1f;
+
+            return true;
+        }
+
+        return false;
     }
 
     public static Vector3 getRollingFriction(Vector3 velocity, Vector3 normal, Terrain.TerrainType type, float gravity) {

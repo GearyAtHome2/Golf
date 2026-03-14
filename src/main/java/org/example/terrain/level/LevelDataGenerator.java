@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.BIG_GRAPE_VINEYARDS;
+//        selectedType = LevelData.Archetype.BIG_GRAPE_VINEYARDS;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -76,7 +76,7 @@ public class LevelDataGenerator {
                 break;
             case BIG_GRAPE_VINEYARDS:
                 algo = LevelData.TerrainAlgorithm.DUNES;
-                scheme = TreeScheme.OAK;//todo: grapevines type?
+                scheme = TreeScheme.GRAPEVINE;
                 break;
             default:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
@@ -348,8 +348,8 @@ public class LevelDataGenerator {
                 undulation = 0.7f;
                 fairwayWiggle = 0.5f + r.nextFloat() * 0.1f;
                 islands = 0.0f;
-                cohesion = 0.8f;
-                distance = Math.round(550 + r.nextFloat() * 100);
+                cohesion = 1.0f;
+                distance = Math.round(550 + r.nextFloat() * 60);
                 par = 4;
                 break;
             case ROUGH_HOUGH_BLUFFS:
