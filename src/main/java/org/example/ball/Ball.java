@@ -16,7 +16,6 @@ import java.util.List;
 public class Ball {
 
     public enum State {AIR, CONTACT, ROLLING, STATIONARY}
-
     public enum Interaction {NONE, LEAVES, WATER, TERRAIN}
 
     public static final float BALL_RADIUS = 0.2f;
@@ -41,6 +40,7 @@ public class Ball {
     private final Vector3 lastStationaryPosition = new Vector3();
     private final Vector3 lastShotPosition = new Vector3();
     private final Vector3 lastTrailPos = new Vector3();
+    private final Vector3 lastFramePosition = new Vector3();
 
     private final BallRenderer renderer;
     private final ParticleManager particleManager;
@@ -48,7 +48,6 @@ public class Ball {
     private boolean isGoodShot = false;
 
     private State state = State.STATIONARY;
-
     private Interaction lastInteraction = Interaction.NONE;
     private float hitCooldown = 0f;
 
@@ -68,6 +67,7 @@ public class Ball {
         this.lastStationaryPosition.set(startPosition);
         this.lastShotPosition.set(startPosition);
         this.lastTrailPos.set(startPosition);
+        this.lastFramePosition.set(startPosition);
         this.velocity.setZero();
         renderer.updateVisuals(position, state);
     }
@@ -94,13 +94,15 @@ public class Ball {
         for (int i = 0; i < SUB_STEPS; i++) {
             if (state != State.STATIONARY) {
                 processPhysicsStep(subDelta, terrain, baseWind);
+                // Frequency is back to being high (every substep)
+                spawnFlightParticles(lastFramePosition, subDelta);
             }
 
             float speed = velocity.len();
             float dynamicStep = MathUtils.clamp(speed * 0.06f, 0.05f, 2.0f);
 
             if (position.dst2(lastTrailPos) > (dynamicStep * dynamicStep)) {
-                renderer.recordTrailPoint(position, 1.0f);
+                renderer.recordTrailPoint(lastFramePosition, 1.0f);
                 lastTrailPos.set(position);
             }
 
@@ -112,9 +114,39 @@ public class Ball {
 
         PhysicsProfiler.startSection("VisualSync");
         renderer.updateVisuals(position, state);
+        lastFramePosition.set(position);
         PhysicsProfiler.endSection("VisualSync");
     }
 
+    private void spawnFlightParticles(Vector3 spawnPos, float subDelta) {
+        if (state == State.AIR && isInitialFlight && config.particlesEnabled) {
+            float velMag = velocity.len();
+            Color trailColor = renderer.getActiveTrailColor();
+            float chanceMultiplier = subDelta / 0.0166f;
+
+            // Shifted window to -0.1 to 0.9.
+            // This maintains a full 1.0 span to bridge frame gaps while
+            // ensuring particles stay clear of the ball's leading edge.
+            float alpha = MathUtils.random(-0.1f, 0.9f);
+            tempV1.set(lastFramePosition).lerp(position, alpha);
+
+            if (shotRating == MinigameResult.Rating.PERFECTION) {
+                float throb = MathUtils.sin(timeElapsed * 10f);
+                float throbFactor = 1.0f + (throb * 0.7f);
+                float force = MathUtils.clamp(velMag / 20f, 0.4f, 1.2f) * throbFactor;
+
+                int count = (throb > 0.4f) ? 4 : (velMag > 15f ? 2 : 1);
+                particleManager.spawnRatingBurst(tempV1, trailColor, count, force);
+
+            } else if (shotRating == MinigameResult.Rating.SUPER) {
+                if (MathUtils.random() < 0.9f * chanceMultiplier)
+                    particleManager.spawnRatingBurst(tempV1, trailColor, 1, 0.4f);
+            } else if (shotRating == MinigameResult.Rating.GREAT) {
+                if (MathUtils.random() < 0.35f * chanceMultiplier)
+                    particleManager.spawnRatingBurst(tempV1, trailColor, 1, 0.3f);
+            }
+        }
+    }
     private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind) {
         float preStepY = position.y;
         handleWaterTransition(terrain);
@@ -122,24 +154,6 @@ public class Ball {
         PhysicsProfiler.startSection("EnvPhysics");
         handleEnvironmentPhysics(delta, terrain, baseWind);
         PhysicsProfiler.endSection("EnvPhysics");
-
-        // Flight streams remain gated by config for performance
-        if (state == State.AIR && isInitialFlight && config.particlesEnabled) {
-            float velMag = velocity.len();
-            Color trailColor = renderer.getActiveTrailColor();
-
-            if (shotRating == MinigameResult.Rating.PERFECTION) {
-                float throb = MathUtils.sin(timeElapsed * 10f);
-                float throbFactor = 1.0f + (throb * 0.7f);
-                float force = MathUtils.clamp(velMag / 20f, 0.4f, 1.2f) * throbFactor;
-                int count = (throb > 0.4f) ? 4 : (velMag > 15f ? 2 : 1);
-                particleManager.spawnRatingBurst(position, trailColor, count, force);
-            } else if (shotRating == MinigameResult.Rating.SUPER) {
-                if (MathUtils.random() < 0.25f) particleManager.spawnRatingBurst(position, trailColor, 1, 0.4f);
-            } else if (shotRating == MinigameResult.Rating.GREAT) {
-                if (MathUtils.random() < 0.07f) particleManager.spawnRatingBurst(position, trailColor, 1, 0.3f);
-            }
-        }
 
         handleTreeCollisions(terrain, delta);
         handleMonolithCollisions(terrain);
@@ -151,7 +165,6 @@ public class Ball {
         if (BallPhysics.checkWaterTransition(position, velocity, waterLevel)) {
             lastInteraction = Interaction.WATER;
             renderer.getActiveTrailColor().set(Color.CYAN);
-            // Impact particles: enabled even if general particles are off
             particleManager.spawnRatingBurst(position, Color.CYAN, 5, 1.5f);
         }
     }
@@ -205,10 +218,11 @@ public class Ball {
     private boolean handleAirCollisions(Terrain terrain) {
         Vector3 bestNormal = new Vector3();
         boolean collisionFound = false;
+        tempV1.set(velocity).scl(0.016f);
         for (float t = 0.33f; t <= 1.0f; t += 0.33f) {
-            float checkX = position.x + (tempV2.x * t);
-            float checkZ = position.z + (tempV2.z * t);
-            float checkY = position.y + (tempV2.y * t);
+            float checkX = position.x + (tempV1.x * t);
+            float checkZ = position.z + (tempV1.z * t);
+            float checkY = position.y + (tempV1.y * t);
             float hAtPoint = terrain.getHeightAt(checkX, checkZ) + BALL_RADIUS / 3;
             if (checkY < hAtPoint) {
                 Vector3 nAtPoint = terrain.getNormalAt(checkX, checkZ);
@@ -233,18 +247,20 @@ public class Ball {
         hitCooldown = 0.05f;
         lastInteraction = Interaction.TERRAIN;
         if (!isGoodShot) renderer.lerpTrailColor(Color.GRAY, 0.4f);
-
-        // Always spawn impact particles for wall hits
         particleManager.spawnRatingBurst(position, Color.LIGHT_GRAY, 3, 0.8f);
     }
 
     private void applyAirMovement(float delta, Terrain terrain) {
-        float nextHeight = terrain.getHeightAt(position.x + tempV2.x, position.z + tempV2.z) + BALL_RADIUS / 3;
-        if (position.y + tempV2.y < nextHeight && hitCooldown <= 0f) {
+        float vx = velocity.x * delta;
+        float vy = velocity.y * delta;
+        float vz = velocity.z * delta;
+
+        float nextHeight = terrain.getHeightAt(position.x + vx, position.z + vz) + BALL_RADIUS / 3;
+        if (position.y + vy < nextHeight && hitCooldown <= 0f) {
             handleTerrainPhysics(delta, terrain, nextHeight);
             position.add(tempV1.set(velocity).scl(delta));
         } else {
-            position.add(tempV2);
+            position.add(vx, vy, vz);
         }
     }
 
@@ -309,7 +325,6 @@ public class Ball {
     }
 
     private void applyBounce(Vector3 normal, Terrain.TerrainType type) {
-        // Impact burst: Always allowed on first landing
         if (isInitialFlight) {
             int landingCount = switch (shotRating) {
                 case PERFECTION -> 8;
@@ -393,7 +408,6 @@ public class Ball {
         this.isInitialFlight = true;
         renderer.setShotRatingColor(rating);
 
-        // Initial hit burst: Always allowed
         int burstCount = switch (rating) {
             case PERFECTION -> 15;
             case SUPER -> 10;
@@ -429,10 +443,7 @@ public class Ball {
         renderer.updateVisuals(position, state);
     }
 
-    public boolean isInWater(Terrain terrain) {
-        return position.y < terrain.getWaterLevel();
-    }
-
+    public boolean isInWater(Terrain terrain) { return position.y < terrain.getWaterLevel(); }
     public boolean checkVictory(Terrain terrain) {
         Vector3 holePos = terrain.getHolePosition();
         float dist = position.dst(holePos);
@@ -440,52 +451,19 @@ public class Ball {
         return dist < holeRadius && position.y < holePos.y - 0.22f;
     }
 
-    public Vector3 getPosition() {
-        return position;
-    }
-
-    public Vector3 getVelocity() {
-        return velocity;
-    }
-
-    public Vector3 getSpin() {
-        return spin;
-    }
-
-    public State getState() {
-        return state;
-    }
-
-    public void setState(State state) {
-        this.state = state;
-    }
-
-    public Interaction getLastInteraction() {
-        return lastInteraction;
-    }
-
-    public void clearInteraction() {
-        lastInteraction = Interaction.NONE;
-    }
-
+    public Vector3 getPosition() { return position; }
+    public Vector3 getVelocity() { return velocity; }
+    public Vector3 getSpin() { return spin; }
+    public State getState() { return state; }
+    public void setState(State state) { this.state = state; }
+    public Interaction getLastInteraction() { return lastInteraction; }
+    public void clearInteraction() { lastInteraction = Interaction.NONE; }
     public float getFlatDistanceToHole(Terrain terrain) {
         if (terrain == null) return 0;
         return Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
     }
-
-    public float getShotDistance() {
-        return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
-    }
-
-    public void render(ModelBatch batch, Environment env) {
-        renderer.render(batch, env);
-    }
-
-    public void renderTrail(ModelBatch batch, Environment env) {
-        renderer.renderTrail(batch, env);
-    }
-
-    public void dispose() {
-        renderer.dispose();
-    }
+    public float getShotDistance() { return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z); }
+    public void render(ModelBatch batch, Environment env) { renderer.render(batch, env); }
+    public void renderTrail(ModelBatch batch, Environment env) { renderer.renderTrail(batch, env); }
+    public void dispose() { renderer.dispose(); }
 }
