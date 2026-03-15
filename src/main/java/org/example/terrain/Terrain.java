@@ -14,6 +14,7 @@ import com.badlogic.gdx.math.Vector3;
 import org.example.ball.ShotDifficulty;
 import org.example.terrain.features.PuttingGreenGenerator;
 import org.example.terrain.objects.Monolith;
+import org.example.terrain.objects.TerrainObject;
 import org.example.terrain.objects.Tree;
 
 import java.util.ArrayList;
@@ -30,6 +31,8 @@ public class Terrain {
     private final List<ModelInstance> chunks = new ArrayList<>();
     private TerrainType[][] terrainMap;
     private float[][] heightMap;
+
+    private final List<TerrainObject> allObjects = new ArrayList<>();
     private final List<Tree> trees = new ArrayList<>();
     private final List<Monolith> monoliths = new ArrayList<>();
 
@@ -43,11 +46,8 @@ public class Terrain {
     private float greenMinH = Float.MAX_VALUE, greenMaxH = -Float.MAX_VALUE;
 
     private final float CELL_SIZE = 10.0f;
-    private List<Tree>[][] treeGrid;
-    private List<Monolith>[][] monolithGrid;
+    private List<TerrainObject>[][] objectGrid;
     private int gridCols, gridRows;
-
-    private final Vector3 tempV1 = new Vector3();
 
     public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
         this.SIZE_Z = dynamicSizeZ;
@@ -60,13 +60,12 @@ public class Terrain {
         initializeGrids();
         generator.generate(terrainMap, heightMap, trees, monoliths, teeCenter, holePosition);
 
-        // Capture the surface height for positioning
+        allObjects.addAll(trees);
+        allObjects.addAll(monoliths);
+
         float surfaceY = getSurfaceHeightAt(holePosition.x, holePosition.z);
         this.holePosition.set(holePosition.x, surfaceY, holePosition.z);
-
-        // Initialize the Hole with the correct surface normal and radius
         this.physicalHole = new Hole(holePosition, getNormalAt(holePosition.x, holePosition.z), holeSize / 2f);
-
         this.teeCenter.y = getSurfaceHeightAt(teeCenter.x, teeCenter.z);
 
         if (generator instanceof ClassicGenerator) {
@@ -94,13 +93,11 @@ public class Terrain {
     private void initializeGrids() {
         gridCols = MathUtils.ceil((SIZE_X * SCALE) / CELL_SIZE);
         gridRows = MathUtils.ceil((SIZE_Z * SCALE) / CELL_SIZE);
-        treeGrid = new ArrayList[gridCols][gridRows];
-        monolithGrid = new ArrayList[gridCols][gridRows];
+        objectGrid = new ArrayList[gridCols][gridRows];
 
         for (int x = 0; x < gridCols; x++) {
             for (int z = 0; z < gridRows; z++) {
-                treeGrid[x][z] = new ArrayList<>();
-                monolithGrid[x][z] = new ArrayList<>();
+                objectGrid[x][z] = new ArrayList<>();
             }
         }
     }
@@ -109,23 +106,16 @@ public class Terrain {
         float offsetX = (SIZE_X * SCALE) / 2f;
         float offsetZ = (SIZE_Z * SCALE) / 2f;
 
-        for (Tree t : trees) {
-            int gx = MathUtils.clamp((int) ((t.getPosition().x + offsetX) / CELL_SIZE), 0, gridCols - 1);
-            int gz = MathUtils.clamp((int) ((t.getPosition().z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
-            treeGrid[gx][gz].add(t);
-        }
-
-        for (Monolith m : monoliths) {
-            int gx = MathUtils.clamp((int) ((m.getPosition().x + offsetX) / CELL_SIZE), 0, gridCols - 1);
-            int gz = MathUtils.clamp((int) ((m.getPosition().z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
-            monolithGrid[gx][gz].add(m);
+        for (TerrainObject obj : allObjects) {
+            int gx = MathUtils.clamp((int) ((obj.getPosition().x + offsetX) / CELL_SIZE), 0, gridCols - 1);
+            int gz = MathUtils.clamp((int) ((obj.getPosition().z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
+            objectGrid[gx][gz].add(obj);
         }
     }
 
     private void calculateGreenBounds() {
         List<Float> greenHeights = new ArrayList<>();
         float sum = 0;
-
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (terrainMap[x][z] == TerrainType.GREEN) {
@@ -135,43 +125,137 @@ public class Terrain {
                 }
             }
         }
-
         if (greenHeights.isEmpty()) {
-            greenMinH = 0;
-            greenMaxH = 10;
+            greenMinH = 0; greenMaxH = 10;
             return;
         }
-
         float averageHeight = sum / greenHeights.size();
         float threshold = 5.0f;
-
         greenMinH = Float.MAX_VALUE;
         greenMaxH = -Float.MAX_VALUE;
         boolean validFound = false;
-
         for (float h : greenHeights) {
             if (Math.abs(h - averageHeight) > threshold) continue;
             greenMinH = Math.min(greenMinH, h);
             greenMaxH = Math.max(greenMaxH, h);
             validFound = true;
         }
-
         if (!validFound) {
             greenMinH = averageHeight - 1;
             greenMaxH = averageHeight + 1;
         }
     }
 
-    public float getMaxDistanceX() {
-        return (SIZE_X * SCALE) / 2f;
+    public void render(ModelBatch batch, Environment env) {
+        for (ModelInstance chunk : chunks) batch.render(chunk, env);
+        if (waterInstance != null) batch.render(waterInstance, env);
+        for (TerrainObject obj : allObjects) obj.render(batch, env);
+        if (physicalHole != null) physicalHole.render(batch, env);
+        if (flagInstance != null) batch.render(flagInstance, env);
+        if (teeInstance != null) batch.render(teeInstance, env);
     }
 
-    public float getMaxDistanceZ() {
-        return (SIZE_Z * SCALE) / 2f;
+    public void updateCameraOcclusion(Vector3 cameraPos, Vector3 ballPos, float delta) {
+        Vector3 rayDirection = new Vector3(ballPos).sub(cameraPos).nor();
+        float rayLength = cameraPos.dst(ballPos);
+
+        for (TerrainObject obj : allObjects) {
+            float radius = 1.0f;
+            if (obj instanceof Tree) radius = ((Tree) obj).fR;
+            else if (obj instanceof Monolith) radius = Math.max(((Monolith) obj).width, ((Monolith) obj).depth);
+
+            obj.setTargetAlpha(isObjectOccluding(cameraPos, rayDirection, rayLength, obj.getPosition(), radius) ? 0.3f : 1.0f);
+            obj.update(delta);
+        }
     }
 
-    public boolean isPointOutOfBounds(float worldX, float worldZ) {
-        return Math.abs(worldX) > getMaxDistanceX() || Math.abs(worldZ) > getMaxDistanceZ();
+    private boolean isObjectOccluding(Vector3 cam, Vector3 dir, float len, Vector3 objPos, float radius) {
+        float camX = cam.x, camZ = cam.z;
+        float ballX = camX + dir.x * len, ballZ = camZ + dir.z * len;
+        float objX = objPos.x, objZ = objPos.z;
+        float l2 = Vector2.dst2(camX, camZ, ballX, ballZ);
+        if (l2 == 0) return Vector2.dst(camX, camZ, objX, objZ) < radius;
+        float t = MathUtils.clamp(((objX - camX) * (ballX - camX) + (objZ - camZ) * (ballZ - camZ)) / l2, 0, 1);
+        float distSq = Vector2.dst2(objX, objZ, camX + t * (ballX - camX), camZ + t * (ballZ - camZ));
+        return distSq < (radius * radius);
+    }
+
+    public List<Tree> getTreesAt(float worldX, float worldZ) {
+        List<Tree> result = new ArrayList<>();
+        for (TerrainObject obj : getNearbyObjects(worldX, worldZ)) {
+            if (obj instanceof Tree) result.add((Tree) obj);
+        }
+        return result;
+    }
+
+    public List<Monolith> getMonolithsAt(float worldX, float worldZ) {
+        List<Monolith> result = new ArrayList<>();
+        for (TerrainObject obj : getNearbyObjects(worldX, worldZ)) {
+            if (obj instanceof Monolith) result.add((Monolith) obj);
+        }
+        return result;
+    }
+
+    private List<TerrainObject> getNearbyObjects(float worldX, float worldZ) {
+        int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
+        int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
+        List<TerrainObject> nearby = new ArrayList<>();
+        int radius = 2;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                int nx = gx + x, nz = gz + z;
+                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) {
+                    nearby.addAll(objectGrid[nx][nz]);
+                }
+            }
+        }
+        return nearby;
+    }
+
+    public float getSurfaceHeightAt(float worldX, float worldZ) {
+        float localX = worldX + (SIZE_X * SCALE / 2f);
+        float localZ = worldZ + (SIZE_Z * SCALE / 2f);
+        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
+        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
+        float fx = (localX / SCALE) - ix;
+        float fz = (localZ / SCALE) - iz;
+        float h00 = heightMap[ix][iz], h10 = heightMap[ix + 1][iz];
+        float h01 = heightMap[ix][iz + 1], h11 = heightMap[ix + 1][iz + 1];
+        return MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
+    }
+
+    public float getHeightAt(float worldX, float worldZ) {
+        float baseHeight = getSurfaceHeightAt(worldX, worldZ);
+        float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
+        float rimRadius = holeSize / 2.0f;
+        float floorBoundary = rimRadius * 0.8f;
+        float outerBoundary = rimRadius * 1.2f;
+        float targetDepth = 0.4f;
+        if (distToHole <= floorBoundary) return baseHeight - targetDepth;
+        if (distToHole < outerBoundary) {
+            float t = (distToHole - floorBoundary) / (outerBoundary - floorBoundary);
+            return baseHeight - (targetDepth * (1.0f - t));
+        }
+        return baseHeight;
+    }
+
+    public Vector3 getNormalAt(float worldX, float worldZ) { return getNormalAt(worldX, worldZ, true); }
+
+    public Vector3 getNormalAt(float worldX, float worldZ, boolean forPhysics) {
+        float rimRadius = holeSize / 2.0f;
+        float sampleEps = 0.005f;
+        float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
+        float hL = getHeightAt(worldX - sampleEps, worldZ), hR = getHeightAt(worldX + sampleEps, worldZ);
+        float hD = getHeightAt(worldX, worldZ - sampleEps), hU = getHeightAt(worldX, worldZ + sampleEps);
+        float yWeight = 2.0f;
+        if (forPhysics && distToHole < rimRadius * 1.2f && distToHole > rimRadius * 0.8f) yWeight = 1.5f;
+        Vector3 normal = new Vector3(hL - hR, yWeight * sampleEps, hD - hU).nor();
+        if (forPhysics && distToHole <= rimRadius * 0.8f) {
+            float bL = getSurfaceHeightAt(worldX - sampleEps, worldZ), bR = getSurfaceHeightAt(worldX + sampleEps, worldZ);
+            float bD = getSurfaceHeightAt(worldX, worldZ - sampleEps), bU = getSurfaceHeightAt(worldX, worldZ + sampleEps);
+            normal.set(bL - bR, 2.0f * sampleEps, bD - bU).nor();
+        }
+        return normal;
     }
 
     private ModelInstance buildChunk(int zStart, int zEnd) {
@@ -180,14 +264,9 @@ public class Terrain {
         MeshPartBuilder meshBuilder = builder.part("terrain_chunk", GL20.GL_TRIANGLES,
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.ColorPacked,
                 new Material());
-
         for (int x = 0; x < SIZE_X - 1; x++) {
             for (int z = zStart; z < zEnd && z < SIZE_Z - 1; z++) {
-                Vector3 v00 = vertex(x, z);
-                Vector3 v10 = vertex(x + 1, z);
-                Vector3 v01 = vertex(x, z + 1);
-                Vector3 v11 = vertex(x + 1, z + 1);
-
+                Vector3 v00 = vertex(x, z), v10 = vertex(x + 1, z), v01 = vertex(x, z + 1), v11 = vertex(x + 1, z + 1);
                 TerrainType type = terrainMap[x][z];
                 TerrainMeshHelper.buildTriangle(meshBuilder, v00, v10, v11, type, greenMinH, greenMaxH);
                 TerrainMeshHelper.buildTriangle(meshBuilder, v00, v11, v01, type, greenMinH, greenMaxH);
@@ -198,114 +277,17 @@ public class Terrain {
         return instance;
     }
 
-    private Vector3 vertex(int x, int z) {
-        float y = heightMap[x][z];
-        return new Vector3(x * SCALE, y, z * SCALE);
-    }
-
-    public void render(ModelBatch batch, Environment env) {
-        for (ModelInstance chunk : chunks) batch.render(chunk, env);
-        if (waterInstance != null) batch.render(waterInstance, env);
-        for (Tree t : trees) t.render(batch, env);
-        for (Monolith b : monoliths) b.render(batch, env);
-        if (physicalHole != null) physicalHole.render(batch, env);
-        if (flagInstance != null) batch.render(flagInstance, env);
-        if (teeInstance != null) batch.render(teeInstance, env);
-    }
-
-    public float getSurfaceHeightAt(float worldX, float worldZ) {
-        float localX = worldX + (SIZE_X * SCALE / 2f);
-        float localZ = worldZ + (SIZE_Z * SCALE / 2f);
-        int ix = MathUtils.clamp((int) (localX / SCALE), 0, SIZE_X - 2);
-        int iz = MathUtils.clamp((int) (localZ / SCALE), 0, SIZE_Z - 2);
-
-        float fx = (localX / SCALE) - ix;
-        float fz = (localZ / SCALE) - iz;
-
-        float h00 = heightMap[ix][iz];
-        float h10 = heightMap[ix + 1][iz];
-        float h01 = heightMap[ix][iz + 1];
-        float h11 = heightMap[ix + 1][iz + 1];
-
-        return MathUtils.lerp(MathUtils.lerp(h00, h10, fx), MathUtils.lerp(h01, h11, fx), fz);
-    }
-
-    /**
-     * Corrected height logic. We use the holePosition's Y (the surface)
-     * as the starting point for the sink depth.
-     */
-    public float getHeightAt(float worldX, float worldZ) {
-        float baseHeight = getSurfaceHeightAt(worldX, worldZ);
-        float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
-        float rimRadius = holeSize / 2.0f;
-
-        float floorBoundary = rimRadius * 0.8f;   // Inner flat bottom
-        float outerBoundary = rimRadius * 1.2f;   // Outer lip transition
-        float targetDepth = 0.4f;
-
-        // 1. Hole bottom: Completely flat at target depth
-        if (distToHole <= floorBoundary) {
-            return baseHeight - targetDepth;
-        }
-
-        // 2. The Steep Slope: Linear interpolation between 0.8R and 1.2R
-        if (distToHole < outerBoundary) {
-            float t = (distToHole - floorBoundary) / (outerBoundary - floorBoundary);
-            return baseHeight - (targetDepth * (1.0f - t));
-        }
-
-        return baseHeight;
-    }
-
-    public Vector3 getNormalAt(float worldX, float worldZ) {
-        return getNormalAt(worldX, worldZ, true);
-    }
-
-    public Vector3 getNormalAt(float worldX, float worldZ, boolean forPhysics) {
-        float rimRadius = holeSize / 2.0f;
-        float sampleEps = 0.005f; // Smaller epsilon for more accurate slope detection at the rim
-        float distToHole = Vector2.dst(worldX, worldZ, holePosition.x, holePosition.z);
-
-        // Standard central difference for normal calculation
-        float hL = getHeightAt(worldX - sampleEps, worldZ);
-        float hR = getHeightAt(worldX + sampleEps, worldZ);
-        float hD = getHeightAt(worldX, worldZ - sampleEps);
-        float hU = getHeightAt(worldX, worldZ + sampleEps);
-
-        // Standard weight for visual/natural terrain
-        float yWeight = 2.0f;
-
-        if (forPhysics && distToHole < rimRadius * 1.2f && distToHole > rimRadius * 0.8f) {
-            yWeight = 1.5f; // Amplifies the X/Z slope components significantly
-        }
-
-        Vector3 normal = new Vector3(hL - hR, yWeight * sampleEps, hD - hU).nor();
-
-        // Safety: If on the flat bottom, use the visual surface normal
-        // to prevent jitter or the ball "sinking" through the floor
-        if (forPhysics && distToHole <= rimRadius * 0.8f) {
-            float bL = getSurfaceHeightAt(worldX - sampleEps, worldZ);
-            float bR = getSurfaceHeightAt(worldX + sampleEps, worldZ);
-            float bD = getSurfaceHeightAt(worldX, worldZ - sampleEps);
-            float bU = getSurfaceHeightAt(worldX, worldZ + sampleEps);
-            normal.set(bL - bR, 2.0f * sampleEps, bD - bU).nor();
-        }
-
-        return normal;
-    }
+    private Vector3 vertex(int x, int z) { return new Vector3(x * SCALE, heightMap[x][z], z * SCALE); }
 
     private void createFlag(Vector3 pos) {
         ModelBuilder mb = new ModelBuilder();
         mb.begin();
         mb.part("pole", GL20.GL_TRIANGLES, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE))).cylinder(0.1f, 5f, 0.1f, 8);
-
         Material flagMat = new Material(ColorAttribute.createDiffuse(Color.RED));
         flagMat.set(new com.badlogic.gdx.graphics.g3d.attributes.IntAttribute(com.badlogic.gdx.graphics.g3d.attributes.IntAttribute.CullFace, 0));
-
         mb.part("flag", GL20.GL_TRIANGLES, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal, flagMat)
                 .rect(0.1f, 1.5f, 0f, 0.1f, 2.5f, 0f, 1.6f, 2.5f, 0f, 1.6f, 1.5f, 0f, 0f, 0f, 1f);
-
         flagInstance = new ModelInstance(mb.end());
         updateFlagTransform(pos, 1.0f, 0f);
     }
@@ -338,18 +320,10 @@ public class Terrain {
 
     private void createWaterPlane() {
         ModelBuilder builder = new ModelBuilder();
-        float w = SIZE_X * SCALE;
-        float h = SIZE_Z * SCALE;
-
-        Model water = builder.createRect(
-                0, waterLevel, h,
-                w, waterLevel, h,
-                w, waterLevel, 0,
-                0, waterLevel, 0,
-                0, 1, 0,
+        float w = SIZE_X * SCALE, h = SIZE_Z * SCALE;
+        Model water = builder.createRect(0, waterLevel, h, w, waterLevel, h, w, waterLevel, 0, 0, waterLevel, 0, 0, 1, 0,
                 new Material(ColorAttribute.createDiffuse(new Color(0.2f, 0.4f, 0.8f, 0.6f))),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-
         waterInstance = new ModelInstance(water);
         waterInstance.transform.setToTranslation(-w / 2f, 0, -h / 2f);
     }
@@ -357,8 +331,7 @@ public class Terrain {
     public void dispose() {
         for (ModelInstance c : chunks) c.model.dispose();
         if (waterInstance != null) waterInstance.model.dispose();
-        for (Tree t : trees) t.dispose();
-        for (Monolith b : monoliths) b.dispose();
+        for (TerrainObject obj : allObjects) obj.dispose();
         if (physicalHole != null) physicalHole.dispose();
         if (flagInstance != null) flagInstance.model.dispose();
         if (teeInstance != null) teeInstance.model.dispose();
@@ -379,70 +352,6 @@ public class Terrain {
         return diff;
     }
 
-    public void updateCameraOcclusion(Vector3 cameraPos, Vector3 ballPos, float delta) {
-        Vector3 rayDirection = new Vector3(ballPos).sub(cameraPos).nor();
-        float rayLength = cameraPos.dst(ballPos);
-
-        // Process Trees
-        for (Tree t : trees) {
-            t.setTargetAlpha(isObjectOccluding(cameraPos, rayDirection, rayLength, t.getPosition(), t.fR) ? 0.3f : 1.0f);
-            t.update(delta);
-        }
-
-        // Process Monoliths
-        for (Monolith m : monoliths) {
-            float proxyRadius = Math.max(m.width, m.depth);
-            m.setTargetAlpha(isObjectOccluding(cameraPos, rayDirection, rayLength, m.getPosition(), proxyRadius) ? 0.2f : 1.0f);
-            m.update(delta);
-        }
-    }
-
-    private boolean isObjectOccluding(Vector3 cam, Vector3 dir, float len, Vector3 objPos, float radius) {
-        float camX = cam.x;
-        float camZ = cam.z;
-        float ballX = camX + dir.x * len;
-        float ballZ = camZ + dir.z * len;
-
-        float objX = objPos.x;
-        float objZ = objPos.z;
-
-        float l2 = Vector2.dst2(camX, camZ, ballX, ballZ);
-        if (l2 == 0) return Vector2.dst(camX, camZ, objX, objZ) < radius;
-
-        float t = ((objX - camX) * (ballX - camX) + (objZ - camZ) * (ballZ - camZ)) / l2;
-
-        t = MathUtils.clamp(t, 0, 1);
-
-        float distSq = Vector2.dst2(objX, objZ, camX + t * (ballX - camX), camZ + t * (ballZ - camZ));
-
-        return distSq < (radius * radius);
-    }
-
-    public List<Tree> getTreesAt(float worldX, float worldZ) {
-        return getNearbyObjects(worldX, worldZ, treeGrid);
-    }
-
-    public List<Monolith> getMonolithsAt(float worldX, float worldZ) {
-        return getNearbyObjects(worldX, worldZ, monolithGrid);
-    }
-
-    private <T> List<T> getNearbyObjects(float worldX, float worldZ, List<T>[][] grid) {
-        int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
-        int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
-        List<T> nearby = new ArrayList<>();
-        int radius = 2;
-
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                int nx = gx + x, nz = gz + z;
-                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) {
-                    nearby.addAll(grid[nx][nz]);
-                }
-            }
-        }
-        return nearby;
-    }
-
     public void setHolePosition(Vector3 newPos) {
         this.holePosition.set(newPos.x, getSurfaceHeightAt(newPos.x, newPos.z), newPos.z);
         if (physicalHole != null) physicalHole.dispose();
@@ -455,29 +364,16 @@ public class Terrain {
         if (teeInstance != null) teeInstance.transform.setToTranslation(teeCenter.x, teeCenter.y + 0.075f, teeCenter.z);
     }
 
-    public Vector3 getTeePosition() {
-        return teeCenter;
-    }
+    public Vector3 getTeePosition() { return teeCenter; }
+    public Vector3 getHolePosition() { return holePosition; }
+    public float getHoleSize() { return holeSize; }
+    public float getWaterLevel() { return waterLevel; }
+    public float getMaxDistanceX() { return (SIZE_X * SCALE) / 2f; }
+    public float getMaxDistanceZ() { return (SIZE_Z * SCALE) / 2f; }
+    public boolean isPointOutOfBounds(float worldX, float worldZ) { return Math.abs(worldX) > getMaxDistanceX() || Math.abs(worldZ) > getMaxDistanceZ(); }
 
-    public Vector3 getHolePosition() {
-        return holePosition;
-    }
-
-    public float getHoleSize() {
-        return holeSize;
-    }
-
-    public float getWaterLevel() {
-        return waterLevel;
-    }
-
-    public List<Tree> getTrees() {
-        return trees;
-    }
-
-    public List<Monolith> getMonoliths() {
-        return monoliths;
-    }
+    public List<Tree> getTrees() { return trees; }
+    public List<Monolith> getMonoliths() { return monoliths; }
 
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
@@ -488,26 +384,19 @@ public class Terrain {
         STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.02f, new Color(0.18f, 0.18f, 0.2f, 1f));
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
         public final Color color;
-
         TerrainType(float kf, float rr, float sm, float diff, float softness, Color col) {
-            this.kineticFriction = kf;
-            this.rollingResistance = rr;
-            this.staticMultiplier = sm;
-            this.difficulty = diff;
-            this.softness = softness;
-            this.color = col;
+            this.kineticFriction = kf; this.rollingResistance = rr; this.staticMultiplier = sm;
+            this.difficulty = diff; this.softness = softness; this.color = col;
         }
     }
 
     public static class Hole {
         private final ModelInstance cupInstance;
-
         public Hole(Vector3 pos, Vector3 surfaceNormal, float radius) {
             ModelBuilder mb = new ModelBuilder();
             Model discModel = mb.createCylinder(radius * 2f, 0.01f, radius * 2f, 24,
                     new Material(ColorAttribute.createDiffuse(new Color(0.02f, 0.02f, 0.02f, 1f))),
                     VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-
             cupInstance = new ModelInstance(discModel);
             cupInstance.transform.idt();
             Quaternion q = new Quaternion();
@@ -516,14 +405,7 @@ public class Terrain {
             Vector3 finalPos = new Vector3(pos).add(new Vector3(surfaceNormal).scl(0.005f));
             cupInstance.transform.setTranslation(finalPos);
         }
-
-        public void render(ModelBatch b, Environment e) {
-            b.render(cupInstance, e);
-        }
-
-        public void dispose() {
-            cupInstance.model.dispose();
-        }
+        public void render(ModelBatch b, Environment e) { b.render(cupInstance, e); }
+        public void dispose() { cupInstance.model.dispose(); }
     }
-
 }

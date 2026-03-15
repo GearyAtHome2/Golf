@@ -10,17 +10,13 @@ import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.*;
 
-public class Tree {
+public class Tree extends TerrainObject {
     private final ModelInstance trunk, foliage;
-    private final Vector3 pos;
     private final float tH, tR;
     public final float fR;
     private final TreeScheme scheme;
     private final float mapRotation;
     private float actualFoliageHeight;
-
-    private float currentAlpha = 1.0f;
-    private float targetAlpha = 1.0f;
     private final BlendingAttribute trunkBlend, foliageBlend;
 
     public enum TreeScheme {
@@ -47,7 +43,7 @@ public class Tree {
     }
 
     public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng, float mapRotation) {
-        this.pos = new Vector3(x, y, z);
+        super(x, y, z);
         this.tH = th;
         this.tR = tr;
         this.fR = fr;
@@ -99,6 +95,7 @@ public class Tree {
         foliage.transform.rotate(0, 1, 0, mapRotation);
     }
 
+    @Override
     public void update(float delta) {
         if (Math.abs(currentAlpha - targetAlpha) > 0.001f) {
             currentAlpha = MathUtils.lerp(currentAlpha, targetAlpha, delta * 6f);
@@ -107,8 +104,6 @@ public class Tree {
         }
         trunkBlend.opacity = currentAlpha;
         foliageBlend.opacity = currentAlpha;
-
-        // Force material sync for LibGDX
         trunk.materials.get(0).set(trunkBlend);
         foliage.materials.get(0).set(foliageBlend);
     }
@@ -149,11 +144,19 @@ public class Tree {
 
         return ballPos.dst(pos.x, pos.y + tH + fR / 4f, pos.z) < (fR + ballRadius);
     }
-    public void setTargetAlpha(float alpha) { this.targetAlpha = alpha; }
-    public void render(ModelBatch b, Environment e) { b.render(trunk, e); b.render(foliage, e); }
-    public void dispose() { trunk.model.dispose(); foliage.model.dispose(); }
 
-    public Vector3 getPosition() { return pos; }
+    @Override
+    public void render(ModelBatch b, Environment e) {
+        b.render(trunk, e);
+        b.render(foliage, e);
+    }
+
+    @Override
+    public void dispose() {
+        trunk.model.dispose();
+        foliage.model.dispose();
+    }
+
     public float getTrunkHeight() { return tH; }
     public float getTrunkRadius() { return tR; }
     public TreeScheme getScheme() { return scheme; }

@@ -9,18 +9,14 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 
-public class Monolith {
+public class Monolith extends TerrainObject {
     private final ModelInstance instance;
-    private final Vector3 pos;
     public final float width, height, depth;
     private final float rotationY;
-
-    private float currentAlpha = 1.0f;
-    private float targetAlpha = 1.0f;
     private final BlendingAttribute blend;
 
     public Monolith(float x, float y, float z, float w, float h, float d, float rotation) {
-        this.pos = new Vector3(x, y, z);
+        super(x, y, z);
         this.width = w;
         this.height = h;
         this.depth = d;
@@ -34,46 +30,27 @@ public class Monolith {
         instance.transform.rotate(Vector3.Y, rotationY);
     }
 
+    @Override
     public void update(float delta) {
         if (Math.abs(currentAlpha - targetAlpha) > 0.01f) {
             currentAlpha = MathUtils.lerp(currentAlpha, targetAlpha, delta * 6f);
             blend.opacity = currentAlpha;
-            // Syncing to ensure LibGDX recognizes the attribute change
             instance.materials.get(0).set(blend);
         }
     }
 
-    public void setTargetAlpha(float alpha) {
-        this.targetAlpha = alpha;
-    }
-
+    @Override
     public void render(ModelBatch b, Environment e) {
         b.render(instance, e);
     }
 
+    @Override
     public void dispose() {
         if (instance.model != null) instance.model.dispose();
     }
 
-    // --- Getters ---
-
-    public Vector3 getPosition() {
-        return pos;
-    }
-
-    public float getWidth() {
-        return width;
-    }
-
-    public float getHeight() {
-        return height;
-    }
-
-    public float getDepth() {
-        return depth;
-    }
-
-    public float getRotationY() {
-        return rotationY;
-    }
+    public float getWidth() { return width; }
+    public float getHeight() { return height; }
+    public float getDepth() { return depth; }
+    public float getRotationY() { return rotationY; }
 }
