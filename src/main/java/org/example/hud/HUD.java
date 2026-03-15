@@ -75,6 +75,10 @@ public class HUD {
 
     private boolean mainMenuRequested = false;
 
+    // Temporary vectors for HUD calculations to avoid allocation
+    private final Vector3 tempV1 = new Vector3();
+    private final Vector3 tempV2 = new Vector3();
+
     public HUD(GameConfig config) {
         this.config = config;
         batch = new SpriteBatch();
@@ -180,7 +184,7 @@ public class HUD {
         renderDistanceDisplay(delta);
         renderHazardPopUp(delta);
         if (isPractice) renderShotDistance(ball, delta);
-        renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore);
+        renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore, terrain);
         if (ball.getState() == Ball.State.STATIONARY && !minigameController.isActive())
             renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
         batch.end();
@@ -196,7 +200,7 @@ public class HUD {
         }
     }
 
-    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore) {
+    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore, Terrain terrain) {
         float topY = viewport.getWorldHeight() - 40;
         font.getData().setScale(1.5f);
 
@@ -218,8 +222,29 @@ public class HUD {
         drawShadowedText("Club: " + club.name().replace("_", " "), rightX, 140, Color.WHITE);
 
         float currentSpinMag = ball.getSpin().len();
-        Color spinColor = currentSpinMag > 0.1f ? (currentSpinMag > lastDisplayedSpin ? Color.GREEN : Color.RED) : Color.GRAY;
-        drawShadowedText(String.format("Spin: %.1fk RPM", (currentSpinMag * 100f) / 1000f), rightX, 100, spinColor);
+        String spinLabel = "NONE";
+        Color typeColor = Color.GRAY;
+
+        if (currentSpinMag > 0.1f) {
+            Vector3 norm = terrain.getNormalAt(ball.getPosition().x, ball.getPosition().z);
+            tempV1.set(ball.getVelocity()).set(tempV1.x, 0, tempV1.z).nor(); // Movement Direction
+            tempV2.set(norm).crs(tempV1).nor(); // Proper Right-Hand axle for forward rolling
+
+            float alignment = ball.getSpin().dot(tempV2);
+            if (alignment > 25f) {
+                spinLabel = "TOP";
+                typeColor = Color.CHARTREUSE;
+            } else if (alignment < -25f) {
+                spinLabel = "BACK";
+                typeColor = Color.ORANGE;
+            } else {
+                spinLabel = "SIDE";
+                typeColor = Color.VIOLET;
+            }
+        }
+
+        String spinStr = String.format("Spin: %.1fk (%s)", (currentSpinMag * 100f) / 1000f, spinLabel);
+        drawShadowedText(spinStr, rightX, 100, (currentSpinMag < 0.1f) ? Color.GRAY : typeColor);
         lastDisplayedSpin = currentSpinMag;
 
         drawShadowedText(String.format("Speed: %.1fx", config.getGameSpeed()), rightX, 60, Color.WHITE);

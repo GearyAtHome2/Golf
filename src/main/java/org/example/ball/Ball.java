@@ -289,6 +289,7 @@ public class Ball {
         } else {
             state = State.ROLLING;
             calculateTerrainVelocities(normal);
+            BallPhysics.resolveRollingSpin(vTangent, spin, normal, type, delta);
             applyRollingPhysics(vTangent, normal, type, delta);
             velocity.set(vTangent);
         }
@@ -336,10 +337,12 @@ public class Ball {
         isInitialFlight = false;
         float friction = type.kineticFriction;
         float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - ((friction - 0.2f) * 0.08f), 0.05f, BOUNCE_RESTITUTION);
+
         velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction, type.softness));
+
         state = State.CONTACT;
         lastInteraction = Interaction.TERRAIN;
-        spin.scl(MathUtils.clamp(1.0f - (0.4f + (friction * 0.3f)), 0f, 1.0f));
+
     }
 
     private void applyRollingPhysics(Vector3 tangentVel, Vector3 normal, Terrain.TerrainType type, float delta) {

@@ -58,17 +58,37 @@ public class BallPhysics {
     }
 
     public static void applyWaterPhysics(Vector3 position, Vector3 velocity, Vector3 spin, float waterLevel, float delta) {
+        float previousY = position.y - (velocity.y * delta);
         float depth = waterLevel - position.y;
         float immersion = MathUtils.clamp((depth + BALL_RADIUS) / (BALL_RADIUS * 2f), 0f, 1f);
+
+        if (previousY >= waterLevel && position.y < waterLevel && velocity.y < 0) {
+            float speed = velocity.len();
+            if (speed > 5.0f) {
+                float angleRad = (float) Math.asin(Math.abs(velocity.y) / speed);
+                float efficiency = MathUtils.cos(angleRad * 3.0f);
+                efficiency = MathUtils.clamp(efficiency, 0, 1) * efficiency;
+
+                float upwardImpulse = (speed * speed) * 0.005f * efficiency;
+                velocity.y += upwardImpulse;
+                velocity.scl(0.85f);
+                if (velocity.y > 0) return;
+            }
+        }
+
         if (immersion <= 0) return;
+
         float speed = velocity.len();
         float waterLiftCoeff = 0.8f;
         float surfaceSpeed = spin.len() * 0.02f;
         float spinRatio = surfaceSpeed / (speed + 0.1f);
         float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
         float dynamicLift = ((speed / 20.0f) * (speed / 20.0f)) * CL;
-        temp.set(velocity).crs(Vector3.X).nor().scl(spin.x * dynamicLift * waterLiftCoeff * immersion);
-        velocity.add(temp.scl(delta));
+
+        temp.set(velocity).crs(Vector3.Y).nor();
+        temp2.set(velocity).crs(temp).nor().scl(spin.dot(temp) * dynamicLift * waterLiftCoeff * immersion);
+        velocity.add(temp2.scl(delta));
+
         velocity.y += 6.5f * immersion * delta;
         float dragStrength = 2.4f * immersion * (1.0f + speed * 0.12f);
         velocity.scl(MathUtils.clamp(1.0f - (dragStrength * delta), 0.05f, 1.0f));
@@ -76,34 +96,17 @@ public class BallPhysics {
     }
 
     public static boolean handleTrunkCollision(Vector3 pos, Vector3 vel, Vector3 spin, float dx, float dz) {
-        // 1. Calculate the surface normal (outward from the trunk)
         temp.set(dx, 0, dz).nor();
-
-        // 2. Calculate the dot product of velocity and normal
-        // This tells us how much of the velocity is heading "into" the tree
         float dot = vel.dot(temp);
-
-        // 3. Only bounce if the ball is moving TOWARD the trunk
-        // (dot < 0 means the ball and normal are pointing in opposite-ish directions)
         if (dot < 0) {
-            // Standard reflection: v_out = v_in - 2 * (v_in . n) * n
-            // We multiply by 1.6f instead of 2.0f to simulate energy loss (0.6 restitution)
             float bounciness = 1.6f;
             vel.mulAdd(temp, -dot * bounciness);
-
-            // 4. Energy loss and spin dampening
-            // We already applied some energy loss via 'bounciness',
-            // but we can scale the whole vector for friction/impact loss.
             vel.scl(0.85f);
             spin.scl(0.3f);
-
-            // 5. Anti-stuck: Push the ball slightly out of the collision volume
             pos.x += temp.x * 0.1f;
             pos.z += temp.z * 0.1f;
-
             return true;
         }
-
         return false;
     }
 
@@ -120,55 +123,94 @@ public class BallPhysics {
     }
 
     public static Vector3 calculateBounceWithSpin(Vector3 velocity, Vector3 normal, Vector3 spin, float restitution, float friction, float softness) {
+        // --- TWEAKABLE PARAMETERS ---
+        float VERTICAL_STOP_THRESHOLD = 0.20f; // Speed below which the ball stops bouncing vertically
+        float SOFTNESS_ABSORPTION_FACTOR = 0.2f; // Lower = more bounce height on soft ground (was 0.7)
+        float MIN_RESTITUTION = 0.15f;           // Guaranteed minimum bounce regardless of softness
+
+        float SPIN_TRANSFER_RATIO = 0.35f;       // How much "kick" the spin provides
+        float FRICTION_SOFTNESS_BOOST = 0.5f;    // How much softness increases "grip"
+        float NORMAL_GRIP_SCALER = 0.012f;        // Influence of impact speed on grip
+        float NORMAL_GRIP_MIN = 0.5f;
+        float NORMAL_GRIP_MAX = 2.5f;            // Cap for "rocket" effect
+
+        float BASE_ENERGY_RETAINED = 0.92f;      // General speed retention (was 0.90)
+        float ENERGY_LOSS_SOFTNESS_MULT = 0.12f; // Side-to-side energy loss from grass
+        // ----------------------------
+
         float vDotN = velocity.dot(normal);
         temp.set(normal).scl(vDotN);
         vTangent.set(velocity).sub(temp);
 
-        // 1. VERTICAL BOUNCE DECOUPLING
-        // Calculate a "micro-bounce" threshold. If impact is very soft, we kill the bounce energy.
         float absVDotN = Math.abs(vDotN);
-        float bounceEfficiency = 1.0f;
 
-        if (absVDotN < 1.5f) {
-            // Non-linear drop-off: very light hits lose vertical energy exponentially
-            bounceEfficiency = MathUtils.clamp(absVDotN / 1.5f, 0f, 1.0f);
-            bounceEfficiency = bounceEfficiency * bounceEfficiency;
-        }
+        // Improved absorption formula: uses a floor to ensure the ball always has some "pop"
+        float absorption = Math.max(MIN_RESTITUTION, 1.0f - (softness * SOFTNESS_ABSORPTION_FACTOR));
+        float finalRestitution = restitution * absorption;
 
-        // Apply softness-based absorption (Rough/Sand absorbs more than Greens)
-        float absorption = 1.0f - (softness * 0.7f);
-        float finalRestitution = restitution * absorption * bounceEfficiency;
-
-        // Force a "snap to rolling" if the resulting bounce is too pathetic to matter
-        if (absVDotN * finalRestitution < 0.25f) {
+        if (absVDotN * finalRestitution < VERTICAL_STOP_THRESHOLD) {
             vNormalBounce.setZero();
         } else {
             vNormalBounce.set(temp).scl(-finalRestitution);
         }
 
-        // 2. HORIZONTAL "GRAB"
-        if (vTangent.len() > 0.05f) {
+        if (vTangent.len() > 0.05f || spin.len() > 0.05f) {
             Vector3 tanDir = temp.set(vTangent).nor();
-            Vector3 sideDir = temp2.set(tanDir).crs(normal).nor();
+            Vector3 sideDir = temp2.set(normal).crs(tanDir).nor();
 
-            float relativeBackspin = spin.dot(sideDir);
-            float relativeSidespin = spin.dot(normal);
+            float oldSpeed = vTangent.len();
+            float oldSpinMag = spin.dot(sideDir);
 
-            // Grip logic: softness helps spin take hold, but keep it subtle
-            float grip = MathUtils.clamp(softness * 0.5f + friction * 0.3f, 0.05f, 0.9f);
-            float spinTransfer = 0.08f * grip;
+            float surfaceVel = oldSpeed - (oldSpinMag * BALL_RADIUS);
 
-            vTangent.add(tanDir.scl(-relativeBackspin * spinTransfer));
-            vTangent.add(sideDir.scl(relativeSidespin * spinTransfer));
+            float effectiveFriction = friction + (softness * FRICTION_SOFTNESS_BOOST);
+            float normalGrip = MathUtils.clamp(absVDotN * NORMAL_GRIP_SCALER, NORMAL_GRIP_MIN, NORMAL_GRIP_MAX);
+            float gripImpulse = surfaceVel * effectiveFriction * normalGrip;
 
-            // Proportional Speed Loss: Dampen horizontal speed based on impact force
-            // but cap it so it never feels like the ball hits a wall (unless it's deep rough)
-            float frictionLoss = (friction * 0.1f) + (softness * 0.2f);
-            float impactDamping = MathUtils.clamp(absVDotN / 10.0f, 0.05f, 0.4f);
-            vTangent.scl(1.0f - (frictionLoss * impactDamping));
+            float vChange = gripImpulse * SPIN_TRANSFER_RATIO;
+            vTangent.mulAdd(tanDir, -vChange);
+
+            float sChange = gripImpulse / BALL_RADIUS;
+            spin.mulAdd(sideDir, sChange);
+
+            float energyLoss = BASE_ENERGY_RETAINED - (softness * ENERGY_LOSS_SOFTNESS_MULT);
+            vTangent.scl(energyLoss);
+            spin.scl(energyLoss);
+
+            System.out.printf("[BOUNCE] Spd: %.2f->%.2f | Spin: %.1f->%.1f | Kick: %.2f%n",
+                    oldSpeed, vTangent.len(), oldSpinMag, spin.dot(sideDir), -vChange);
         }
 
         return outBounce.set(vTangent).add(vNormalBounce);
+    }
+
+    public static void resolveRollingSpin(Vector3 velocity, Vector3 spin, Vector3 normal, Terrain.TerrainType type, float delta) {
+        float speed = velocity.len();
+
+        if (speed < 0.01f) {
+            spin.scl(1.0f - (10.0f * delta));
+            return;
+        }
+
+        temp.set(normal).crs(velocity).nor();
+        float targetSpinMag = speed / 0.2f;
+        temp2.set(temp).scl(targetSpinMag);
+
+        Vector3 spinDiff = temp.set(temp2).sub(spin);
+        float diffLen = spinDiff.len();
+
+        float gripStrength = 8.0f * type.kineticFriction;
+        float matchRatio = MathUtils.clamp(gripStrength * delta, 0f, 1f);
+
+        temp.set(spinDiff).scl(matchRatio);
+        float stepSize = temp.len();
+
+        spin.add(temp);
+
+        if (diffLen > 0.1f) {
+            float velocityLoss = stepSize * 0.005f;
+            velocity.scl(MathUtils.clamp(1.0f - velocityLoss, 0.8f, 1.0f));
+        }
     }
 
     public static boolean handleMonolithCollision(Vector3 pos, Vector3 vel, Vector3 spin,
