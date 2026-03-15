@@ -1,6 +1,5 @@
 package org.example.ball;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g3d.*;
 import com.badlogic.gdx.math.MathUtils;
@@ -10,6 +9,8 @@ import org.example.GameConfig;
 import org.example.glamour.ParticleManager;
 import org.example.performance.PhysicsProfiler;
 import org.example.terrain.Terrain;
+import org.example.terrain.objects.Tree;
+import org.example.terrain.objects.Monolith;
 
 import java.util.List;
 
@@ -362,8 +363,8 @@ public class Ball {
     private void handleTreeCollisions(Terrain terrain, float delta) {
         if (hitCooldown > 0) return;
 
-        List<Terrain.Tree> nearbyTrees = terrain.getTreesAt(position.x, position.z);
-        for (Terrain.Tree tree : nearbyTrees) {
+        List<Tree> nearbyTrees = terrain.getTreesAt(position.x, position.z);
+        for (Tree tree : nearbyTrees) {
             Vector3 treePos = tree.getPosition();
 
             if (tree.checkTrunkCollision(position, BALL_RADIUS)) {
@@ -394,8 +395,8 @@ public class Ball {
 
     private void handleMonolithCollisions(Terrain terrain) {
         if (hitCooldown > 0) return;
-        List<Terrain.Monolith> nearbyMonoliths = terrain.getMonolithsAt(position.x, position.z);
-        for (Terrain.Monolith m : nearbyMonoliths) {
+        List<Monolith> nearbyMonoliths = terrain.getMonolithsAt(position.x, position.z);
+        for (Monolith m : nearbyMonoliths) {
             if (BallPhysics.handleMonolithCollision(position, velocity, spin, m.getPosition(), m.getWidth(), m.getHeight(), m.getDepth(), m.getRotationY())) {
                 hitCooldown = 0.05f;
                 lastInteraction = Interaction.TERRAIN;

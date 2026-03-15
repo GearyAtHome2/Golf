@@ -4,6 +4,8 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.ITerrainGenerator;
 import org.example.terrain.Terrain;
+import org.example.terrain.objects.Monolith;
+import org.example.terrain.objects.Tree;
 
 import java.util.List;
 import java.util.Random;
@@ -26,7 +28,7 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
     }
 
     @Override
-    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, List<Terrain.Monolith> monoliths, Vector3 teePos, Vector3 holePos) {
+    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Tree> trees, List<Monolith> monoliths, Vector3 teePos, Vector3 holePos) {
         int width = map.length;
         int depth = map[0].length;
 

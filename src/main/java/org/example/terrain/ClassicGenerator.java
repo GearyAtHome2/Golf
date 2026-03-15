@@ -6,6 +6,8 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.features.*;
 import org.example.terrain.level.LevelData;
+import org.example.terrain.objects.Monolith;
+import org.example.terrain.objects.Tree;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -83,7 +85,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     @Override
-    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, List<Terrain.Monolith> monoliths, Vector3 teePos, Vector3 holePos) {
+    public void generate(Terrain.TerrainType[][] map, float[][] heights, List<Tree> trees, List<Monolith> monoliths, Vector3 teePos, Vector3 holePos) {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
         craters.clear();
@@ -165,7 +167,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         return calculateHeightNoise(x, z, data.getHillFrequency(), data.getUndulation(), data.getMaxHeight(), data.getTerrainAlgorithm());
     }
 
-    private void applyPostProcessing(Terrain.TerrainType[][] map, float[][] h, List<Terrain.Monolith> m, List<Terrain.Tree> t, int gX, int gZ, Vector3 teeP, Vector3 holeP, boolean[][] gBuf, ArchetypeFlags flags) {
+    private void applyPostProcessing(Terrain.TerrainType[][] map, float[][] h, List<Monolith> m, List<Tree> t, int gX, int gZ, Vector3 teeP, Vector3 holeP, boolean[][] gBuf, ArchetypeFlags flags) {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
 
@@ -213,7 +215,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
     }
 
-    private void finalizePositionsAndTrees(Terrain.TerrainType[][] map, float[][] heights, Vector3 teeP, Vector3 holeP, List<Terrain.Tree> trees, List<Terrain.Monolith> monoliths, int gX, int gZ, float water, ArchetypeFlags flags) {
+    private void finalizePositionsAndTrees(Terrain.TerrainType[][] map, float[][] heights, Vector3 teeP, Vector3 holeP, List<Tree> trees, List<Monolith> monoliths, int gX, int gZ, float water, ArchetypeFlags flags) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         int teeZ = (int) (SIZE_Z * 0.05f), teeX = SIZE_X / 2;
         teeP.set((teeX * SCALE) - (SIZE_X * SCALE / 2f), heights[teeX][teeZ] + 0.2f, (teeZ * SCALE) - (SIZE_Z * SCALE / 2f));
@@ -230,7 +232,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
     }
 
-    private void generateVineyardTrees(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, int teeZ, int teeX, float water, boolean isCliff) {
+    private void generateVineyardTrees(Terrain.TerrainType[][] map, float[][] heights, List<Tree> trees, int teeZ, int teeX, float water, boolean isCliff) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
         float maxSlopeForFlatness = 0.05f;
@@ -267,7 +269,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
                     float tH = (isCliff ? cliffDelta : data.getTreeHeight()) * (0.9f + rng.nextFloat() * 0.2f);
 
-                    trees.add(new Terrain.Tree(
+                    trees.add(new Tree(
                             finalX,
                             worldY,
                             finalZ,
@@ -283,7 +285,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
     }
 
-    private void generateRandomTrees(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Tree> trees, int teeZ, int teeX, float water, boolean isCliff) {
+    private void generateRandomTrees(Terrain.TerrainType[][] map, float[][] heights, List<Tree> trees, int teeZ, int teeX, float water, boolean isCliff) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         float cliffDelta = Math.abs(data.getTeeHeight() - data.getGreenHeight());
         int treeCount = (int) (SIZE_Z * data.getTreeDensity() * 2.5f);
@@ -312,7 +314,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
             float tH = (isCliff ? cliffDelta : data.getTreeHeight()) * (0.8f + rng.nextFloat() * 0.3f);
 
-            trees.add(new Terrain.Tree(
+            trees.add(new Tree(
                     (tx * SCALE) - (SIZE_X * SCALE / 2f),
                     worldY,
                     (tz * SCALE) - (SIZE_Z * SCALE / 2f),
@@ -346,7 +348,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         return buffer;
     }
 
-    private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Terrain.Monolith> monoliths, int gX, int gZ) {
+    private void generateMonolithPlains(Terrain.TerrainType[][] map, float[][] heights, List<Monolith> monoliths, int gX, int gZ) {
         int SIZE_X = map.length, SIZE_Z = map[0].length;
         int spawnAttempts = (int) (SIZE_Z * 2.5f);
         float maxDist = (float) Math.sqrt(Math.pow(SIZE_X, 2) + Math.pow(SIZE_Z, 2));
@@ -360,7 +362,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             float prob = p * p * (3 - 2 * p);
 
             if (rng.nextFloat() < (prob * MONOLITH_SPAWN_CHANCE)) {
-                monoliths.add(new Terrain.Monolith((x * SCALE) - (SIZE_X * SCALE / 2f), heights[x][z] - MONOLITH_UNDERGROUND_OFFSET, (z * SCALE) - (SIZE_Z * SCALE / 2f), 2.0f, 18.0f, 8.0f, rng.nextFloat() * 360f));
+                monoliths.add(new Monolith((x * SCALE) - (SIZE_X * SCALE / 2f), heights[x][z] - MONOLITH_UNDERGROUND_OFFSET, (z * SCALE) - (SIZE_Z * SCALE / 2f), 2.0f, 18.0f, 8.0f, rng.nextFloat() * 360f));
             }
         }
     }

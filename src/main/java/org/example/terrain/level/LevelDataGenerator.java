@@ -1,7 +1,7 @@
 package org.example.terrain.level;
 
 import com.badlogic.gdx.math.Vector3;
-import org.example.terrain.Terrain.TreeScheme;
+import org.example.terrain.objects.Tree.TreeScheme;
 
 import java.util.*;
 
