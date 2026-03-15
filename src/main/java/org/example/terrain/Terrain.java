@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
@@ -376,15 +377,68 @@ public class Terrain {
         return diff;
     }
 
+    public void updateCameraOcclusion(Vector3 cameraPos, Vector3 ballPos, float delta) {
+        Vector3 rayDirection = new Vector3(ballPos).sub(cameraPos).nor();
+        float rayLength = cameraPos.dst(ballPos);
+
+        for (Tree t : trees) {
+            if (isObjectOccluding(cameraPos, rayDirection, rayLength, t.getPosition(), t.fR)) {
+                System.out.println("ghosting out tree");
+                t.setTargetAlpha(0.3f); // Ghost out
+            } else {
+                t.setTargetAlpha(1.0f); // Fade in
+            }
+            t.update(delta);
+        }
+
+        for (Monolith m : monoliths) {
+            float proxyRadius = Math.max(m.width, m.depth);
+            if (isObjectOccluding(cameraPos, rayDirection, rayLength, m.getPosition(), proxyRadius)) {
+                System.out.println("ghosting out mon");
+                m.setTargetAlpha(0.2f);
+            } else {
+                m.setTargetAlpha(1.0f);
+            }
+            m.update(delta);
+        }
+    }
+
+    private boolean isObjectOccluding(Vector3 cam, Vector3 dir, float len, Vector3 objPos, float radius) {
+        float camX = cam.x;
+        float camZ = cam.z;
+        float ballX = camX + dir.x * len;
+        float ballZ = camZ + dir.z * len;
+
+        float objX = objPos.x;
+        float objZ = objPos.z;
+
+        float l2 = Vector2.dst2(camX, camZ, ballX, ballZ);
+        if (l2 == 0) return Vector2.dst(camX, camZ, objX, objZ) < radius;
+
+        float t = ((objX - camX) * (ballX - camX) + (objZ - camZ) * (ballZ - camZ)) / l2;
+
+        t = MathUtils.clamp(t, 0, 1);
+
+        float distSq = Vector2.dst2(objX, objZ, camX + t * (ballX - camX), camZ + t * (ballZ - camZ));
+
+        return distSq < (radius * radius);
+    }
+
     public List<Tree> getTreesAt(float worldX, float worldZ) {
         int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
         int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
-        List<Tree> nearby = new ArrayList<>(treeGrid[gx][gz]);
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                if (x == 0 && z == 0) continue;
-                int nx = gx + x, nz = gz + z;
-                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) nearby.addAll(treeGrid[nx][nz]);
+
+        List<Tree> nearby = new ArrayList<>();
+
+        int radius = 2;
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                int nx = gx + x;
+                int nz = gz + z;
+                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) {
+                    nearby.addAll(treeGrid[nx][nz]);
+                }
             }
         }
         return nearby;
@@ -393,12 +447,17 @@ public class Terrain {
     public List<Monolith> getMonolithsAt(float worldX, float worldZ) {
         int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
         int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
-        List<Monolith> nearby = new ArrayList<>(monolithGrid[gx][gz]);
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                if (x == 0 && z == 0) continue;
-                int nx = gx + x, nz = gz + z;
-                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) nearby.addAll(monolithGrid[nx][nz]);
+
+        List<Monolith> nearby = new ArrayList<>();
+        int radius = 2;
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                int nx = gx + x;
+                int nz = gz + z;
+                if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) {
+                    nearby.addAll(monolithGrid[nx][nz]);
+                }
             }
         }
         return nearby;
@@ -487,13 +546,20 @@ public class Terrain {
         }
     }
 
+
     public static class Tree {
         private final ModelInstance trunk, foliage;
         private final Vector3 pos;
-        private final float tH, tR, fR;
+        private final float tH;
+        private final float tR;
+        public final float fR;
         private final TreeScheme scheme;
-        private final float mapRotation; // Store for collision logic
+        private final float mapRotation;
         private float actualFoliageHeight;
+
+        private float currentAlpha = 1.0f;
+        private float targetAlpha = 1.0f;
+        private final BlendingAttribute trunkBlend, foliageBlend;
 
         public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng, float mapRotation) {
             this.pos = new Vector3(x, y, z);
@@ -503,19 +569,19 @@ public class Terrain {
             this.scheme = scheme;
             this.mapRotation = mapRotation;
 
-            ModelBuilder mb = new ModelBuilder();
-            Material barkMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomBark()));
-            Material leafMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage()));
+            // Initialize attributes
+            this.trunkBlend = new BlendingAttribute(true, 1.0f);
+            this.foliageBlend = new BlendingAttribute(true, 1.0f);
 
-            // --- Trunk Construction ---
+            ModelBuilder mb = new ModelBuilder();
+            Material barkMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomBark()), trunkBlend);
+            Material leafMat = new Material(ColorAttribute.createDiffuse(scheme.getRandomFoliage()), foliageBlend);
+
             mb.begin();
             long attributes = VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal;
             MeshPartBuilder part = mb.part("trunk", GL20.GL_TRIANGLES, attributes, barkMat);
-
-            // Vertical Post
             part.cylinder(tr * 2, th, tr * 2, 16);
 
-            // Add Horizontal T-Bar for Grapevines
             float armWidth = fr * 3.0f;
             if (scheme == TreeScheme.GRAPEVINE) {
                 float armThickness = tr * 1.4f;
@@ -530,7 +596,6 @@ public class Terrain {
             trunk.transform.setToTranslation(x, y + th / 2, z);
             trunk.transform.rotate(0, 1, 0, mapRotation);
 
-            // --- Foliage Construction ---
             if (scheme == TreeScheme.FIR) {
                 float skirtMultiplier = 0.6f + (rng.nextFloat() * 0.31f);
                 this.actualFoliageHeight = (th * skirtMultiplier) + (fr * 2);
@@ -540,16 +605,12 @@ public class Terrain {
             } else if (scheme == TreeScheme.GRAPEVINE) {
                 float varW = 0.9f + (rng.nextFloat() * 0.3f);
                 float varH = 0.8f + (rng.nextFloat() * 0.4f);
-
                 float vineWidth = armWidth * varW;
                 float vineHeight = tr * 1.6f * varH;
                 float vineDepth = tr * 2.2f * varH;
                 this.actualFoliageHeight = vineHeight;
-
                 foliage = new ModelInstance(mb.createBox(vineWidth, vineHeight, vineDepth, leafMat, attributes));
                 foliage.transform.setToTranslation(x, y + th + (vineHeight / 2f), z);
-
-                // Apply map rotation plus per-tree jitter
                 foliage.transform.rotate(0, 1, 0, mapRotation + (rng.nextFloat() - 0.5f) * 12f);
                 foliage.transform.rotate(1, 0, 0, (rng.nextFloat() - 0.5f) * 3f);
             } else {
@@ -560,74 +621,49 @@ public class Terrain {
             }
         }
 
-        public boolean checkTrunkCollision(Vector3 ballPos, float ballRadius) {
-            float collisionRadius = tR + ballRadius;
-            float distSq = Vector2.dst2(ballPos.x, ballPos.z, pos.x, pos.z);
-
-            if (distSq < (collisionRadius * collisionRadius)) {
-                if (ballPos.y < pos.y + tH && ballPos.y > pos.y) {
-                    Gdx.app.log("PHYSICS", "Trunk Hit detected at: " + ballPos);
-                    return true;
-                }
+        public void update(float delta) {
+            if (Math.abs(currentAlpha - targetAlpha) > 0.001f) {
+                currentAlpha = MathUtils.lerp(currentAlpha, targetAlpha, delta * 6f);
+            } else {
+                currentAlpha = targetAlpha;
             }
 
-            if (scheme == TreeScheme.GRAPEVINE) {
-                float localX = (ballPos.x - pos.x);
-                float localZ = (ballPos.z - pos.z);
+            // 1. Update the local attribute values
+            trunkBlend.opacity = currentAlpha;
+            foliageBlend.opacity = currentAlpha;
 
-                float cos = MathUtils.cosDeg(-mapRotation);
-                float sin = MathUtils.sinDeg(-mapRotation);
+            // 2. THE FIX: Force the ModelInstance materials to use these specific attributes
+            // This ensures that even if the material was copied/reset, it's now using your live variables.
+            trunk.materials.get(0).set(trunkBlend);
+            foliage.materials.get(0).set(foliageBlend);
 
-                float rotatedX = localX * cos - localZ * sin;
-                float rotatedZ = localX * sin + localZ * cos;
-
-                float armHalfWidth = (fR * 3.0f) / 2f;
-                float armThickness = (tR * 0.7f) + ballRadius;
-
-                if (Math.abs(ballPos.y - (pos.y + tH)) < armThickness) {
-                    if (Math.abs(rotatedX) < armHalfWidth + ballRadius &&
-                            Math.abs(rotatedZ) < armThickness) {
-                        return true;
-                    }
-                }
+            // Optional: Log once when it's supposed to be ghosted to verify the material actually has the attribute
+            if (currentAlpha < 0.5f && Gdx.graphics.getFrameId() % 60 == 0) {
+                boolean hasAttr = trunk.materials.get(0).has(BlendingAttribute.Type);
+                Gdx.app.log("TREE_RENDER_CHECK", "Alpha: " + currentAlpha + " | Has Blend Attr: " + hasAttr);
             }
-            return false;
         }
 
-        public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
-            if (scheme == TreeScheme.FIR) {
-                float topY = pos.y + tH + (fR * 2);
-                float baseY = topY - actualFoliageHeight;
-                if (ballPos.y > topY + ballRadius || ballPos.y < baseY - ballRadius) return false;
-                float relativeY = MathUtils.clamp((topY - ballPos.y) / actualFoliageHeight, 0, 1);
-                return Vector3.dst(ballPos.x, 0, ballPos.z, pos.x, 0, pos.z) < (relativeY * (fR * 1.25f)) + ballRadius;
-            } else if (scheme == TreeScheme.GRAPEVINE) {
-                // Rotate ball into tree's local space for box check
-                float localX = (ballPos.x - pos.x);
-                float localZ = (ballPos.z - pos.z);
-                float cos = MathUtils.cosDeg(-mapRotation);
-                float sin = MathUtils.sinDeg(-mapRotation);
-                float rotatedX = localX * cos - localZ * sin;
-                float rotatedZ = localX * sin + localZ * cos;
-
-                float vineHalfWidth = (fR * 3.5f) / 2f;
-                float vineHalfHeight = (actualFoliageHeight) / 2f;
-                float vineHalfDepth = (fR * 1.5f) / 2f;
-
-                float foliageCenterY = pos.y + tH + vineHalfHeight;
-                float dy = Math.abs(ballPos.y - foliageCenterY);
-
-                return Math.abs(rotatedX) < (vineHalfWidth + ballRadius) &&
-                        dy < (vineHalfHeight + ballRadius) &&
-                        Math.abs(rotatedZ) < (vineHalfDepth + ballRadius);
-            } else {
-                return ballPos.dst(pos.x, pos.y + tH + fR, pos.z) < (fR + ballRadius);
-            }
+        public void setTargetAlpha(float alpha) {
+            this.targetAlpha = alpha;
         }
 
         public void render(ModelBatch b, Environment e) {
             b.render(trunk, e);
             b.render(foliage, e);
+        }
+
+        public boolean checkTrunkCollision(Vector3 ballPos, float ballRadius) {
+            float collisionRadius = tR + ballRadius;
+            float distSq = Vector2.dst2(ballPos.x, ballPos.z, pos.x, pos.z);
+            if (distSq < (collisionRadius * collisionRadius)) {
+                if (ballPos.y < pos.y + tH && ballPos.y > pos.y) return true;
+            }
+            return false;
+        }
+
+        public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
+            return ballPos.dst(pos.x, pos.y + tH + fR, pos.z) < (fR + ballRadius);
         }
 
         public void dispose() {
@@ -650,6 +686,8 @@ public class Terrain {
         public TreeScheme getScheme() {
             return scheme;
         }
+
+
     }
 
     public static class Monolith {
@@ -658,15 +696,38 @@ public class Terrain {
         private final float width, height, depth;
         private float rotationY;
 
+        // Transparency logic
+        private float currentAlpha = 1.0f;
+        private float targetAlpha = 1.0f;
+        private final BlendingAttribute blend;
+
         public Monolith(float x, float y, float z, float w, float h, float d, float rotation) {
             this.pos = new Vector3(x, y, z);
             this.width = w;
             this.height = h;
             this.depth = d;
             this.rotationY = rotation;
+            this.blend = new BlendingAttribute(true, 1.0f);
+
             ModelBuilder mb = new ModelBuilder();
-            instance = new ModelInstance(mb.createBox(w, h, d, new Material(ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f))), VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
+            Material mat = new Material(
+                    ColorAttribute.createDiffuse(new Color(0.15f, 0.15f, 0.16f, 1f)),
+                    blend
+            );
+
+            instance = new ModelInstance(mb.createBox(w, h, d, mat, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal));
             updateTransform();
+        }
+
+        public void update(float delta) {
+            if (Math.abs(currentAlpha - targetAlpha) > 0.01f) {
+                currentAlpha = MathUtils.lerp(currentAlpha, targetAlpha, delta * 6f);
+                blend.opacity = currentAlpha;
+            }
+        }
+
+        public void setTargetAlpha(float alpha) {
+            this.targetAlpha = alpha;
         }
 
         private void updateTransform() {

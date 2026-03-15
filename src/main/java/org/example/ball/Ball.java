@@ -94,7 +94,6 @@ public class Ball {
         for (int i = 0; i < SUB_STEPS; i++) {
             if (state != State.STATIONARY) {
                 processPhysicsStep(subDelta, terrain, baseWind);
-                // Frequency is back to being high (every substep)
                 spawnFlightParticles(lastFramePosition, subDelta);
             }
 
@@ -124,9 +123,6 @@ public class Ball {
             Color trailColor = renderer.getActiveTrailColor();
             float chanceMultiplier = subDelta / 0.0166f;
 
-            // Shifted window to -0.1 to 0.9.
-            // This maintains a full 1.0 span to bridge frame gaps while
-            // ensuring particles stay clear of the ball's leading edge.
             float alpha = MathUtils.random(-0.1f, 0.9f);
             tempV1.set(lastFramePosition).lerp(position, alpha);
 
@@ -147,6 +143,7 @@ public class Ball {
             }
         }
     }
+
     private void processPhysicsStep(float delta, Terrain terrain, Vector3 baseWind) {
         float preStepY = position.y;
         handleWaterTransition(terrain);
@@ -376,7 +373,7 @@ public class Ball {
                 if (BallPhysics.handleTrunkCollision(position, velocity, spin, dx, dz)) {
                     lastInteraction = Interaction.TERRAIN;
                     isGoodShot = false;
-                    hitCooldown = 0.1f; // Ensure we don't double-hit the same frame
+                    hitCooldown = 0.1f;
                     particleManager.spawnRatingBurst(position, Color.BROWN, 4, 1.0f);
                 }
                 continue;
@@ -435,7 +432,12 @@ public class Ball {
         velocity.z *= hLen;
         velocity.scl(finalSpeed);
         state = (loft < 1f) ? State.ROLLING : State.AIR;
-        hitCooldown = (state == State.ROLLING) ? 0.02f : 0.1f;
+
+        // REDUCED COOLDOWNS:
+        // Use a tiny buffer just to escape the floor collision on frame 0,
+        // but not long enough to pass through a tree.
+        hitCooldown = (state == State.ROLLING) ? 0.005f : 0.01f;
+
         renderer.resetTrail(renderer.getActiveTrailColor());
         lastTrailPos.set(position);
     }

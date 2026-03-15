@@ -241,7 +241,10 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         particleManager.update(delta, terrain);
-        if (terrain != null) terrain.updateFlag(camera.position);
+        if (terrain != null) {
+            terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
+            terrain.updateFlag(camera.position);
+        }
     }
 
     private void handleBallStationaryLogic(float delta) {
@@ -391,8 +394,10 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void handleStartMenuInput() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) menuSelection = (menuSelection - 1 + 6) % 6;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) menuSelection = (menuSelection + 1) % 6;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W))
+            menuSelection = (menuSelection - 1 + 6) % 6;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S))
+            menuSelection = (menuSelection + 1) % 6;
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
             switch (menuSelection) {
@@ -404,13 +409,19 @@ public class GolfGame extends ApplicationAdapter {
                     competitiveScore = new CompetitiveScore(competitiveCourse);
                     shotController.setGuidelineEnabled(false);
                 }
-                case 2 -> { enterInstructions(); return; }
+                case 2 -> {
+                    enterInstructions();
+                    return;
+                }
                 case 3 -> currentState = GameState.PRACTICE_RANGE;
                 case 4 -> currentState = GameState.PUTTING_GREEN;
                 case 5 -> {
                     long seed = -1;
                     String clip = Gdx.app.getClipboard().getContents();
-                    try { if (clip != null) seed = Long.parseLong(clip.trim()); } catch (Exception ignored) {}
+                    try {
+                        if (clip != null) seed = Long.parseLong(clip.trim());
+                    } catch (Exception ignored) {
+                    }
                     currentState = GameState.PLAYING;
                     initLevel(seed);
                     return;
@@ -434,9 +445,11 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.I)) showClubInfo = !showClubInfo;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE) shotController.toggleGuideline();
+        if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE)
+            shotController.toggleGuideline();
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null) Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
+        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
+            Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) handleNewLevelInput();
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
