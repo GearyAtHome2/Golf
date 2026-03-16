@@ -256,9 +256,11 @@ public class GolfGame extends ApplicationAdapter {
                     practiceResetTimer = 0f;
                 } else if (terrain.isPointOutOfBounds(ball.getPosition().x, ball.getPosition().z)) {
                     hud.showOutOfBounds();
+                    hud.incrementShots(); // Penalty stroke
                     resetBallToLastShot();
                 } else if (ball.isInWater(terrain)) {
                     hud.showWaterHazard();
+                    hud.incrementShots(); // Penalty stroke
                     resetBallToLastShot();
                 }
             }
@@ -269,6 +271,12 @@ public class GolfGame extends ApplicationAdapter {
 
     private void resetBallToLastShot() {
         if (ball != null) {
+            // If the user manually resets, they get a penalty stroke,
+            // but only if they are actually mid-game (not just sitting at the tee).
+            if (Gdx.input.isKeyJustPressed(Input.Keys.R) && hasCurrentBallBeenHit) {
+                hud.incrementShots();
+            }
+
             ball.resetToLastPosition();
             ball.setState(Ball.State.STATIONARY);
             hasCurrentBallBeenHit = false;

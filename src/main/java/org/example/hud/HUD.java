@@ -25,6 +25,7 @@ public class HUD {
     private float hazardTimer = 0;
     private String hazardText = "";
     private Color hazardColor = Color.WHITE;
+    private boolean isPracticeState = false; // Track this for penalty display
     private boolean instructionsRequested = false;
     private boolean cameraConfigRequested = false;
 
@@ -161,6 +162,7 @@ public class HUD {
 
     public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore) {
         float delta = Gdx.graphics.getDeltaTime();
+        this.isPracticeState = isPractice;
 
         if (!minigameController.isActive()) {
             updateSpinInput(delta);
@@ -386,9 +388,21 @@ public class HUD {
     private void renderHazardPopUp(float delta) {
         if (hazardTimer > 0) {
             hazardTimer -= delta;
+            float centerX = viewport.getWorldWidth() / 2f;
+            float centerY = viewport.getWorldHeight() / 2f;
+            float alpha = MathUtils.clamp(hazardTimer * 2f, 0, 1);
+
+            // Main Hazard Text
             font.getData().setScale(3.0f * (1.0f + (MathUtils.sin(hazardTimer * 10f) * 0.1f)));
-            Color fadeColor = new Color(hazardColor.r, hazardColor.g, hazardColor.b, MathUtils.clamp(hazardTimer * 2f, 0, 1));
-            drawShadowedText(hazardText, viewport.getWorldWidth() / 2f - 200, viewport.getWorldHeight() / 2f + 100, fadeColor);
+            Color mainColor = new Color(hazardColor.r, hazardColor.g, hazardColor.b, alpha);
+            drawShadowedText(hazardText, centerX - 200, centerY + 100, mainColor);
+
+            // Penalty Text (only if not practice)
+            if (!isPracticeState) {
+                font.getData().setScale(1.5f);
+                Color penaltyColor = new Color(1, 0, 0, alpha); // Pure Red
+                drawShadowedText("+1 STROKE PENALTY", centerX - 120, centerY + 40, penaltyColor);
+            }
         }
     }
 

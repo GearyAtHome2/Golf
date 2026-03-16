@@ -14,7 +14,7 @@ import java.util.Random;
 public class WhistlingIslesGenerator {
     // --- TWEAKABLE VARIABLES ---
     private static final int ISLE_COUNT = 14;            // Total islands to attempt to place
-    private static final float MIN_SPACING = 65.0f;     // Prevents islands from merging into one giant blob
+    private static final float MIN_SPACING = 45.0f;     // Prevents islands from merging into one giant blob
     private static final float SIZE_MULTIPLIER = 2.0f;  // Global scale for all island dimensions
 
     private static final float ELONGATION_RATIO = 3.0f; // Ratio of length to width (X:Z in local space)
@@ -23,7 +23,7 @@ public class WhistlingIslesGenerator {
     private static final float BEACH_LENGTH = 60.0f;    // Length of the gentle slope into the water
 
     private static final float MAX_EXTRA_HEIGHT = 2.5f; // Max random height added above sea level
-    private static final float NOISE_STRENGTH = 6.0f;   // How much the coastline "wobbles"
+    private static final float NOISE_STRENGTH = 12.0f;   // How much the coastline "wobbles"
     private static final float SEA_FLOOR_DEPTH = -3.0f; // How deep the transition goes
     // ---------------------------
 

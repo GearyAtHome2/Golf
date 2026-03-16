@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = LevelData.Archetype.BIG_GRAPE_VINEYARDS;
+        selectedType = LevelData.Archetype.WHISTLING_ISLES;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -145,15 +145,15 @@ public class LevelDataGenerator {
                 greenH = 5.0f + r.nextFloat() * 5.0f;
                 windMin = 0f;
                 windMax = 7f;
-                treeH = 30.0f + r.nextFloat() * 20.0f;
+                treeH = 45.0f;
                 foliageR = 10.0f;
                 trunkR = 1.8f;
                 hillFreq = 0.025f;
                 maxH = 5.0f;
                 treeDensity = 0.26f;
                 maxFairwayWidth = 45.0f;
-                minFairwayWidth = 20.0f;
-                fairwayWiggle = 0.08f + r.nextFloat() * 0.02f;
+                minFairwayWidth = 25.0f;
+                fairwayWiggle = 0.06f + r.nextFloat() * 0.02f;
                 islands = 0.0f;
                 cohesion = 0.95f;
                 distance = Math.round(550 + r.nextFloat() * 200);
@@ -318,8 +318,8 @@ public class LevelDataGenerator {
                 windMax = 18f;
                 treeH = 8.0f + r.nextFloat() * 2.0f;
                 treeDensity = 0.98f;
-                foliageR = 3.0f;
-                trunkR = 0.5f;
+                foliageR = 2.7f;
+                trunkR = 0.4f;
                 hillFreq = 0.06f;
                 maxH = 4.0f;
                 maxFairwayWidth = 50f;
