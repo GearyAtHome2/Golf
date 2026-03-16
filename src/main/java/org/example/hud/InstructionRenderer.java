@@ -75,6 +75,7 @@ public class InstructionRenderer {
                     " * You can use LClick and drag to rotate, RClick to pan",
                     "[F] - Use Rangefinder",
                     "[P] - Toggle shot angle projection (Disabled during competitive play)",
+                    "[i] - Show club information",
                     "[R] - Reset Ball to last position",
                     "[N] - Next map (Disabled during competitive play)",
                     "[ESC] - Pause Menu - contains additional keybinds",
@@ -99,11 +100,11 @@ public class InstructionRenderer {
                     {"DRIVER", "Maximum power and Tee bonus. High difficulty from the fairway."},
                     {"WOODS (3/5)", "Long range from the fairway. Lower loft for more roll-out."},
                     {"2-IRON", "Long and piercing flight. Very high skill requirement."},
-                    {"HYBRID", "The 'rescue' club. Easy to hit with respectable, predictable distance."},
+                    {"HYBRID", "Mid-range precision club. Easy to hit with respectable, predictable distance and a high flight trajectory."},
                     {"IRONS (5-9)", "Old faithfuls. Higher numbers mean more loft and control."},
-                    {"WEDGES (P/G/S)", "Precision clubs. Very forgiving sweet spots, high loft."},
+                    {"WEDGES (P/G/S)", "Precision clubs. Very forgiving sweet spots, high loft, very high backspin"},
                     {"LOB WEDGE", "Extreme loft for clearing obstacles. Requires high precision."},
-                    {"PUTTER", "Zero loft. Designed for the green, but works for 'Texas Wedges'."}
+                    {"PUTTER", "Zero loft. Designed for the green, but works for 'Texas Wedges' if you get under it."}
             };
 
             for (String[] club : clubInfo) {
@@ -144,7 +145,10 @@ public class InstructionRenderer {
                     "ball trajectory left or right.",
                     "--------------------------------------------------------------",
                     "WIND: High wind speeds apply additional drag as well as",
-                    "ball displacement. Wind is more effective at higher altitudes."
+                    "ball displacement. Wind is more effective at higher altitudes.",
+                    "--------------------------------------------------------------",
+                    "RANGE: Liberal use of the club info [i], the rangefinder [F] and",
+                    "the overview [LTAB] is recommended."
             };
             for (String line : gameplay) {
                 font.draw(batch, line, centerX - 330, currentY);

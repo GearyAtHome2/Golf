@@ -125,6 +125,12 @@ public class HUD {
         if (Gdx.input.isKeyJustPressed(Input.Keys.I)) instructionsRequested = true;
         if (Gdx.input.isKeyJustPressed(Input.Keys.O)) cameraConfigRequested = true;
 
+        // Handle seed copying specifically for visual feedback trigger
+        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
+            Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
+            seedFeedbackTimer = 2.0f;
+        }
+
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         float centerX = viewport.getWorldWidth() / 2f;
@@ -139,9 +145,16 @@ public class HUD {
         drawShadowedText("[D] DIFFICULTY: " + config.difficulty.name(), centerX - 120, centerY + 40, Color.WHITE);
         drawShadowedText("[L] PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"), centerX - 120, centerY, config.particlesEnabled ? Color.GREEN : Color.RED);
 
+        if (seedFeedbackTimer > 0) {
+            float delta = Gdx.graphics.getDeltaTime();
+            seedFeedbackTimer -= delta;
+            font.setColor(0, 1, 0, MathUtils.clamp(seedFeedbackTimer, 0, 1));
+            font.draw(batch, "SEED COPIED TO CLIPBOARD", centerX - 120, centerY - 60);
+        }
+
         font.setColor(Color.GRAY);
         font.draw(batch, "----------------", centerX - 80, centerY - 40);
-        drawShadowedText("[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [I] HELP  |  [O] CAM CONFIG", 50, 100, Color.WHITE);
+        drawShadowedText("[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [C] COPY SEED  |  [I] HELP  |  [O] CAM CONFIG", 50, 100, Color.WHITE);
 
         batch.end();
     }
@@ -154,6 +167,10 @@ public class HUD {
             if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
                 distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
                 distanceDisplayTimer = 3.0f;
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
+                Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
+                seedFeedbackTimer = 2.0f;
             }
         }
 
@@ -185,6 +202,15 @@ public class HUD {
         renderHazardPopUp(delta);
         if (isPractice) renderShotDistance(ball, delta);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore, terrain);
+
+        if (seedFeedbackTimer > 0) {
+            seedFeedbackTimer -= delta;
+            font.getData().setScale(1.2f);
+            Color c = Color.GREEN.cpy();
+            c.a = MathUtils.clamp(seedFeedbackTimer, 0, 1);
+            drawShadowedText("SEED COPIED!", viewport.getWorldWidth() / 2f - 60, viewport.getWorldHeight() - 100, c);
+        }
+
         if (ball.getState() == Ball.State.STATIONARY && !minigameController.isActive())
             renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
         batch.end();
@@ -375,6 +401,7 @@ public class HUD {
         hazardTimer = 0;
         shotFeedbackTimer = 0;
         distanceDisplayTimer = 0;
+        seedFeedbackTimer = 0;
         mainMenuRequested = false;
         instructionsRequested = false;
         cameraConfigRequested = false;

@@ -440,14 +440,17 @@ public class GolfGame extends ApplicationAdapter {
             }
         }
 
+        // Toggles that only work while NOT in a menu
         if (currentState != GameState.PAUSED && currentState != GameState.INSTRUCTIONS && currentState != GameState.CAMERA_CONFIG) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.I)) showClubInfo = !showClubInfo;
             if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE)
                 shotController.toggleGuideline();
-            if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
-                Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
         }
 
+        // Global Gameplay hotkeys (work in Pause/Victory/Play)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null) {
+            Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
+        }
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
         if (Gdx.input.isKeyJustPressed(Input.Keys.N)) handleNewLevelInput();
 
