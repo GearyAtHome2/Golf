@@ -18,7 +18,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.WHISTLING_ISLES;
+//        selectedType = LevelData.Archetype.WHISTLING_ISLES;
         data.setArchetype(selectedType);
 
         // --- 1. Select Algorithm and TreeScheme ---
@@ -186,7 +186,7 @@ public class LevelDataGenerator {
                 windMin = 2f;
                 windMax = 15f;
                 hillFreq = 0.045f;
-                treeDensity = 0.9f;
+                treeDensity = 0.82f;
                 maxFairwayWidth = 35.0f;
                 fairwayWiggle = 0.4f + r.nextFloat() * 0.3f;
                 islands = 0.7f;
@@ -195,7 +195,7 @@ public class LevelDataGenerator {
                 par = distance < 470 ? 4 : 5;
                 break;
             case ISLAND_COAST:
-                baseDifficultyIndex = 4f;
+                baseDifficultyIndex = 3f;
                 teeH = 15.0f + r.nextFloat() * 10.0f;
                 greenH = 15.0f + r.nextFloat() * 5.0f;
                 windMin = 6f;
@@ -290,7 +290,7 @@ public class LevelDataGenerator {
                 par = 4;
                 break;
             case WETLANDS:
-                baseDifficultyIndex = 5f;
+                baseDifficultyIndex = 6f;
                 teeH = 17.0f + r.nextFloat() * 2.0f;
                 greenH = 13.0f + r.nextFloat() * 3.0f;
                 windMin = 6f;

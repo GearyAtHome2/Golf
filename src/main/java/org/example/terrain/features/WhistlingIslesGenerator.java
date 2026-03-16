@@ -13,9 +13,9 @@ import java.util.Random;
 
 public class WhistlingIslesGenerator {
     // --- TWEAKABLE VARIABLES ---
-    private static final int ISLE_COUNT = 14;            // Total islands to attempt to place
-    private static final float MIN_SPACING = 45.0f;     // Prevents islands from merging into one giant blob
-    private static final float SIZE_MULTIPLIER = 2.0f;  // Global scale for all island dimensions
+    private static final int ISLE_COUNT = 30;            // Total islands to attempt to place
+    private static final float MIN_SPACING = 85.0f;     // Prevents islands from merging into one giant blob
+    private static final float SIZE_MULTIPLIER = 2.5f;  // Global scale for all island dimensions
 
     private static final float ELONGATION_RATIO = 3.0f; // Ratio of length to width (X:Z in local space)
     private static final float FAIRWAY_WIDTH = 20.0f;   // Base fairway width before noise/scaling
@@ -41,7 +41,7 @@ public class WhistlingIslesGenerator {
         this.waveAmps = waveAmps;
         this.waveOffsets = waveOffsets;
 
-        this.islandAngle = (45f + rng.nextFloat() * 90f) * MathUtils.degreesToRadians;
+        this.islandAngle = (45f - rng.nextFloat() * 90f) * MathUtils.degreesToRadians;
     }
 
     public void generateWhistlingIsles(Terrain.TerrainType[][] map, float[][] heights, int gX, int gZ, float water) {
