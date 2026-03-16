@@ -26,6 +26,7 @@ import org.example.gameManagers.LevelManager;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
 import org.example.hud.HUD;
+import org.example.performance.PhysicsProfiler;
 import org.example.terrain.ClassicGenerator;
 import org.example.terrain.ITerrainGenerator;
 import org.example.terrain.Terrain;
@@ -185,7 +186,11 @@ public class GolfGame extends ApplicationAdapter {
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
+
+        // 1. Process Input first
         handleInput();
+
+        // 2. Clear Screen
         gameViewport.apply();
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
@@ -200,10 +205,19 @@ public class GolfGame extends ApplicationAdapter {
         } else if (currentState == GameState.CAMERA_CONFIG) {
             hud.renderCameraConfig();
         } else {
+            // 3. Update & Profile Physics/Logic
             updateLogic(delta);
+
+            // 4. Render the 3D Scene
             renderScene();
+
+            // 5. Render HUD on top
             renderUI();
         }
+
+        // 6. Final Profiler Step: Update the timer and log if 1 second has passed
+        // We do this at the very end of the frame so it captures everything.
+        PhysicsProfiler.updateAndLog(delta);
     }
 
     private void updateLogic(float delta) {
@@ -215,8 +229,11 @@ public class GolfGame extends ApplicationAdapter {
             Vector3 currentWind = (currentState == GameState.PUTTING_GREEN || currentLevelData == null) ? zeroWind : currentLevelData.getWind();
 
             windManager.update(effDelta, currentWind, camera.position);
+
             if (hud.wasMinigameCanceled()) shotController.reset();
 
+            // Profile the Shot Charging logic (input handling/vector math)
+            PhysicsProfiler.startSection("ShotControllerCharge");
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain)) {
                     hud.incrementShots();
@@ -224,12 +241,18 @@ public class GolfGame extends ApplicationAdapter {
                     shotController.update(0, ball, camera.direction, currentClub, hud, terrain);
                 }
             }
+            PhysicsProfiler.endSection("ShotControllerCharge");
 
+            // This call now internally profiles several sub-sections
             ball.update(effDelta, terrain, currentWind);
+
             cameraController.update(ball.getPosition());
 
             if (config.particlesEnabled) {
+                // Profile the "global" particle interaction check
+                PhysicsProfiler.startSection("ParticleInteractions");
                 particleManager.handleBallInteraction(ball, terrain);
+                PhysicsProfiler.endSection("ParticleInteractions");
             }
 
             handleBallStationaryLogic(delta);
@@ -237,9 +260,13 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         particleManager.update(delta, terrain);
+
         if (terrain != null) {
+            // Profile occlusion (this involves raycasting or height checks)
+            PhysicsProfiler.startSection("CameraOcclusion");
             terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
             terrain.updateFlag(camera.position);
+            PhysicsProfiler.endSection("CameraOcclusion");
         }
     }
 

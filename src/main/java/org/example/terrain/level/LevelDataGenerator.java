@@ -203,8 +203,8 @@ public class LevelDataGenerator {
                 hillFreq = 0.02f;
                 maxH = 15.0f;
                 treeDensity = 0.03f;
-                maxFairwayWidth = 45.0f;
-                minFairwayWidth = 28.0f;
+                maxFairwayWidth = 55.0f;
+                minFairwayWidth = 35.0f;
                 undulation = 0.4f;
                 fairwayWiggle = 0.25f + r.nextFloat() * 0.06f;
                 islands = 0f;

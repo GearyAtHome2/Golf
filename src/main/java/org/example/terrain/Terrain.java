@@ -48,6 +48,8 @@ public class Terrain {
     private final float CELL_SIZE = 10.0f;
     private List<TerrainObject>[][] objectGrid;
     private int gridCols, gridRows;
+    private final Vector3 tempRayDir = new Vector3();
+    private final Vector3 tempCamPos = new Vector3();
 
     public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
         this.SIZE_Z = dynamicSizeZ;
@@ -156,15 +158,46 @@ public class Terrain {
     }
 
     public void updateCameraOcclusion(Vector3 cameraPos, Vector3 ballPos, float delta) {
-        Vector3 rayDirection = new Vector3(ballPos).sub(cameraPos).nor();
+        float offsetX = (SIZE_X * SCALE) / 2f;
+        float offsetZ = (SIZE_Z * SCALE) / 2f;
+
+        // 1. Reset all objects to visible (alpha 1.0)
+        // In a massive game, you'd only reset "nearby" objects,
+        // but for now, we just need to avoid the heavy math on all of them.
+        for (TerrainObject obj : allObjects) {
+            obj.setTargetAlpha(1.0f);
+        }
+
+        // 2. Determine grid range for the ray
+        int x1 = MathUtils.clamp((int) ((cameraPos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
+        int z1 = MathUtils.clamp((int) ((cameraPos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
+        int x2 = MathUtils.clamp((int) ((ballPos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
+        int z2 = MathUtils.clamp((int) ((ballPos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
+
+        int minX = Math.min(x1, x2);
+        int maxX = Math.max(x1, x2);
+        int minZ = Math.min(z1, z2);
+        int maxZ = Math.max(z1, z2);
+
+        tempRayDir.set(ballPos).sub(cameraPos).nor();
         float rayLength = cameraPos.dst(ballPos);
 
-        for (TerrainObject obj : allObjects) {
-            float radius = 1.0f;
-            if (obj instanceof Tree) radius = ((Tree) obj).fR;
-            else if (obj instanceof Monolith) radius = Math.max(((Monolith) obj).width, ((Monolith) obj).depth);
+        // 3. Only check objects in cells the ray actually touches
+        for (int gx = minX; gx <= maxX; gx++) {
+            for (int gz = minZ; gz <= maxZ; gz++) {
+                for (TerrainObject obj : objectGrid[gx][gz]) {
+                    float radius = (obj instanceof Tree) ? ((Tree) obj).fR :
+                            (obj instanceof Monolith) ? Math.max(((Monolith) obj).width, ((Monolith) obj).depth) : 1.0f;
 
-            obj.setTargetAlpha(isObjectOccluding(cameraPos, rayDirection, rayLength, obj.getPosition(), radius) ? 0.3f : 1.0f);
+                    if (isObjectOccluding(cameraPos, tempRayDir, rayLength, obj.getPosition(), radius)) {
+                        obj.setTargetAlpha(0.3f);
+                    }
+                }
+            }
+        }
+
+        // 4. Run the visual fade update
+        for (TerrainObject obj : allObjects) {
             obj.update(delta);
         }
     }

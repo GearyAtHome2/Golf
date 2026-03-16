@@ -35,6 +35,10 @@ public class Ball {
     private static final float MAX_STEP_UP = 1.0f;
     private static final int SUB_STEPS = 4;
 
+    // Fixed Timestep Constants
+    private static final float TIME_STEP = 1f / 60f;
+    private static final float MAX_ACCUMULATOR = 0.25f;
+
     private final Vector3 position = new Vector3();
     private final Vector3 velocity = new Vector3();
     private final Vector3 spin = new Vector3();
@@ -51,6 +55,7 @@ public class Ball {
     private State state = State.STATIONARY;
     private Interaction lastInteraction = Interaction.NONE;
     private float hitCooldown = 0f;
+    private float accumulator = 0f;
 
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
@@ -76,42 +81,46 @@ public class Ball {
     public void update(float delta, Terrain terrain, Vector3 baseWind) {
         timeElapsed += delta;
         PhysicsProfiler.startFrame();
-        PhysicsProfiler.startSection("TrailUpdate");
 
+        // 1. Visual/Trail updates stay on variable delta for smoothness
+        PhysicsProfiler.startSection("TrailUpdate");
         float agingScale = (shotRating == MinigameResult.Rating.PERFECTION) ? 0.65f : 1.0f;
         float speedMult = (config.animSpeed == GameConfig.AnimSpeed.NONE) ? 1.0f : config.animSpeed.mult;
         renderer.updateTrail(delta * agingScale * speedMult);
-
         PhysicsProfiler.endSection("TrailUpdate");
 
-        if (state == State.STATIONARY && !renderer.hasVisibleTrail()) {
-            return;
-        }
-
+        if (state == State.STATIONARY && !renderer.hasVisibleTrail()) return;
         if (hitCooldown > 0) hitCooldown -= delta;
 
-        float subDelta = delta / SUB_STEPS;
-        PhysicsProfiler.startSection("PhysicsSubsteps");
+        // 2. STABILIZED PHYSICS
+        // We cap delta to 0.033 (30fps) to prevent massive "teleport" jumps if the OS hitches
+        float stabilizedDelta = Math.min(delta, 0.033f);
+        float subDelta = stabilizedDelta / SUB_STEPS;
+
+        PhysicsProfiler.startSection("PhysicsSubstepsTotal");
         for (int i = 0; i < SUB_STEPS; i++) {
             if (state != State.STATIONARY) {
                 processPhysicsStep(subDelta, terrain, baseWind);
+
+                PhysicsProfiler.startSection("ParticlesFlight");
                 spawnFlightParticles(lastFramePosition, subDelta);
+                PhysicsProfiler.endSection("ParticlesFlight");
             }
 
+            PhysicsProfiler.startSection("TrailRecording");
             float speed = velocity.len();
             float dynamicStep = MathUtils.clamp(speed * 0.06f, 0.05f, 2.0f);
-
             if (position.dst2(lastTrailPos) > (dynamicStep * dynamicStep)) {
-                renderer.recordTrailPoint(lastFramePosition, 1.0f);
+                renderer.recordTrailPoint(position, 1.0f);
                 lastTrailPos.set(position);
             }
+            PhysicsProfiler.endSection("TrailRecording");
 
             if (state == State.STATIONARY) break;
         }
-        PhysicsProfiler.endSection("PhysicsSubsteps");
+        PhysicsProfiler.endSection("PhysicsSubstepsTotal");
 
-        particleManager.handleBallInteraction(this, terrain);
-
+        // 3. VISUAL SYNC
         PhysicsProfiler.startSection("VisualSync");
         renderer.updateVisuals(position, state);
         lastFramePosition.set(position);
@@ -149,12 +158,18 @@ public class Ball {
         float preStepY = position.y;
         handleWaterTransition(terrain);
 
-        PhysicsProfiler.startSection("EnvPhysics");
+        PhysicsProfiler.startSection("EnvForces");
         handleEnvironmentPhysics(delta, terrain, baseWind);
-        PhysicsProfiler.endSection("EnvPhysics");
+        PhysicsProfiler.endSection("EnvForces");
 
+        PhysicsProfiler.startSection("TreeCollision");
         handleTreeCollisions(terrain, delta);
+        PhysicsProfiler.endSection("TreeCollision");
+
+        PhysicsProfiler.startSection("MonolithCollision");
         handleMonolithCollisions(terrain);
+        PhysicsProfiler.endSection("MonolithCollision");
+
         applyYConstraints(preStepY, terrain);
     }
 
@@ -437,9 +452,6 @@ public class Ball {
         velocity.scl(finalSpeed);
         state = (loft < 1f) ? State.ROLLING : State.AIR;
 
-        // REDUCED COOLDOWNS:
-        // Use a tiny buffer just to escape the floor collision on frame 0,
-        // but not long enough to pass through a tree.
         hitCooldown = (state == State.ROLLING) ? 0.005f : 0.01f;
 
         renderer.resetTrail(renderer.getActiveTrailColor());
