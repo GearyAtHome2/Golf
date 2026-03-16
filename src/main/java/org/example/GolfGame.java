@@ -217,14 +217,10 @@ public class GolfGame extends ApplicationAdapter {
             windManager.update(effDelta, currentWind, camera.position);
             if (hud.wasMinigameCanceled()) shotController.reset();
 
-            // FIX: If ball is moving, we don't update input, BUT we update once more
-            // right after the shot is taken to let the controller hide the guideline.
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain)) {
                     hud.incrementShots();
                     hasCurrentBallBeenHit = true;
-                    // Run the update one more time immediately so the controller
-                    // acknowledges the ball is now moving (state changed in ball.hit).
                     shotController.update(0, ball, camera.direction, currentClub, hud, terrain);
                 }
             }
@@ -444,19 +440,21 @@ public class GolfGame extends ApplicationAdapter {
             }
         }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.I)) showClubInfo = !showClubInfo;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE)
-            shotController.toggleGuideline();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
-            Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
-        if (Gdx.input.isKeyJustPressed(Input.Keys.N)) handleNewLevelInput();
+        if (currentState != GameState.PAUSED && currentState != GameState.INSTRUCTIONS && currentState != GameState.CAMERA_CONFIG) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.I)) showClubInfo = !showClubInfo;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE)
+                shotController.toggleGuideline();
+            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
+            if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
+                Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
+            if (Gdx.input.isKeyJustPressed(Input.Keys.N)) handleNewLevelInput();
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-            config.adjustGameSpeed(true);
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-            config.adjustGameSpeed(false);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+                config.adjustGameSpeed(true);
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+                config.adjustGameSpeed(false);
+            }
         }
     }
 
