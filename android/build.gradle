@@ -1,0 +1,49 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "org.example"
+    // The version of the SDK used to compile your app
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "org.example"
+        minSdk 19
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src/main/java']
+            aidl.srcDirs = ['src/main/java']
+            renderscript.srcDirs = ['src/main/java']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// This task copies the natives into the right place for Android
+tasks.register('copyNatives') {
+    doFirst {
+        configurations.natives.copy().forEach { f ->
+            copy {
+                from f
+                into "libs/armeabi-v7a"
+                if (f.name.contains("arm64-v8a")) into "libs/arm64-v8a"
+                if (f.name.contains("x86_64")) into "libs/x86_64"
+                if (f.name.contains("x86") && !f.name.contains("x86_64")) into "libs/x86"
+            }
+        }
+    }
+}
+
+preBuild.dependsOn copyNatives
