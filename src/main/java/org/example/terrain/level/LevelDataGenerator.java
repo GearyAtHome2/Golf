@@ -383,8 +383,8 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
                 bunkerCount = 1 + r.nextInt(4);
-                distance = Math.round(500 + r.nextFloat() * 350);
-                par = distance < 600 ? 3 : distance < 750 ? 4 : 5;
+                distance = Math.round(500 + r.nextFloat() * 300);
+                par = distance < 550 ? 3 : distance < 750 ? 4 : 5;
                 break;
         }
 

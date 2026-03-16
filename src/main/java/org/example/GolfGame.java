@@ -444,17 +444,18 @@ public class GolfGame extends ApplicationAdapter {
             if (Gdx.input.isKeyJustPressed(Input.Keys.I)) showClubInfo = !showClubInfo;
             if (Gdx.input.isKeyJustPressed(Input.Keys.P) && currentState != GameState.COMPETITIVE)
                 shotController.toggleGuideline();
-            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
             if (Gdx.input.isKeyJustPressed(Input.Keys.C) && currentLevelData != null)
                 Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
-            if (Gdx.input.isKeyJustPressed(Input.Keys.N)) handleNewLevelInput();
+        }
 
-            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-                config.adjustGameSpeed(true);
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-                config.adjustGameSpeed(false);
-            }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) resetBallToLastShot();
+        if (Gdx.input.isKeyJustPressed(Input.Keys.N)) handleNewLevelInput();
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+            config.adjustGameSpeed(true);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+            config.adjustGameSpeed(false);
         }
     }
 
