@@ -4,41 +4,28 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // This allows the ":android" project to use the 'com.android.application' plugin
-        classpath 'com.android.tools.build:gradle:8.2.2'
+        classpath 'com.android.tools.build:gradle:8.3.0'
     }
 }
 
 allprojects {
     apply plugin: "eclipse"
     apply plugin: "idea"
-
     version = '1.0'
     ext {
         appName = "Golf Game 2026"
         gdxVersion = '1.12.1'
     }
-
     repositories {
-        mavenCentral()
         google()
+        mavenCentral()
     }
 }
 
 project(":core") {
     apply plugin: "java-library"
-
-    // This block prevents Gradle from un-setting your Source Root
-    sourceSets {
-        main {
-            java.srcDirs = ['src/main/java']
-//            resources.srcDirs = ['src/main/resources']
-        }
-    }
-
-    dependencies {
-        api "com.badlogicgames.gdx:gdx:$gdxVersion"
-    }
+    sourceSets { main { java.srcDirs = ['src/main/java'] } }
+    dependencies { api "com.badlogicgames.gdx:gdx:$gdxVersion" }
 }
 
 project(":desktop") {

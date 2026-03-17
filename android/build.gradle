@@ -1,10 +1,19 @@
 apply plugin: 'com.android.application'
 
+configurations { natives }
+
+dependencies {
+    implementation project(":core")
+    api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+}
+
 android {
     namespace "org.example"
-    // The version of the SDK used to compile your app
     compileSdk 34
-
     defaultConfig {
         applicationId "org.example"
         minSdk 19
@@ -12,38 +21,44 @@ android {
         versionCode 1
         versionName "1.0"
     }
-
     sourceSets {
         main {
-            manifest.srcFile 'AndroidManifest.xml'
+            manifest.srcFile 'src/main/AndroidManifest.xml'
             java.srcDirs = ['src/main/java']
-            aidl.srcDirs = ['src/main/java']
-            renderscript.srcDirs = ['src/main/java']
-            res.srcDirs = ['res']
-            assets.srcDirs = ['assets']
+            res.srcDirs = ['src/main/res']
+            assets.srcDirs = ['../assets']
             jniLibs.srcDirs = ['libs']
         }
     }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 }
 
-// This task copies the natives into the right place for Android
-tasks.register('copyNatives') {
+task copyNatives {
     doFirst {
-        configurations.natives.copy().forEach { f ->
-            copy {
-                from f
-                into "libs/armeabi-v7a"
-                if (f.name.contains("arm64-v8a")) into "libs/arm64-v8a"
-                if (f.name.contains("x86_64")) into "libs/x86_64"
-                if (f.name.contains("x86") && !f.name.contains("x86_64")) into "libs/x86"
+        configurations.natives.copy().files.each { jar ->
+            def outputDir = null
+            if (jar.name.contains("arm64-v8a")) outputDir = file("libs/arm64-v8a")
+            else if (jar.name.contains("armeabi-v7a")) outputDir = file("libs/armeabi-v7a")
+            else if (jar.name.contains("x86_64")) outputDir = file("libs/x86_64")
+            else if (jar.name.contains("x86")) outputDir = file("libs/x86")
+
+            if (outputDir != null) {
+                outputDir.mkdirs()
+                copy {
+                    from zipTree(jar)
+                    into outputDir
+                    include "*.so"
+                }
             }
         }
     }
 }
 
-preBuild.dependsOn copyNatives
+project.afterEvaluate {
+    tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") }.configureEach {
+        dependsOn copyNatives
+    }
+}
