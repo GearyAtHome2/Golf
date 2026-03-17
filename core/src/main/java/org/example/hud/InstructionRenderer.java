@@ -10,20 +10,21 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import org.example.input.GameInputProcessor;
 
 public class InstructionRenderer {
 
     private float instructionScrollY = 0;
     private final float MAX_SCROLL = 1400f; // Increased to accommodate the Clubs section
 
-    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport) {
+    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameInputProcessor input) {
         float delta = Gdx.graphics.getDeltaTime();
         float scrollSpeed = 450f * delta;
 
-        if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
         }
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) {
             instructionScrollY = Math.min(MAX_SCROLL, instructionScrollY + scrollSpeed);
         }
 

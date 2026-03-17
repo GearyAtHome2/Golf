@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.GameConfig;
+import org.example.input.GameInputProcessor;
 
 public class CameraController {
 
@@ -70,11 +71,11 @@ public class CameraController {
         return false;
     }
 
-    public void update(Vector3 ballPos) {
+    public void update(Vector3 ballPos, GameInputProcessor input) {
         if (isPaused) return;
         float delta = Gdx.graphics.getDeltaTime();
 
-        isOverhead = Gdx.input.isKeyPressed(Input.Keys.TAB);
+        isOverhead = input.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW);
 
         if (isOverhead) {
             updateOverheadMode(ballPos, delta);

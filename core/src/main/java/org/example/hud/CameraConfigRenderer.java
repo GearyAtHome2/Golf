@@ -12,6 +12,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.GameConfig;
+import org.example.input.GameInputProcessor;
 
 public class CameraConfigRenderer {
 
@@ -20,17 +21,17 @@ public class CameraConfigRenderer {
     private int selectedIndex = 0;
     private final int TOTAL_SETTINGS = 5;
 
-    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameConfig config) {
-        handleNavigation();
-        handleInteraction(config);
+    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameConfig config, GameInputProcessor input) {
+        handleNavigation(input);
+        handleInteraction(config, input);
 
         float delta = Gdx.graphics.getDeltaTime();
         float scrollSpeed = 450f * delta;
 
-        if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             scrollY = Math.max(0, scrollY - scrollSpeed);
         }
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) {
             scrollY = Math.min(MAX_SCROLL, scrollY + scrollSpeed);
         }
 
@@ -103,18 +104,18 @@ public class CameraConfigRenderer {
         batch.end();
     }
 
-    private void handleNavigation() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.W) || Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+    private void handleNavigation(GameInputProcessor input) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.MENU_UP)) {
             selectedIndex = (selectedIndex - 1 + TOTAL_SETTINGS) % TOTAL_SETTINGS;
         }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.S) || Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN)) {
             selectedIndex = (selectedIndex + 1) % TOTAL_SETTINGS;
         }
     }
 
-    private void handleInteraction(GameConfig config) {
-        boolean left = Gdx.input.isKeyJustPressed(Input.Keys.A) || Gdx.input.isKeyJustPressed(Input.Keys.LEFT);
-        boolean right = Gdx.input.isKeyJustPressed(Input.Keys.D) || Gdx.input.isKeyJustPressed(Input.Keys.RIGHT);
+    private void handleInteraction(GameConfig config, GameInputProcessor input) {
+        boolean left = input.isActionJustPressed(GameInputProcessor.Action.CYCLE_ANIMATION);
+        boolean right = input.isActionJustPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY);
 
         switch (selectedIndex) {
             case 0: // Control Style

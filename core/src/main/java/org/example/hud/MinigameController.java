@@ -17,6 +17,7 @@ import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
+import org.example.input.GameInputProcessor;
 import org.example.terrain.Terrain;
 
 public class MinigameController {
@@ -63,7 +64,7 @@ public class MinigameController {
         }
     }
 
-    public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff, ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font, Viewport viewport) {
+    public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff, ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font, Viewport viewport, GameInputProcessor input) {
         if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             cancel();
             return;
@@ -87,7 +88,7 @@ public class MinigameController {
                 if (engine.needlePos >= 1.0f) { engine.needlePos = 1.0f; engine.needleMovingRight = false; }
                 else if (engine.needlePos <= 0f) { engine.needlePos = 0f; engine.needleMovingRight = true; }
                 
-                if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) stopNeedle();
+                if (input.isActionJustPressed(GameInputProcessor.Action.STOP_NEEDLE)) stopNeedle();
             }
         } else {
             glowTimer -= delta;

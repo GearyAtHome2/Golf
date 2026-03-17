@@ -10,12 +10,22 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.*;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.Actor;
 import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.Ball;
 import org.example.ball.CompetitiveScore;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
+import org.example.input.GameInputProcessor;
+import org.example.input.MobileInputProcessor;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 
@@ -75,6 +85,10 @@ public class HUD {
     private Color shotFeedbackColor = Color.WHITE;
 
     private boolean mainMenuRequested = false;
+    
+    private Stage stage;
+    private Skin skin;
+    private boolean mobileUIInitialized = false;
 
     // Temporary vectors for HUD calculations to avoid allocation
     private final Vector3 tempV1 = new Vector3();
@@ -105,29 +119,101 @@ public class HUD {
     public void incrementShots() { shotCount++; }
     public void resetShots() { shotCount = 0; }
     public int getShotCount() { return shotCount; }
-    public void resize(int width, int height) { viewport.update(width, height, true); }
+    public void resize(int width, int height) { 
+        viewport.update(width, height, true); 
+        if (stage != null) stage.getViewport().update(width, height, true);
+    }
+    
+    public void setupMobileUI(MobileInputProcessor input) {
+        if (mobileUIInitialized) return;
+        
+        stage = new Stage(new ScreenViewport());
+        
+        // Note: For a real app we'd load a .json skin, but for now we create a basic one
+        skin = new Skin();
+        skin.add("default", font);
+        
+        TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
+        style.font = font;
+        style.up = null; // We could add textures here if available
+        style.down = null;
+        style.fontColor = Color.WHITE;
+        style.downFontColor = Color.YELLOW;
+
+        Table table = new Table();
+        table.setFillParent(true);
+        stage.addActor(table);
+
+        // Club Up/Down buttons
+        TextButton clubUp = new TextButton("[ Club + ]", style);
+        clubUp.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CLUB_UP);
+            }
+        });
+
+        TextButton clubDown = new TextButton("[ Club - ]", style);
+        clubDown.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CLUB_DOWN);
+            }
+        });
+
+        TextButton projBtn = new TextButton("[ PROJ ]", style);
+        projBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.PROJECTION);
+            }
+        });
+
+        // Power button (hold to charge)
+        TextButton powerBtn = new TextButton("[ HIT ]", style);
+        powerBtn.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, true);
+                return true;
+            }
+
+            @Override
+            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, false);
+            }
+        });
+
+        table.bottom().left().pad(20);
+        table.add(clubUp).pad(10);
+        table.add(clubDown).pad(10);
+        table.add(projBtn).pad(10);
+        table.add(powerBtn).pad(10);
+
+        mobileUIInitialized = true;
+    }
 
     public void renderStartMenu(int selection) {
         mainMenuRenderer.render(batch, font, viewport, selection);
     }
 
-    public void renderPauseMenu(boolean isPractice, LevelData levelData) {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.A)) {
+    public void renderPauseMenu(boolean isPractice, LevelData levelData, GameInputProcessor input) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) {
             config.animSpeed = GameConfig.AnimSpeed.values()[(config.animSpeed.ordinal() + 1) % GameConfig.AnimSpeed.values().length];
         }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.D)) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) {
             config.difficulty = GameConfig.Difficulty.values()[(config.difficulty.ordinal() + 1) % GameConfig.Difficulty.values().length];
         }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES)) {
             config.particlesEnabled = !config.particlesEnabled;
         }
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.M)) mainMenuRequested = true;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.I)) instructionsRequested = true;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.O)) cameraConfigRequested = true;
+        if (input.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) mainMenuRequested = true;
+        if (input.isActionJustPressed(GameInputProcessor.Action.HELP)) instructionsRequested = true;
+        if (input.isActionJustPressed(GameInputProcessor.Action.CAM_CONFIG)) cameraConfigRequested = true;
 
         // Handle seed copying specifically for visual feedback trigger
-        if (Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && levelData != null) {
             Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
             seedFeedbackTimer = 2.0f;
         }
@@ -160,17 +246,26 @@ public class HUD {
         batch.end();
     }
 
-    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore) {
+    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input) {
+        if (input instanceof MobileInputProcessor) {
+            setupMobileUI((MobileInputProcessor) input);
+            if (stage != null) {
+                Gdx.input.setInputProcessor(stage);
+                stage.act(Gdx.graphics.getDeltaTime());
+                stage.draw();
+            }
+        }
+        
         float delta = Gdx.graphics.getDeltaTime();
         this.isPracticeState = isPractice;
 
         if (!minigameController.isActive()) {
-            updateSpinInput(delta);
-            if (Gdx.input.isKeyJustPressed(Input.Keys.F)) {
+            updateSpinInput(delta, input);
+            if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
                 distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
                 distanceDisplayTimer = 3.0f;
             }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.C) && levelData != null) {
+            if (input.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && levelData != null) {
                 Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
                 seedFeedbackTimer = 2.0f;
             }
@@ -218,7 +313,7 @@ public class HUD {
         batch.end();
 
         if (minigameController.isActive()) {
-            minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport);
+            minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input);
             if (minigameController.isNeedleStopped() && minigameController.getGlowTimer() >= 0.98f) {
                 MinigameResult res = minigameController.getResult();
                 shotFeedbackTimer = 1.5f;
@@ -422,20 +517,22 @@ public class HUD {
         spinDot.set(0, 0);
     }
 
-    public void updateSpinInput(float d) {
-        if (Gdx.input.isKeyPressed(Input.Keys.W)) spinDot.y = MathUtils.clamp(spinDot.y + d * 2, -1f, 1f);
-        if (Gdx.input.isKeyPressed(Input.Keys.S)) spinDot.y = MathUtils.clamp(spinDot.y - d * 2, -1f, 1f);
-        if (Gdx.input.isKeyPressed(Input.Keys.A)) spinDot.x = MathUtils.clamp(spinDot.x - d * 2, -1f, 1f);
-        if (Gdx.input.isKeyPressed(Input.Keys.D)) spinDot.x = MathUtils.clamp(spinDot.x + d * 2, -1f, 1f);
+    public void updateSpinInput(float d, GameInputProcessor input) {
+        if (input.isActionPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) spinDot.x = MathUtils.clamp(spinDot.x - d * 2, -1f, 1f); // Reusing A/D
+        if (input.isActionPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) spinDot.x = MathUtils.clamp(spinDot.x + d * 2, -1f, 1f);
+        
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) spinDot.y = MathUtils.clamp(spinDot.y + d * 2, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) spinDot.y = MathUtils.clamp(spinDot.y - d * 2, -1f, 1f);
+        
         if (spinDot.len() > 1f) spinDot.nor();
     }
 
-    public void renderInstructions() { instructionRenderer.render(batch, shapeRenderer, font, viewport); }
+    public void renderInstructions(GameInputProcessor input) { instructionRenderer.render(batch, shapeRenderer, font, viewport, input); }
     public boolean wasInstructionsRequested() { return instructionsRequested; }
     public void clearInstructionsRequest() { instructionsRequested = false; }
     public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
 
-    public void renderCameraConfig() { cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config); }
+    public void renderCameraConfig(GameInputProcessor input) { cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config, input); }
     public boolean wasCameraConfigRequested() { return cameraConfigRequested; }
     public void clearCameraConfigRequest() { cameraConfigRequested = false; }
     public void resetCameraConfigScroll() { cameraConfigRenderer.resetScroll(); }

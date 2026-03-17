@@ -14,6 +14,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import org.example.Club;
 import org.example.hud.HUD;
+import org.example.input.GameInputProcessor;
 import org.example.terrain.Terrain;
 
 public class ShotController {
@@ -96,7 +97,7 @@ public class ShotController {
         cancelCooldown = CANCEL_COOLDOWN_TIME;
     }
 
-    public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud, Terrain terrain) {
+    public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud, Terrain terrain, GameInputProcessor input) {
         animationTimer += delta;
         if (cancelCooldown > 0) cancelCooldown -= delta;
 
@@ -105,6 +106,10 @@ public class ShotController {
 
         if (ballIsStationary) {
             calculateShotVector(projectionVector, camDir, club, hud, terrain, 0f);
+        }
+
+        if (input.isActionJustPressed(GameInputProcessor.Action.PROJECTION)) {
+            toggleGuideline();
         }
 
         if (waitingForMinigame) {
@@ -137,23 +142,18 @@ public class ShotController {
             return false;
         }
 
-        if (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+        if (input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT)) {
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
                 isCharging = false;
-                spaceHoldTime = 0;
                 isPowerLocked = true;
                 lockedPower = MAX_POWER;
                 lockTimer = 0;
-                return false;
+                spaceHoldTime = 0;
             }
-        }
-
-        if (isCharging && Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
-            reset();
             return false;
         }
 
-        if (Gdx.input.isKeyPressed(Input.Keys.SPACE)) {
+        if (input.isActionPressed(GameInputProcessor.Action.CHARGE_SHOT)) {
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
                 isCharging = true;
                 spaceHoldTime = Math.min(spaceHoldTime + (delta * 2f), MAX_POWER);
