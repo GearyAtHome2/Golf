@@ -44,8 +44,14 @@ public class MobileUIFactory {
 
         ui.skin.add("btnUp", createRoundedRectDrawable(new Color(0.2f, 0.2f, 0.2f, 0.5f), 12), Drawable.class);
         ui.skin.add("btnDown", createRoundedRectDrawable(new Color(0.4f, 0.4f, 0.4f, 0.7f), 12), Drawable.class);
+
+        // Standard HIT colors
         ui.skin.add("hitUp", createRoundedRectDrawable(new Color(0.8f, 0.2f, 0.2f, 0.7f), 15), Drawable.class);
         ui.skin.add("hitDown", createRoundedRectDrawable(new Color(0.5f, 0.1f, 0.1f, 0.8f), 15), Drawable.class);
+
+        // MAX HIT colors (Darker red/maroon)
+        ui.skin.add("maxHitUp", createRoundedRectDrawable(new Color(0.5f, 0.05f, 0.05f, 0.75f), 15), Drawable.class);
+        ui.skin.add("maxHitDown", createRoundedRectDrawable(new Color(0.3f, 0.02f, 0.02f, 0.85f), 15), Drawable.class);
 
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
         style.font = font;
@@ -79,9 +85,28 @@ public class MobileUIFactory {
         leftStack.add(spinIndicator).size(160).bottom().left().expandY().padBottom(20);
 
         // RIGHT SIDE: HIT + Controls
-        // Moved up halfway: Spacer reduced from 280 to 220
-        rightStack.add().height(220).row();
+        // Spacer reduced slightly to accommodate the extra button in the vertical stack
+        rightStack.add().height(180).row();
 
+        // --- MAX BUTTON (New) ---
+        TextButton maxBtn = new TextButton("MAX", style);
+        TextButton.TextButtonStyle maxStyle = new TextButton.TextButtonStyle(style);
+        maxStyle.up = ui.skin.getDrawable("maxHitUp");
+        maxStyle.down = ui.skin.getDrawable("maxHitDown");
+        maxBtn.setStyle(maxStyle);
+        maxBtn.addListener(new InputListener() {
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                input.setActionState(GameInputProcessor.Action.MAX_POWER_SHOT, true);
+                return true;
+            }
+            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                input.setActionState(GameInputProcessor.Action.MAX_POWER_SHOT, false);
+            }
+        });
+        // Slightly smaller width/height than the main HIT button
+        rightStack.add(maxBtn).width(200).height(110).right().padBottom(10).row();
+
+        // --- HIT BUTTON ---
         TextButton hitBtn = new TextButton("HIT", style);
         TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
         hitStyle.up = ui.skin.getDrawable("hitUp");
@@ -97,7 +122,7 @@ public class MobileUIFactory {
                 input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
             }
         });
-        rightStack.add(hitBtn).width(240).height(150).top().right().padBottom(15).row();
+        rightStack.add(hitBtn).width(240).height(150).right().padBottom(15).row();
 
         ui.resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, whitePixel);
         ui.newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, whitePixel);
@@ -105,7 +130,6 @@ public class MobileUIFactory {
         rightStack.add(ui.resetBallBtn).width(btnW).height(110).right().padBottom(15).row();
         rightStack.add(ui.newMapBtn).width(btnW).height(110).right().expandY().top().row();
 
-        // INFO button restored to original padding
         ui.infoToggleBtn = new TextButton("INFO", style);
         rightStack.add(ui.infoToggleBtn).width(120).height(80).bottom().right().padBottom(250);
 
