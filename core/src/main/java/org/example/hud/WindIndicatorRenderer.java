@@ -17,24 +17,27 @@ public class WindIndicatorRenderer {
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, Vector3 wind, Camera camera) {
         if (wind == null) return;
 
+        // Position in top right
         float centerX = viewport.getWorldWidth() - 100;
         float centerY = viewport.getWorldHeight() - 100;
         float radius = 50f;
 
-        float windAngle = MathUtils.atan2(wind.z, wind.x);
-        float camAngle = MathUtils.atan2(camera.direction.z, camera.direction.x);
-        float displayAngle = (windAngle - camAngle) * MathUtils.radDeg + 90f;
+        float windAngle = MathUtils.atan2(wind.z, wind.x) * MathUtils.radDeg;
+        float camAngle = MathUtils.atan2(camera.direction.z, camera.direction.x) * MathUtils.radDeg;
 
-        // 1. Pause batch and enable Blending
+        float displayAngle = (camAngle - windAngle) + 90f;
+
+        // 1. Pause batch and enable Blending for the circle background
         batch.end();
 
         Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA, com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
 
+        shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
         // 2. Draw Translucent Circle
-        shapeRenderer.setColor(0, 0, 0, 0.4f); // 0.4f is 40% opacity
+        shapeRenderer.setColor(0, 0, 0, 0.4f);
         shapeRenderer.circle(centerX, centerY, radius);
 
         // 3. Draw the Arrow
@@ -57,22 +60,27 @@ public class WindIndicatorRenderer {
         layout.setText(font, speed);
         font.draw(batch, speed, centerX - layout.width / 2, centerY - 65);
     }
+
     private void drawArrow(ShapeRenderer sr, float x, float y, float degrees, float size) {
+        // Convert to radians for manual point calculation
         float rad = degrees * MathUtils.degreesToRadians;
 
         // Arrow Tip
         float tipX = x + MathUtils.cos(rad) * size;
         float tipY = y + MathUtils.sin(rad) * size;
 
-        // Base points
-        float baseLeftX = x + MathUtils.cos(rad + 2.5f) * (size * 0.3f);
-        float baseLeftY = y + MathUtils.sin(rad + 2.5f) * (size * 0.3f);
-        float baseRightX = x + MathUtils.cos(rad - 2.5f) * (size * 0.3f);
-        float baseRightY = y + MathUtils.sin(rad - 2.5f) * (size * 0.3f);
+        // Base points: We use a smaller offset for the "back" of the triangle
+        // 2.5 and -2.5 radians are roughly 140 degrees away from the tip,
+        // creating a sharp arrowhead.
+        float baseLeftX = x + MathUtils.cos(rad + 2.4f) * (size * 0.4f);
+        float baseLeftY = y + MathUtils.sin(rad + 2.4f) * (size * 0.4f);
+        float baseRightX = x + MathUtils.cos(rad - 2.4f) * (size * 0.4f);
+        float baseRightY = y + MathUtils.sin(rad - 2.4f) * (size * 0.4f);
 
+        // Main Triangle
         sr.triangle(tipX, tipY, baseLeftX, baseLeftY, baseRightX, baseRightY);
 
-        // Draw a small line for the tail to make it look "classic"
+        // Stem of the arrow
         sr.rectLine(x, y, tipX, tipY, 3f);
     }
 }

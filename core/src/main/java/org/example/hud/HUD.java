@@ -1,7 +1,6 @@
 package org.example.hud;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -9,23 +8,20 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.*;
-import com.badlogic.gdx.utils.viewport.ScreenViewport;
-import com.badlogic.gdx.utils.viewport.Viewport;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
-import com.badlogic.gdx.scenes.scene2d.InputListener;
-import com.badlogic.gdx.scenes.scene2d.InputEvent;
-import com.badlogic.gdx.scenes.scene2d.Actor;
-import com.badlogic.gdx.graphics.g2d.NinePatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
-import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
-import com.badlogic.gdx.graphics.g2d.Batch;
+import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.Ball;
@@ -42,17 +38,8 @@ import static org.example.hud.UIUtils.createRoundedRectDrawable;
 public class HUD {
     private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
 
-    private float hazardTimer = 0;
-    private String hazardText = "";
-    private Color hazardColor = Color.WHITE;
-    private boolean isPracticeState = false; // Track this for penalty display
     private boolean instructionsRequested = false;
     private boolean cameraConfigRequested = false;
-
-    private float persistentShotDistance = 0f;
-    private float maxDistanceSeen = 0f;
-    private float shotDistanceDisplayTimer = 0f;
-    private boolean ballWasActive = false;
     private final SpriteBatch batch;
     private final ShapeRenderer shapeRenderer;
     private final BitmapFont font;
@@ -66,9 +53,8 @@ public class HUD {
     private final ClubInfoRenderer clubInfoRenderer = new ClubInfoRenderer();
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
     private final NotificationManager notificationManager = new NotificationManager();
-
+    private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
     private int shotCount = 0;
-    private float lastDisplayedSpin = 0f;
     private final Vector2 spinDot = new Vector2(0, 0);
     private final float SPIN_UI_RADIUS = 50f;
 
@@ -80,7 +66,7 @@ public class HUD {
     private Color shotFeedbackColor = Color.WHITE;
 
     private boolean mainMenuRequested = false;
-    
+
     private Stage stage;
     private Skin skin;
     private Stage startMenuStage;
@@ -136,22 +122,31 @@ public class HUD {
         font.draw(batch, text, x, y);
     }
 
-    public void incrementShots() { shotCount++; }
-    public void resetShots() { shotCount = 0; }
-    public int getShotCount() { return shotCount; }
-    public void resize(int width, int height) { 
-        viewport.update(width, height, true); 
+    public void incrementShots() {
+        shotCount++;
     }
-    
+
+    public void resetShots() {
+        shotCount = 0;
+    }
+
+    public int getShotCount() {
+        return shotCount;
+    }
+
+    public void resize(int width, int height) {
+        viewport.update(width, height, true);
+    }
+
     public void setupMobileUI(MobileInputProcessor input) {
         if (mobileUIInitialized) return;
         System.out.println("[DEBUG_LOG] HUD.setupMobileUI() - Starting");
-        
+
         // Use the same viewport to ensure coordinates match manual text rendering
         stage = new Stage(viewport, batch);
         startMenuStage = new Stage(viewport, batch);
         pauseMenuStage = new Stage(viewport, batch);
-        
+
         System.out.println("[DEBUG_LOG] HUD.setupMobileUI() - Stages created");
         skin = new Skin();
         skin.add("default", font);
@@ -250,6 +245,7 @@ public class HUD {
                 input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, true);
                 return true;
             }
+
             @Override
             public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
                 System.out.println("[DEBUG_LOG] HIT button touchUp - pointer: " + pointer);
@@ -499,7 +495,6 @@ public class HUD {
         }
 
         float delta = Gdx.graphics.getDeltaTime();
-        this.isPracticeState = isPractice;
 
         notificationManager.update(delta);
 
@@ -556,19 +551,7 @@ public class HUD {
     }
 
     private void updatePracticeDistanceLogic(Ball ball) {
-        Ball.State s = ball.getState();
-        boolean isMoving = (s == Ball.State.AIR || s == Ball.State.ROLLING || s == Ball.State.CONTACT);
-        if (isMoving) {
-            ballWasActive = true;
-            float currentShotDist = ball.getShotDistance();
-            if (currentShotDist > maxDistanceSeen) maxDistanceSeen = currentShotDist;
-            shotDistanceDisplayTimer = 0f;
-        } else if (s == Ball.State.STATIONARY && ballWasActive) {
-            persistentShotDistance = maxDistanceSeen;
-            shotDistanceDisplayTimer = 5.0f;
-            ballWasActive = false;
-            maxDistanceSeen = 0f;
-        }
+        distanceTracker.update(Gdx.graphics.getDeltaTime(), ball);
     }
 
     private void renderOverlays(Club currentClub, Camera gameCamera, Terrain terrain, GameInputProcessor input, float delta, boolean showClubInfo) {
@@ -692,25 +675,35 @@ public class HUD {
 
         String spinStr = String.format("Spin: %.1fk (%s)", (currentSpinMag * 100f) / 1000f, spinLabel);
         drawShadowedText(spinStr, rightX, 100, (currentSpinMag < 0.1f) ? Color.GRAY : typeColor);
-        lastDisplayedSpin = currentSpinMag;
 
         drawShadowedText(String.format("Speed: %.1fx", config.getGameSpeed()), rightX, 60, Color.WHITE);
     }
 
     private void renderShotDistance(Ball ball, float delta) {
-        float toRender = 0;
-        Ball.State state = ball.getState();
-        boolean isMoving = (state == Ball.State.AIR || state == Ball.State.ROLLING || state == Ball.State.CONTACT);
-        if (isMoving) {
-            toRender = ball.getShotDistance();
+        boolean isMoving = ball.getState() == Ball.State.AIR ||
+                ball.getState() == Ball.State.ROLLING ||
+                ball.getState() == Ball.State.CONTACT;
+
+        if (isMoving || distanceTracker.shouldShow()) {
+            float distanceToShow = isMoving ? ball.getShotDistance() : distanceTracker.getDisplayDistance();
+
             font.getData().setScale(1.4f);
-            drawShadowedText(String.format("SHOT DISTANCE: %.1f yds", toRender), viewport.getWorldWidth() - 300, 200, Color.WHITE);
-        } else if (shotDistanceDisplayTimer > 0) {
-            toRender = persistentShotDistance;
-            shotDistanceDisplayTimer -= delta;
-            font.getData().setScale(1.4f);
-            Color fadeColor = new Color(1f, 0.85f, 0f, MathUtils.clamp(shotDistanceDisplayTimer, 0, 1));
-            drawShadowedText(String.format("SHOT DISTANCE: %.1f yds", toRender), viewport.getWorldWidth() - 300, 200, fadeColor);
+
+            if (!isMoving) {
+                float alpha = MathUtils.clamp(distanceTracker.getTimer(), 0, 1);
+                font.setColor(1f, 0.85f, 0f, alpha); // Golden yellow fade
+            } else {
+                font.setColor(Color.WHITE);
+            }
+
+            drawShadowedText(
+                    String.format("SHOT DISTANCE: %.1f yds", distanceToShow),
+                    viewport.getWorldWidth() - 300,
+                    200,
+                    font.getColor()
+            );
+
+            font.setColor(Color.WHITE);
         }
     }
 
@@ -735,80 +728,16 @@ public class HUD {
         shapeRenderer.end();
     }
 
-    private void renderFeedbackMessages(float delta) {
-        if (shotFeedbackTimer > 0) {
-            shotFeedbackTimer -= delta;
-            font.getData().setScale(2.5f * (shotFeedbackTimer / 1.5f + 0.5f));
-            Color fadeColor = new Color(shotFeedbackColor.r, shotFeedbackColor.g, shotFeedbackColor.b, Math.min(1, shotFeedbackTimer * 2));
-            drawShadowedText(shotFeedbackText, viewport.getWorldWidth() / 2f - 150, viewport.getWorldHeight() / 2f + 150, fadeColor);
-        }
-    }
-
-    private void renderShotDebug(Vector3 ballPos, Vector3 aimDir, Terrain terrain) {
-        ShotDifficulty diff = terrain.getShotDifficulty(ballPos.x, ballPos.z, aimDir);
-        Vector3 normal = terrain.getNormalAt(ballPos.x, ballPos.z);
-        float sidePush = normal.dot(new Vector3(aimDir).crs(Vector3.Y).nor());
-        font.getData().setScale(1f);
-        float dy = 250;
-        drawShadowedText("--- PRE-SHOT DEBUG ---", 40, dy, Color.YELLOW);
-        drawShadowedText("Terrain: " + terrain.getTerrainTypeAt(ballPos.x, ballPos.z) + " (x" + String.format("%.2f", diff.terrainDifficulty) + ")", 40, dy - 20, Color.YELLOW);
-        drawShadowedText(String.format("Slope Multiplier: %.2fx", diff.slopeDifficulty), 40, dy - 40, Color.YELLOW);
-        if (Math.abs(sidePush) > 0.05f) {
-            Color kickColor = sidePush > 0 ? Color.RED : Color.CYAN;
-            drawShadowedText(String.format("Terrain Kick: %s (%.2f)", (sidePush > 0 ? "RIGHT" : "LEFT"), sidePush), 40, dy - 60, kickColor);
-        }
-    }
-
     public void logShotInitiated(Vector3 ballPos, Club club, Terrain terrain, ShotDifficulty diff, float powerMod) {
         minigameController.start(ballPos, club, diff, powerMod, config.animSpeed, config.difficulty);
-        this.maxDistanceSeen = 0f;
-    }
-
-    private void renderWindIndicator(Vector3 worldWind, Camera camera) {
-        float uiX = viewport.getWorldWidth() - 80, uiY = viewport.getWorldHeight() - 80, radius = 40f;
-        
-        batch.end();
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line); shapeRenderer.setColor(Color.WHITE); shapeRenderer.circle(uiX, uiY, radius); shapeRenderer.end();
-        if (worldWind.len() > 0.1f) {
-            Vector3 camForward = new Vector3(camera.direction.x, 0, camera.direction.z).nor();
-            Vector3 camRight = new Vector3(camera.direction).crs(camera.up).nor();
-            camRight.y = 0; camRight.nor();
-            float angle = MathUtils.atan2(worldWind.dot(camForward), worldWind.dot(camRight));
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled); shapeRenderer.setColor(Color.YELLOW);
-            shapeRenderer.rectLine(uiX - MathUtils.cos(angle) * 30, uiY - MathUtils.sin(angle) * 30, uiX + MathUtils.cos(angle) * 30, uiY + MathUtils.sin(angle) * 30, 3f);
-            shapeRenderer.triangle(uiX + MathUtils.cos(angle) * radius, uiY + MathUtils.sin(angle) * radius, uiX + MathUtils.cos(angle + 2.6f) * 15, uiY + MathUtils.sin(angle + 2.6f) * 15, uiX + MathUtils.cos(angle - 2.6f) * 15, uiY + MathUtils.sin(angle - 2.6f) * 15);
-            shapeRenderer.end();
-        }
-        batch.begin();
-        font.getData().setScale(1.2f); drawShadowedText(String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10, Color.WHITE);
     }
 
     public void showWaterHazard() {
-        notificationManager.showHazard("WATER HAZARD", Color.CYAN, 1.1f);}
+        notificationManager.showHazard("WATER HAZARD", Color.CYAN, 1.1f);
+    }
 
     public void showOutOfBounds() {
         notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f);
-    }
-
-    private void renderHazardPopUp(float delta) {
-        if (hazardTimer > 0) {
-            hazardTimer -= delta;
-            float centerX = viewport.getWorldWidth() / 2f;
-            float centerY = viewport.getWorldHeight() / 2f;
-            float alpha = MathUtils.clamp(hazardTimer * 2f, 0, 1);
-
-            // Main Hazard Text
-            font.getData().setScale(3.0f * (1.0f + (MathUtils.sin(hazardTimer * 10f) * 0.1f)));
-            Color mainColor = new Color(hazardColor.r, hazardColor.g, hazardColor.b, alpha);
-            drawShadowedText(hazardText, centerX - 200, centerY + 100, mainColor);
-
-            // Penalty Text (only if not practice)
-            if (!isPracticeState) {
-                font.getData().setScale(1.5f);
-                Color penaltyColor = new Color(1, 0, 0, alpha); // Pure Red
-                drawShadowedText("+1 STROKE PENALTY", centerX - 120, centerY + 40, penaltyColor);
-            }
-        }
     }
 
     public void renderVictory(int shots, LevelData levelData, CompetitiveScore compScore) {
@@ -817,7 +746,7 @@ public class HUD {
         batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, compScore);
         batch.end();
-        
+
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && stage != null) {
             stage.act();
             stage.draw();
@@ -828,7 +757,6 @@ public class HUD {
         if (gameplayTable != null) gameplayTable.setVisible(true);
         if (victoryTable != null) victoryTable.setVisible(false);
         minigameController.reset();
-        hazardTimer = 0;
         shotFeedbackTimer = 0;
         distanceDisplayTimer = 0;
         seedFeedbackTimer = 0;
@@ -863,37 +791,88 @@ public class HUD {
         cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config, input);
         batch.end();
     }
-    public boolean wasCameraConfigRequested() { return cameraConfigRequested; }
-    public void clearCameraConfigRequest() { cameraConfigRequested = false; }
-    public void resetCameraConfigScroll() { cameraConfigRenderer.resetScroll(); }
-    public boolean isTouchInsideCameraConfig(float x, float y) { return cameraConfigRenderer.isClickInside(x, y); }
 
-    public boolean wasInstructionsRequested() { return instructionsRequested; }
-    public void clearInstructionsRequest() { instructionsRequested = false; }
-    public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
-    public boolean isTouchInsideInstructions(float x, float y) { return instructionRenderer.isClickInside(x, y); }
+    public boolean wasCameraConfigRequested() {
+        return cameraConfigRequested;
+    }
+
+    public void clearCameraConfigRequest() {
+        cameraConfigRequested = false;
+    }
+
+    public void resetCameraConfigScroll() {
+        cameraConfigRenderer.resetScroll();
+    }
+
+    public boolean isTouchInsideCameraConfig(float x, float y) {
+        return cameraConfigRenderer.isClickInside(x, y);
+    }
+
+    public boolean wasInstructionsRequested() {
+        return instructionsRequested;
+    }
+
+    public void clearInstructionsRequest() {
+        instructionsRequested = false;
+    }
+
+    public void resetInstructionScroll() {
+        instructionRenderer.resetScroll();
+    }
+
+    public boolean isTouchInsideInstructions(float x, float y) {
+        return instructionRenderer.isClickInside(x, y);
+    }
+
     public boolean isTouchInsideClubInfo(float x, float y) {
         float width = 320f, height = 200f;
         float boxX = viewport.getWorldWidth() - width - 20;
         float boxY = 220f; // Matches target y in renderClubInfo
         return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
     }
+
     public void setClubInfoVisible(boolean visible) {
         if (infoToggleBtn != null) infoToggleBtn.setVisible(!visible);
     }
 
-    public boolean isMinigameComplete() { return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null; }
-    public boolean wasMinigameCanceled() { return minigameController.wasCanceled(); }
-    public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }
-    public MinigameResult getMinigameResult() { return minigameController.getResult(); }
-    public Vector2 getSpinOffset() { return spinDot; }
-    public Stage getStage() { return stage != null ? stage : new Stage(viewport, batch); }
-    public Stage getStartMenuStage() { return startMenuStage != null ? startMenuStage : new Stage(viewport, batch); }
-    public Stage getPauseMenuStage() { return pauseMenuStage != null ? pauseMenuStage : new Stage(viewport, batch); }
-    public void dispose() { 
-        batch.dispose(); 
-        shapeRenderer.dispose(); 
-        font.dispose(); 
+    public boolean isMinigameComplete() {
+        return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null;
+    }
+
+    public boolean wasMinigameCanceled() {
+        return minigameController.wasCanceled();
+    }
+
+    public boolean wasMainMenuRequested() {
+        boolean m = mainMenuRequested;
+        mainMenuRequested = false;
+        return m;
+    }
+
+    public MinigameResult getMinigameResult() {
+        return minigameController.getResult();
+    }
+
+    public Vector2 getSpinOffset() {
+        return spinDot;
+    }
+
+    public Stage getStage() {
+        return stage != null ? stage : new Stage(viewport, batch);
+    }
+
+    public Stage getStartMenuStage() {
+        return startMenuStage != null ? startMenuStage : new Stage(viewport, batch);
+    }
+
+    public Stage getPauseMenuStage() {
+        return pauseMenuStage != null ? pauseMenuStage : new Stage(viewport, batch);
+    }
+
+    public void dispose() {
+        batch.dispose();
+        shapeRenderer.dispose();
+        font.dispose();
         if (whitePixel != null) whitePixel.dispose();
         if (stage != null) stage.dispose();
         if (startMenuStage != null) startMenuStage.dispose();
