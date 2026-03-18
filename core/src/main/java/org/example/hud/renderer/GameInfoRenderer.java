@@ -51,9 +51,9 @@ public class GameInfoRenderer {
             drawShadowedText(batch, font, "Shots: " + shotCount, marginX, shotsY, Color.WHITE);
 
             float rightX = viewport.getWorldWidth() * 0.84f;
-            font.getData().setScale(2.2f * uiScale);
-            drawShadowedText(batch, font, club.name().replace("_", " "), rightX + 130, 150 * uiScale, Color.WHITE);
-            renderDebugInfo(batch, font, config, ball, terrain, rightX + 130, 100 * uiScale, 60 * uiScale, uiScale);
+            font.getData().setScale(2.4f * uiScale);
+            drawShadowedText(batch, font, club.name().replace("_", " "), rightX + 130, 140 * uiScale, Color.WHITE);
+            renderDebugInfo(batch, font, config, ball, terrain, rightX + 130, 80 * uiScale, 60 * uiScale, uiScale);
 
         } else {
 
