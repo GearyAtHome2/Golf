@@ -41,7 +41,6 @@ public class CameraController {
     }
 
     public void updateCursorState() {
-        // Only catch if in FREE mode AND not paused
         if (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !isPaused) {
             Gdx.input.setCursorCatched(true);
         } else {

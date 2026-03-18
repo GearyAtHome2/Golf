@@ -250,9 +250,11 @@ public class GolfGame extends ApplicationAdapter {
             renderUI();
         }
 
-        // 6. Final Profiler Step: Update the timer and log if 1 second has passed
-        // We do this at the very end of the frame so it captures everything.
 //        PhysicsProfiler.updateAndLog(delta);
+
+        if (inputProcessor instanceof MobileInputProcessor) {
+            ((MobileInputProcessor) inputProcessor).resetDrags();
+        }
     }
 
     private void updateLogic(float delta) {
