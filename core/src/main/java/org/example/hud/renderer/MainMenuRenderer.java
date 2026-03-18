@@ -69,7 +69,7 @@ public class MainMenuRenderer {
 
         font.getData().setScale(isAndroid ? 1.5f : 1f);
         font.setColor(Color.GRAY);
-        String hint = isAndroid ? "Tap options directly to select" : "Use UP/DOWN to select, ENTER to start";
+        String hint = isAndroid ? "" : "Use UP/DOWN to select, ENTER to start";
         font.draw(batch, hint, centerX - (isAndroid ? 180 : 130), centerY - (spacing * 5));
     }
 
