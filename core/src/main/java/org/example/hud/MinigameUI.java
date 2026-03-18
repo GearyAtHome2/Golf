@@ -16,7 +16,7 @@ public class MinigameUI {
     public void draw(ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font,
                      float screenW, float screenH, MinigameEngine engine,
                      float barSwellTimer, float glowTimer, Color glowColor,
-                     Array<HUD.ModAnimation> activeAnims) {
+                     Array<ModAnimation> activeAnims) {
 
         float width = screenW * 0.6f;
         float baseH = 30f;
@@ -77,7 +77,7 @@ public class MinigameUI {
         // 8. Text Animations
         if (activeAnims.size > 0) {
             batch.begin();
-            for (HUD.ModAnimation anim : activeAnims) {
+            for (ModAnimation anim : activeAnims) {
                 font.getData().setScale(1.5f * anim.scale);
                 font.setColor(anim.color.r, anim.color.g, anim.color.b, anim.alpha);
                 font.draw(batch, anim.text, greenCx - 80, (screenH - 150f) + anim.yOffset);

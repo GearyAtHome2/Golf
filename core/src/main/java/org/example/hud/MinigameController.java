@@ -23,7 +23,7 @@ import org.example.terrain.Terrain;
 public class MinigameController {
     private final MinigameEngine engine = new MinigameEngine();
     private final MinigameUI minigameUI = new MinigameUI();
-    private final Array<HUD.ModAnimation> activeAnims = new Array<>();
+    private final Array<ModAnimation> activeAnims = new Array<>();
 
     private boolean active = false;
     private boolean needleStopped = false;
@@ -125,7 +125,7 @@ public class MinigameController {
         if (animSetting != GameConfig.AnimSpeed.NONE) {
             Color c = (mult <= 1.05f) ? Color.GREEN : Color.RED;
             if (step == 4) c = Color.GOLD;
-            activeAnims.add(new HUD.ModAnimation(text, c));
+            activeAnims.add(new ModAnimation(text, c));
         }
     }
 
@@ -139,7 +139,7 @@ public class MinigameController {
 
     private void updateAnimations(float delta) {
         for (int i = activeAnims.size - 1; i >= 0; i--) {
-            HUD.ModAnimation anim = activeAnims.get(i);
+            ModAnimation anim = activeAnims.get(i);
             anim.life -= delta * 1.8f;
             float progress = 1.0f - anim.life;
             anim.yOffset = MathUtils.lerp(-5f, 45f, Interpolation.swingIn.apply(progress));

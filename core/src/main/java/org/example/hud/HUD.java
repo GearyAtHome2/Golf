@@ -37,6 +37,8 @@ import org.example.input.MobileInputProcessor;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 
+import static org.example.hud.UIUtils.createRoundedRectDrawable;
+
 public class HUD {
     private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
 
@@ -51,23 +53,6 @@ public class HUD {
     private float maxDistanceSeen = 0f;
     private float shotDistanceDisplayTimer = 0f;
     private boolean ballWasActive = false;
-
-    public static class ModAnimation {
-        public String text;
-        public float yOffset, alpha, scale, life;
-        public Color color;
-        public boolean hitBar = false;
-
-        public ModAnimation(String text, Color color) {
-            this.text = text;
-            this.color = color;
-            this.yOffset = -5f;
-            this.alpha = 0f;
-            this.scale = 0.8f;
-            this.life = 1.0f;
-        }
-    }
-
     private final SpriteBatch batch;
     private final ShapeRenderer shapeRenderer;
     private final BitmapFont font;
@@ -79,6 +64,8 @@ public class HUD {
     private final CameraConfigRenderer cameraConfigRenderer = new CameraConfigRenderer();
     private final VictoryRenderer victoryRenderer = new VictoryRenderer();
     private final ClubInfoRenderer clubInfoRenderer = new ClubInfoRenderer();
+    private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
+    private final NotificationManager notificationManager = new NotificationManager();
 
     private int shotCount = 0;
     private float lastDisplayedSpin = 0f;
@@ -117,82 +104,6 @@ public class HUD {
     private Texture whitePixel;
 
     private void setupCamera() {
-    }
-
-    private Drawable createRoundedRectDrawable(Color color, int radius) {
-        int size = 64; 
-        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pixmap.setBlending(Pixmap.Blending.None);
-        pixmap.setColor(0, 0, 0, 0);
-        pixmap.fill();
-        
-        pixmap.setColor(color);
-        pixmap.fillRectangle(radius, 0, size - 2 * radius, size);
-        pixmap.fillRectangle(0, radius, size, size - 2 * radius);
-        pixmap.fillCircle(radius, radius, radius);
-        pixmap.fillCircle(size - radius, radius, radius);
-        pixmap.fillCircle(radius, size - radius, radius);
-        pixmap.fillCircle(size - radius, size - radius, radius);
-        
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-        pixmap.dispose();
-        
-        return new NinePatchDrawable(new NinePatch(new TextureRegion(texture), radius, radius, radius, radius));
-    }
-
-    private class HoldButton extends TextButton {
-        private float holdTime = 0;
-        private final float requiredTime = 1.2f;
-        private final GameInputProcessor.Action action;
-        private final MobileInputProcessor mobileInput;
-
-        public HoldButton(String text, TextButtonStyle style, GameInputProcessor.Action action, MobileInputProcessor mobileInput) {
-            super(text, style);
-            this.action = action;
-            this.mobileInput = mobileInput;
-            
-            addListener(new InputListener() {
-                @Override
-                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                    if (isDisabled()) return false;
-                    holdTime = 0;
-                    return true;
-                }
-
-                @Override
-                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-                    if (holdTime >= requiredTime) {
-                        mobileInput.triggerAction(action);
-                    }
-                    holdTime = 0;
-                }
-            });
-        }
-
-        @Override
-        public void act(float delta) {
-            super.act(delta);
-            if (isPressed() && !isDisabled()) {
-                holdTime += delta;
-            } else {
-                holdTime = 0;
-            }
-        }
-
-        @Override
-        public void draw(Batch batch, float parentAlpha) {
-            super.draw(batch, parentAlpha);
-            if (isPressed() && !isDisabled() && holdTime > 0) {
-                float progress = Math.min(holdTime / requiredTime, 1f);
-                float barW = getWidth() * progress;
-                float barH = getHeight();
-                
-                batch.setColor(1f, 1f, 1f, 0.4f);
-                batch.draw(whitePixel, getX(), getY(), barW, barH);
-                batch.setColor(Color.WHITE);
-            }
-        }
     }
 
     public HUD(GameConfig config) {
@@ -244,14 +155,12 @@ public class HUD {
         System.out.println("[DEBUG_LOG] HUD.setupMobileUI() - Stages created");
         skin = new Skin();
         skin.add("default", font);
-        
-        // Translucent gray rounded backgrounds
+
         Drawable btnUp = createRoundedRectDrawable(new Color(0.2f, 0.2f, 0.2f, 0.5f), 12);
         Drawable btnDown = createRoundedRectDrawable(new Color(0.4f, 0.4f, 0.4f, 0.7f), 12);
         skin.add("btnUp", btnUp, Drawable.class);
         skin.add("btnDown", btnDown, Drawable.class);
-        
-        // Dark Red for HIT button pressed state
+
         Drawable hitUp = createRoundedRectDrawable(new Color(0.8f, 0.2f, 0.2f, 0.7f), 15);
         Drawable hitDown = createRoundedRectDrawable(new Color(0.5f, 0.1f, 0.1f, 0.8f), 15);
         skin.add("hitUp", hitUp, Drawable.class);
@@ -348,18 +257,14 @@ public class HUD {
                 input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
             }
         });
-        
-        // HIT button at the top right
+
         rightStack.add(hitBtn).width(200).height(140).expandY().top().right().padTop(20).row();
 
-        // --- NEW BUTTONS (RESET & NEW MAP) ---
-        resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input);
-        newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input);
+        resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, whitePixel);
+        newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, whitePixel);
 
-        // Positioned between HIT and INFO, clearing the info box area (y=220-420)
-        // Enlarged and pushed UPWARDS from the bottom to avoid overlap
         rightStack.add(resetBallBtn).width(210).height(100).right().padBottom(20).row();
-        rightStack.add(newMapBtn).width(210).height(100).right().padBottom(150).row(); 
+        rightStack.add(newMapBtn).width(210).height(100).right().padBottom(150).row();
 
         infoToggleBtn = new TextButton("INFO", style);
         infoToggleBtn.addListener(new ChangeListener() {
@@ -369,8 +274,6 @@ public class HUD {
                 infoToggleBtn.setVisible(!showInfoDisplay);
             }
         });
-        // Positioned just above the club name text (e.g. above DRIVER at y=180)
-        // anchored at y=220 to match the club info renderer's display area
         rightStack.add(infoToggleBtn).width(120).height(80).bottom().right().padBottom(220);
 
         // --- VICTORY UI ---
@@ -589,10 +492,8 @@ public class HUD {
     }
 
     public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo) {
-        // 1. Ensure any previous batching is closed before we start UI logic
         if (batch.isDrawing()) batch.end();
 
-        // 2. Platform-specific initialization
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !mobileUIInitialized) {
             setupMobileUI((MobileInputProcessor) input);
         }
@@ -600,97 +501,125 @@ public class HUD {
         float delta = Gdx.graphics.getDeltaTime();
         this.isPracticeState = isPractice;
 
-        // 3. Logic Updates
+        notificationManager.update(delta);
+
+        // --- Logic Updates ---
         if (!minigameController.isActive()) {
             updateSpinInput(delta, input);
+            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+                this.spinDot.set(spinIndicator.getSpinDot());
+            }
             if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
                 distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
                 distanceDisplayTimer = 3.0f;
             }
-            if (input.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && levelData != null) {
-                Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
-                seedFeedbackTimer = 2.0f;
-            }
         }
 
         if (isPractice) {
-            Ball.State s = ball.getState();
-            boolean isMoving = (s == Ball.State.AIR || s == Ball.State.ROLLING || s == Ball.State.CONTACT);
-            if (isMoving) {
-                ballWasActive = true;
-                float currentShotDist = ball.getShotDistance();
-                if (currentShotDist > maxDistanceSeen) maxDistanceSeen = currentShotDist;
-                shotDistanceDisplayTimer = 0f;
-            } else if (s == Ball.State.STATIONARY && ballWasActive) {
-                persistentShotDistance = maxDistanceSeen;
-                shotDistanceDisplayTimer = 5.0f;
-                ballWasActive = false;
-                maxDistanceSeen = 0f;
-            }
+            updatePracticeDistanceLogic(ball);
         }
 
-        // 4. Update Actor Data (Essential for both Mobile and Desktop)
         preShotDebugActor.update(terrain, ball, gameCamera);
 
-        // 5. Render Mobile Stage (Buttons/Layout)
-        if (mobileUIInitialized && stage != null && Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            stage.getViewport().apply();
-            stage.act(delta);
-            stage.draw();
-        }
-
-        // 6. Manual Rendering Setup
+        // --- Render Setup ---
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
-        // 7. Render Spin UI (Desktop only)
+        // 1. Draw Shapes First (Spin UI)
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             drawSpinUI();
         }
 
-        // 8. Main HUD Batch
+        // 2. Main HUD Batch (Unified)
         batch.begin();
 
-        // --- DESKTOP DEBUG RENDER ---
+        // DRAW WIND FIRST (Top layer of the world, bottom layer of the HUD)
+        if (levelData != null) {
+            windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
+        }
+
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
-            // We set bounds manually because there is no Table layout on Desktop
             preShotDebugActor.setBounds(40, 150, 400, 140);
             preShotDebugActor.draw(batch, 1.0f);
         }
-        // ----------------------------
 
-        if (levelData != null) renderWindIndicator(levelData.getWind(), gameCamera);
-        renderFeedbackMessages(delta);
+        notificationManager.render(batch, font, viewport);
         renderDistanceDisplay(delta);
-        renderHazardPopUp(delta);
 
         if (isPractice) renderShotDistance(ball, delta);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore, terrain);
 
         batch.end();
 
-        // 9. Club Info Overlays
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+        renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo);
+    }
+
+    private void updatePracticeDistanceLogic(Ball ball) {
+        Ball.State s = ball.getState();
+        boolean isMoving = (s == Ball.State.AIR || s == Ball.State.ROLLING || s == Ball.State.CONTACT);
+        if (isMoving) {
+            ballWasActive = true;
+            float currentShotDist = ball.getShotDistance();
+            if (currentShotDist > maxDistanceSeen) maxDistanceSeen = currentShotDist;
+            shotDistanceDisplayTimer = 0f;
+        } else if (s == Ball.State.STATIONARY && ballWasActive) {
+            persistentShotDistance = maxDistanceSeen;
+            shotDistanceDisplayTimer = 5.0f;
+            ballWasActive = false;
+            maxDistanceSeen = 0f;
+        }
+    }
+
+    private void renderOverlays(Club currentClub, Camera gameCamera, Terrain terrain, GameInputProcessor input, float delta, boolean showClubInfo) {
+        if (mobileUIInitialized && stage != null && Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            stage.act(delta);
+            stage.draw();
+
             if (showInfoDisplay) {
                 renderClubInfo(currentClub);
-                if (Gdx.input.justTouched()) {
-                    tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-                    viewport.unproject(tempV3);
-                    if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
-                            tempV3.y > 220 && tempV3.y < 420) {
-                        showInfoDisplay = false;
-                        if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
-                    }
-                }
+                handleMobileInfoClick();
             }
         } else if (showClubInfo) {
             renderClubInfo(currentClub);
         }
 
-        // 10. Minigame Layer
         if (minigameController.isActive()) {
             minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input);
+        }
+    }
+
+    private void handleMobileInfoClick() {
+        if (Gdx.input.justTouched()) {
+            tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            viewport.unproject(tempV3);
+            if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
+                    tempV3.y > 220 && tempV3.y < 420) {
+                showInfoDisplay = false;
+                if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
+            }
+        }
+    }
+
+    private void updateSpinInput(float delta, GameInputProcessor input) {
+        float SPIN_SPEED = 2.0f; // Adjust this to change how fast the dot moves
+
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
+            spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
+        }
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) {
+            spinDot.y = MathUtils.clamp(spinDot.y - SPIN_SPEED * delta, -1f, 1f);
+        }
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT)) {
+            spinDot.x = MathUtils.clamp(spinDot.x - SPIN_SPEED * delta, -1f, 1f);
+        }
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT)) {
+            spinDot.x = MathUtils.clamp(spinDot.x + SPIN_SPEED * delta, -1f, 1f);
+        }
+
+        // Optional: Constrain to a circle if you don't want it reaching the "corners" of the square
+        if (spinDot.len() > 1f) {
+            spinDot.nor();
         }
     }
 
@@ -854,8 +783,12 @@ public class HUD {
         font.getData().setScale(1.2f); drawShadowedText(String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10, Color.WHITE);
     }
 
-    public void showWaterHazard() { this.hazardText = "WATER HAZARD"; this.hazardColor = Color.CYAN; this.hazardTimer = 1.0f; }
-    public void showOutOfBounds() { this.hazardText = "OUT OF BOUNDS"; this.hazardColor = Color.RED; this.hazardTimer = 1.1f; }
+    public void showWaterHazard() {
+        notificationManager.showHazard("WATER HAZARD", Color.CYAN, 1.1f);}
+
+    public void showOutOfBounds() {
+        notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f);
+    }
 
     private void renderHazardPopUp(float delta) {
         if (hazardTimer > 0) {
@@ -903,16 +836,6 @@ public class HUD {
         instructionsRequested = false;
         cameraConfigRequested = false;
         spinDot.set(0, 0);
-    }
-
-    public void updateSpinInput(float d, GameInputProcessor input) {
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT)) spinDot.x = MathUtils.clamp(spinDot.x - d * 2, -1f, 1f);
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT)) spinDot.x = MathUtils.clamp(spinDot.x + d * 2, -1f, 1f);
-        
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) spinDot.y = MathUtils.clamp(spinDot.y + d * 2, -1f, 1f);
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) spinDot.y = MathUtils.clamp(spinDot.y - d * 2, -1f, 1f);
-        
-        if (spinDot.len() > 1f) spinDot.nor();
     }
 
     public void renderInstructions(GameInputProcessor input) {
