@@ -17,21 +17,26 @@ public class WindIndicatorRenderer {
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, Vector3 wind, Camera camera) {
         if (wind == null) return;
 
-        // Base scaling for element sizes (radius, thickness, font)
-        float uiScale = viewport.getWorldHeight() / 720f;
-        if (uiScale < 1.0f) uiScale = 1.0f;
+        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
-        // --- RELATIVE POSITIONING ---
-        // centerX: Placed at 75% of screen width (25% away from the right edge)
-        // This creates a guaranteed "action lane" for buttons on the right.
-        float centerX = viewport.getWorldWidth() * 0.84f;
+        float centerX, centerY, radius, uiScale;
 
-        // centerY: Stay near the top, but scaled so it doesn't clip off-screen
-        float centerY = viewport.getWorldHeight() - (110f * uiScale);
+        if (isAndroid) {
+            // Mobile: Large and shifted left to avoid the HIT button stack
+            uiScale = viewport.getWorldHeight() / 720f;
+            if (uiScale < 1.0f) uiScale = 1.0f;
 
-        float radius = 60f * uiScale;
+            centerX = viewport.getWorldWidth() * 0.84f;
+            centerY = viewport.getWorldHeight() - (110f * uiScale);
+            radius = 60f * uiScale;
+        } else {
+            // Desktop: Original compact corner placement
+            uiScale = 1.0f;
+            centerX = viewport.getWorldWidth() - 100;
+            centerY = viewport.getWorldHeight() - 100;
+            radius = 50f;
+        }
 
-        // Compass logic
         float windAngle = MathUtils.atan2(wind.z, wind.x) * MathUtils.radDeg;
         float camAngle = MathUtils.atan2(camera.direction.z, camera.direction.x) * MathUtils.radDeg;
         float displayAngle = (camAngle - windAngle) + 90f;
@@ -55,15 +60,26 @@ public class WindIndicatorRenderer {
         float oldScaleY = font.getScaleY();
         font.setColor(Color.WHITE);
 
-        // Labels positioned relative to the scaled radius
-        font.getData().setScale(1.2f * uiScale);
-        layout.setText(font, "WIND");
-        font.draw(batch, "WIND", centerX - layout.width / 2, centerY + (radius + 35 * uiScale));
+        if (isAndroid) {
+            // Large mobile labels
+            font.getData().setScale(1.2f * uiScale);
+            layout.setText(font, "WIND");
+            font.draw(batch, "WIND", centerX - layout.width / 2, centerY + (radius + 35 * uiScale));
 
-        font.getData().setScale(1.6f * uiScale);
-        String speed = String.format("%.1f mph", wind.len());
-        layout.setText(font, speed);
-        font.draw(batch, speed, centerX - layout.width / 2, centerY - (radius + 25 * uiScale));
+            font.getData().setScale(1.6f * uiScale);
+            String speed = String.format("%.1f mph", wind.len());
+            layout.setText(font, speed);
+            font.draw(batch, speed, centerX - layout.width / 2, centerY - (radius + 25 * uiScale));
+        } else {
+            // Original desktop labels
+            font.getData().setScale(1.1f);
+            layout.setText(font, "WIND");
+            font.draw(batch, "WIND", centerX - layout.width / 2, centerY + 75);
+
+            String speed = String.format("%.1f mph", wind.len());
+            layout.setText(font, speed);
+            font.draw(batch, speed, centerX - layout.width / 2, centerY - 65);
+        }
 
         font.getData().setScale(oldScaleX, oldScaleY);
     }
