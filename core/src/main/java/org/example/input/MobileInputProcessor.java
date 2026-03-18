@@ -1,6 +1,8 @@
 package org.example.input;
 
 import com.badlogic.gdx.math.Vector2;
+import org.example.ball.ShotController;
+
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -9,6 +11,8 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     private final Map<Action, Boolean> pressedMap = new EnumMap<>(Action.class);
     private final Map<Action, Boolean> accumulatedJustPressedMap = new EnumMap<>(Action.class);
     private final Map<Action, Boolean> currentFrameJustPressedMap = new EnumMap<>(Action.class);
+
+    private ShotController shotController; // Add this
 
     private float dragX = 0;
     private float dragY = 0;
@@ -104,7 +108,21 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
         return currentFrameJustPressedMap.get(action);
     }
 
+    public void setShotController(org.example.ball.ShotController controller) {
+        this.shotController = controller;
+    }
+
+    // Helper to check if club switching is allowed
+    private boolean isClubChangeAllowed(Action action) {
+        if (action == Action.CLUB_UP || action == Action.CLUB_DOWN) {
+            return shotController == null || !shotController.isCharging();
+        }
+        return true;
+    }
+
     public void setActionState(Action action, boolean pressed) {
+        if (!isClubChangeAllowed(action)) return; // BLOCKING PASSIVE CHECK
+
         if (pressed && !pressedMap.get(action)) {
             accumulatedJustPressedMap.put(action, true);
         }
@@ -112,6 +130,8 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     }
 
     public void triggerAction(Action action) {
+        if (!isClubChangeAllowed(action)) return; // BLOCKING PASSIVE CHECK
+
         accumulatedJustPressedMap.put(action, true);
         pressedMap.put(action, true);
     }

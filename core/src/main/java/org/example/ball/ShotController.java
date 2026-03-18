@@ -99,6 +99,7 @@ public class ShotController {
         isSpinLocked = false;
         lockedSpin.set(0, 0);
         lockedCamDir.set(0, 0, 0);
+        projectionVector.set(0, 0, 0);
     }
 
     public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud, Terrain terrain, GameInputProcessor input) {
@@ -111,11 +112,23 @@ public class ShotController {
         // --- GUIDELINE LOGIC ---
         if (ballIsStationary) {
             if (isSpinLocked) {
+                // BRANCH A: Frozen after minigame
                 calculateShotVector(projectionVector, lockedCamDir, club, lockedSpin, terrain, 0f);
+                if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
+                    Gdx.app.log("SHOT_DEBUG", "Branch A (Locked) | CamDir: " + lockedCamDir + " | Spin: " + lockedSpin);
+                }
             } else if (waitingForMinigame) {
+                // BRANCH B: Aim frozen, spin live (during minigame)
                 calculateShotVector(projectionVector, lockedCamDir, club, hud.getSpinOffset(), terrain, 0f);
+                if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
+                    Gdx.app.log("SHOT_DEBUG", "Branch B (Waiting) | LockedCam: " + lockedCamDir);
+                }
             } else {
+                // BRANCH C: Everything live
                 calculateShotVector(projectionVector, camDir, club, hud.getSpinOffset(), terrain, 0f);
+                if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
+                    Gdx.app.log("SHOT_DEBUG", "Branch C (Live) | CamDir: " + camDir + " | Spin: " + hud.getSpinOffset());
+                }
             }
         }
 
@@ -130,6 +143,7 @@ public class ShotController {
             }
             if (hud.isMinigameComplete()) {
                 waitingForMinigame = false;
+                isSpinLocked = false;
                 executeShot(ball, lockedCamDir, club, lockedPower, lockedSpin, terrain, hud.getMinigameResult());
                 return true;
             }
@@ -137,7 +151,7 @@ public class ShotController {
         }
 
         // --- DIFFICULTY & LOCK-IN LOGIC ---
-        currentDifficulty = terrain.getShotDifficulty(ball.getPosition().x, ball.getPosition().z, camDir);
+        currentDifficulty = terrain.getShotDifficulty(ball.getPosition().x, ball.getPosition().z, lockedCamDir);
         currentDifficulty.clubDifficulty = MathUtils.clamp(club.powerMult / 20f, 1.0f, 2.0f);
         Vector2 spinOffset = hud.getSpinOffset();
         currentDifficulty.swingDifficulty = 1.0f + (spinOffset.len() * 0.75f);
@@ -169,6 +183,9 @@ public class ShotController {
 
         if (input.isActionPressed(GameInputProcessor.Action.CHARGE_SHOT)) {
             if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
+                if (!isCharging) {
+                    lockedCamDir.set(camDir);
+                }
                 isCharging = true;
                 spaceHoldTime = Math.min(spaceHoldTime + (delta * 2f), MAX_POWER);
             }
@@ -256,6 +273,11 @@ public class ShotController {
             case WANK, SHIT -> 0.3f;
             default -> 1f;
         };
+    }
+
+    public Vector3 getLockedCamDir() {
+        if (lockedCamDir.isZero()) return lastBallPos; // Or just return the vector if you handle it elsewhere
+        return lockedCamDir;
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {

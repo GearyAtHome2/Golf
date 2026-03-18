@@ -335,14 +335,12 @@ public class GolfGame extends ApplicationAdapter {
 
     private void resetBallToLastShot() {
         if (ball != null) {
-            // If the user manually resets, they get a penalty stroke,
-            // but only if they are actually mid-game (not just sitting at the tee).
             if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL) && hasCurrentBallBeenHit) {
                 hud.incrementShots();
             }
-
             ball.resetToLastPosition();
             ball.setState(Ball.State.STATIONARY);
+            shotController.reset();
             hasCurrentBallBeenHit = false;
             isVictory = false;
             practiceResetTimer = 0f;
@@ -585,14 +583,14 @@ public class GolfGame extends ApplicationAdapter {
         }
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) {
-                // Towards DRIVER (index 0)
-                int index = MathUtils.clamp(currentClub.ordinal() - 1, 0, Club.values().length - 1);
-                currentClub = Club.values()[index];
-            } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) {
-                // Towards PUTTER (index 18)
-                int index = MathUtils.clamp(currentClub.ordinal() + 1, 0, Club.values().length - 1);
-                currentClub = Club.values()[index];
+            if (!shotController.isCharging()) {
+                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) {
+                    int index = MathUtils.clamp(currentClub.ordinal() - 1, 0, Club.values().length - 1);
+                    currentClub = Club.values()[index];
+                } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) {
+                    int index = MathUtils.clamp(currentClub.ordinal() + 1, 0, Club.values().length - 1);
+                    currentClub = Club.values()[index];
+                }
             }
         }
 

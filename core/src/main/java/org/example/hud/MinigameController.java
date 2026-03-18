@@ -68,11 +68,8 @@ public class MinigameController {
                               GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff,
                               ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font,
                               Viewport viewport, GameInputProcessor input,
-                              org.example.ball.ShotController shotController) {        if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
-            // Check if it's a touch from an Android stage actor (like the HIT button)
-            // By default, Scene2D Stage handles touchDown and might prevent it reaching Gdx.input.isButtonJustPressed
-            // but if it doesn't, we should check if the touch was on a UI element.
-            // On Desktop, this is still valid for canceling.
+                              org.example.ball.ShotController shotController) {
+        if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
                 System.out.println("[DEBUG_LOG] Minigame canceled by click/touch - needleStopped: " + needleStopped);
                 cancel();
@@ -86,8 +83,9 @@ public class MinigameController {
             timer += delta;
             float stepDuration = (animSetting == GameConfig.AnimSpeed.NONE) ? 0.01f : (0.7f / animSetting.mult);
             Vector3 normal = terrain.getNormalAt(activeBallPos.x, activeBallPos.z);
-            Vector3 rightOfAim = new Vector3(camera.direction).crs(Vector3.Y).nor();
-            
+            Vector3 referenceDir = (shotController != null) ? shotController.getLockedCamDir() : camera.direction;
+            Vector3 rightOfAim = new Vector3(referenceDir).crs(Vector3.Y).nor();
+
             engine.updateZones(delta, normal.dot(rightOfAim), spinDot.x, shotRandomness);
 
             if (step < 4 && timer >= stepDuration) advanceStep(animSetting, gameDiff);
