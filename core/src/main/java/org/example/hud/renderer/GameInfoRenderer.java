@@ -52,7 +52,7 @@ public class GameInfoRenderer {
 
             float rightX = viewport.getWorldWidth() * 0.84f;
             font.getData().setScale(2.2f * uiScale);
-            drawShadowedText(batch, font, club.name().replace("_", " "), rightX + 130, 14    0 * uiScale, Color.WHITE);
+            drawShadowedText(batch, font, club.name().replace("_", " "), rightX + 130, 150 * uiScale, Color.WHITE);
             renderDebugInfo(batch, font, config, ball, terrain, rightX + 130, 100 * uiScale, 60 * uiScale, uiScale);
 
         } else {
