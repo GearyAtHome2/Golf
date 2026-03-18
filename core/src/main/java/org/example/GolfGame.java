@@ -400,7 +400,7 @@ public class GolfGame extends ApplicationAdapter {
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(currentLevelData, inputProcessor);
         } else {
-            hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor, showClubInfo);
+            hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor, showClubInfo, shotController);
         }
     }
 

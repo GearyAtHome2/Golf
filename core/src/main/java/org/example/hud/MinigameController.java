@@ -64,8 +64,11 @@ public class MinigameController {
         }
     }
 
-    public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff, ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font, Viewport viewport, GameInputProcessor input) {
-        if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
+    public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot,
+                              GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff,
+                              ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font,
+                              Viewport viewport, GameInputProcessor input,
+                              org.example.ball.ShotController shotController) {        if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
             // Check if it's a touch from an Android stage actor (like the HIT button)
             // By default, Scene2D Stage handles touchDown and might prevent it reaching Gdx.input.isButtonJustPressed
             // but if it doesn't, we should check if the touch was on a UI element.
@@ -97,7 +100,7 @@ public class MinigameController {
                 
                 if (input.isActionJustPressed(GameInputProcessor.Action.STOP_NEEDLE)) {
                     System.out.println("[DEBUG_LOG] Minigame STOP_NEEDLE action triggered - needlePos: " + engine.needlePos);
-                    stopNeedle();
+                    stopNeedle(spinDot, shotController);
                 }
             }
         } else {
@@ -108,8 +111,7 @@ public class MinigameController {
             }
         }
 
-        minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);
-    }
+        minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);    }
 
     private void advanceStep(GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff) {
         step++;
@@ -129,12 +131,16 @@ public class MinigameController {
         }
     }
 
-    private void stopNeedle() {
+    private void stopNeedle(Vector2 currentSpin, org.example.ball.ShotController shotController) {
         needleStopped = true;
         glowTimer = 1.0f;
         lastResult = engine.calculateResult(engine.needlePos);
         glowColor = lastResult.rating.color;
         step++;
+
+        if (shotController != null) {
+            shotController.snapshotFinalSpin(currentSpin);
+        }
     }
 
     private void updateAnimations(float delta) {

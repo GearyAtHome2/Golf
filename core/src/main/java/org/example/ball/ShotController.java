@@ -50,8 +50,9 @@ public class ShotController {
 
     private Vector3 lastBallPos = new Vector3();
     private boolean ballIsStationary = false;
-
-    // --- NEW FLAG ---
+    private boolean isSpinLocked = false;
+    private final Vector2 lockedSpin = new Vector2();
+    private final Vector3 lockedCamDir = new Vector3();
     private boolean showGuideline = false;
 
     public ShotController() {
@@ -95,6 +96,9 @@ public class ShotController {
         lockedPower = 0f;
         lockTimer = 0f;
         cancelCooldown = CANCEL_COOLDOWN_TIME;
+        isSpinLocked = false;
+        lockedSpin.set(0, 0);
+        lockedCamDir.set(0, 0, 0);
     }
 
     public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud, Terrain terrain, GameInputProcessor input) {
@@ -104,8 +108,15 @@ public class ShotController {
         lastBallPos.set(ball.getPosition());
         ballIsStationary = (ball.getState() == Ball.State.STATIONARY);
 
+        // --- GUIDELINE LOGIC ---
         if (ballIsStationary) {
-            calculateShotVector(projectionVector, camDir, club, hud, terrain, 0f);
+            if (isSpinLocked) {
+                calculateShotVector(projectionVector, lockedCamDir, club, lockedSpin, terrain, 0f);
+            } else if (waitingForMinigame) {
+                calculateShotVector(projectionVector, lockedCamDir, club, hud.getSpinOffset(), terrain, 0f);
+            } else {
+                calculateShotVector(projectionVector, camDir, club, hud.getSpinOffset(), terrain, 0f);
+            }
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.PROJECTION)) {
@@ -119,12 +130,13 @@ public class ShotController {
             }
             if (hud.isMinigameComplete()) {
                 waitingForMinigame = false;
-                executeShot(ball, camDir, club, lockedPower, hud, terrain, hud.getMinigameResult());
+                executeShot(ball, lockedCamDir, club, lockedPower, lockedSpin, terrain, hud.getMinigameResult());
                 return true;
             }
             return false;
         }
 
+        // --- DIFFICULTY & LOCK-IN LOGIC ---
         currentDifficulty = terrain.getShotDifficulty(ball.getPosition().x, ball.getPosition().z, camDir);
         currentDifficulty.clubDifficulty = MathUtils.clamp(club.powerMult / 20f, 1.0f, 2.0f);
         Vector2 spinOffset = hud.getSpinOffset();
@@ -135,6 +147,8 @@ public class ShotController {
             if (lockTimer >= LOCK_DURATION) {
                 isPowerLocked = false;
                 float powerMod = 0.5f + (lockedPower / MAX_POWER);
+
+                lockedCamDir.set(camDir);
                 hud.logShotInitiated(ball.getPosition(), club, terrain, currentDifficulty, powerMod);
                 waitingForMinigame = true;
                 lockTimer = 0;
@@ -175,21 +189,30 @@ public class ShotController {
         return false;
     }
 
-    private void executeShot(Ball ball, Vector3 camDir, Club club, float power, HUD hud, Terrain terrain, MinigameResult result) {
-        calculateShotVector(tempV1, camDir, club, hud, terrain, result.accuracy);
-        float rawR = MathUtils.clamp(hud.getSpinOffset().len(), 0f, 1f);
+    public void snapshotFinalSpin(Vector2 currentSpin) {
+        this.lockedSpin.set(currentSpin);
+        this.isSpinLocked = true;
+    }
+
+    private void executeShot(Ball ball, Vector3 aimDirFreeform, Club club, float power, Vector2 spin, Terrain terrain, MinigameResult result) {
+        calculateShotVector(tempV1, aimDirFreeform, club, spin, terrain, result.accuracy);
+
+        float rawR = MathUtils.clamp(spin.len(), 0f, 1f);
         float powerPenalty = (float) Math.pow(rawR, 6) * 0.40f;
         float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * result.powerMod;
+
         float launchLoft = (float) Math.asin(tempV1.y) * MathUtils.radiansToDegrees;
         ball.hit(tempV1, power, launchLoft, finalPowerMult, result.rating);
 
-        Vector3 aimDir = new Vector3(camDir.x, 0, camDir.z).nor();
+        Vector3 aimDir = new Vector3(aimDirFreeform.x, 0, aimDirFreeform.z).nor();
         Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
-        Vector2 quadOffset = getQuadraticSpinOffset(hud.getSpinOffset());
+
+        Vector2 quadOffset = getQuadraticSpinOffset(spin);
         float attackAngle = quadOffset.y * -20.0f;
         float sForce = (float) Math.sin(Math.abs(club.loft - attackAngle) * MathUtils.degreesToRadians);
         float spinCurve = (float)Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
         float quality = getQualityFactor(result.rating);
+
         float backspin = (power * finalPowerMult) * sForce * 14.5f * (1.0f + (quadOffset.y * 1.8f)) * quality * spinCurve;
         float sidespin = (quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 60.0f * spinCurve);
 
@@ -197,8 +220,8 @@ public class ShotController {
         ball.getSpin().add(tempV2.set(Vector3.Y).scl(-sidespin));
     }
 
-    private void calculateShotVector(Vector3 out, Vector3 camDir, Club club, HUD hud, Terrain terrain, float accuracy) {
-        Vector2 quadOffset = getQuadraticSpinOffset(hud.getSpinOffset());
+    private void calculateShotVector(Vector3 out, Vector3 camDir, Club club, Vector2 spin, Terrain terrain, float accuracy) {
+        Vector2 quadOffset = getQuadraticSpinOffset(spin);
         Vector3 aimDir = new Vector3(camDir.x, 0, camDir.z).nor();
         Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
 

@@ -24,10 +24,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
-import org.example.ball.Ball;
-import org.example.ball.CompetitiveScore;
-import org.example.ball.MinigameResult;
-import org.example.ball.ShotDifficulty;
+import org.example.ball.*;
 import org.example.hud.mobile.MobileUIFactory;
 import org.example.hud.renderer.*;
 import org.example.input.GameInputProcessor;
@@ -211,7 +208,7 @@ public class HUD {
         }
     }
 
-    public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo) {
+    public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
         if (batch.isDrawing()) batch.end();
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !mobileUIInitialized) {
@@ -222,16 +219,13 @@ public class HUD {
 
         notificationManager.update(delta);
 
-        // --- Logic Updates ---
-        if (!minigameController.isActive()) {
-            updateSpinInput(delta, input);
-            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-                this.spinDot.set(spinIndicator.getSpinDot());
-            }
-            if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
-                distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
-                distanceDisplayTimer = 3.0f;
-            }
+        updateSpinInput(delta, input);
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            this.spinDot.set(spinIndicator.getSpinDot());
+        }
+        if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
+            distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
+            distanceDisplayTimer = 3.0f;
         }
 
         if (isPractice) {
@@ -277,14 +271,16 @@ public class HUD {
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, compScore, terrain);
         batch.end();
 
-        renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo);
+        renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
 
     private void updatePracticeDistanceLogic(Ball ball) {
         distanceTracker.update(Gdx.graphics.getDeltaTime(), ball);
     }
 
-    private void renderOverlays(Club currentClub, Camera gameCamera, Terrain terrain, GameInputProcessor input, float delta, boolean showClubInfo) {
+    private void renderOverlays(Club currentClub, Camera gameCamera, Terrain terrain,
+                                GameInputProcessor input, float delta, boolean showClubInfo,
+                                org.example.ball.ShotController shotController) {
         if (mobileUIInitialized && stage != null && Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             stage.act(delta);
             stage.draw();
@@ -317,7 +313,10 @@ public class HUD {
         }
 
         if (minigameController.isActive()) {
-            minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input);
+            minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot,
+                    config.animSpeed, config.difficulty,
+                    shapeRenderer, batch, font, viewport,
+                    input, shotController);
         }
     }
 
@@ -334,7 +333,7 @@ public class HUD {
     }
 
     private void updateSpinInput(float delta, GameInputProcessor input) {
-        float SPIN_SPEED = 2.0f; // Adjust this to change how fast the dot moves
+        float SPIN_SPEED = 2.0f;
 
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
@@ -349,7 +348,6 @@ public class HUD {
             spinDot.x = MathUtils.clamp(spinDot.x + SPIN_SPEED * delta, -1f, 1f);
         }
 
-        // Optional: Constrain to a circle if you don't want it reaching the "corners" of the square
         if (spinDot.len() > 1f) {
             spinDot.nor();
         }
@@ -402,13 +400,22 @@ public class HUD {
 
     private void drawSpinUI() {
         float spinX = 80, spinY = 80;
+
+        Vector2 displaySpin = spinDot;
+        boolean isLocked = minigameController.isActive() && minigameController.isNeedleStopped();
+
+
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(Color.WHITE);
+        shapeRenderer.setColor(isLocked ? Color.GRAY : Color.WHITE); // Visual cue
         shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS);
+
         shapeRenderer.setColor(0.1f, 0.1f, 0.1f, 1f);
         shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS - 3);
-        shapeRenderer.setColor(Color.RED);
-        shapeRenderer.circle(spinX + (spinDot.x * (SPIN_UI_RADIUS - 10)), spinY + (spinDot.y * (SPIN_UI_RADIUS - 10)), 5);
+
+        // Draw the red dot. If locked, maybe make it darker red.
+        shapeRenderer.setColor(isLocked ? Color.MAROON : Color.RED);
+        shapeRenderer.circle(spinX + (displaySpin.x * (SPIN_UI_RADIUS - 10)),
+                spinY + (displaySpin.y * (SPIN_UI_RADIUS - 10)), 5);
         shapeRenderer.end();
     }
 
