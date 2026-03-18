@@ -1,4 +1,4 @@
-package org.example.hud;
+package org.example.hud.renderer;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;

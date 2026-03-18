@@ -396,10 +396,9 @@ public class GolfGame extends ApplicationAdapter {
         } else if (isVictory) {
             hud.renderVictory(hud.getShotCount(), currentLevelData, isComp ? competitiveScore : null);
         } else if (currentState == GameState.PAUSED) {
-            hud.renderPauseMenu(isPractice, currentLevelData, inputProcessor);
+            hud.renderPauseMenu(currentLevelData, inputProcessor);
         } else {
-            float displaySpeed = config.getGameSpeed();
-            hud.renderPlayingHUD(displaySpeed, currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor, showClubInfo);
+            hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor, showClubInfo);
         }
     }
 
