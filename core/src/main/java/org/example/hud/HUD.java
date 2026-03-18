@@ -54,6 +54,7 @@ public class HUD {
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
     private final GameInfoRenderer gameInfoRenderer = new GameInfoRenderer();
     private final PauseMenuRenderer pauseMenuRenderer = new PauseMenuRenderer();
+    private final OverlayRenderer overlayRenderer = new OverlayRenderer();
     private final NotificationManager notificationManager = new NotificationManager();
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
     private int shotCount = 0;
@@ -333,21 +334,7 @@ public class HUD {
     }
 
     public void renderClubInfo(Club club) {
-        if (batch.isDrawing()) batch.end();
-        if (shapeRenderer.isDrawing()) shapeRenderer.end();
-
-        clubInfoRenderer.render(
-                batch,
-                shapeRenderer,
-                font,
-                viewport,
-                club.name(),
-                ClubInfoManager.getClubDescription(club),
-                ClubInfoManager.getCarryDistanceInfo(club),
-                ClubInfoManager.getPowerInfo(club),
-                ClubInfoManager.getLoftInfo(club),
-                220f
-        );
+        overlayRenderer.renderClubInfo(batch, shapeRenderer, font, viewport, club);
     }
 
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, CompetitiveScore compScore, Terrain terrain) {
@@ -437,34 +424,15 @@ public class HUD {
         instructionsRequested = false;
         cameraConfigRequested = false;
         spinDot.set(0, 0);
+        overlayRenderer.resetScrolls();
     }
 
     public void renderInstructions(GameInputProcessor input) {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
-            touchPoint.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            viewport.unproject(touchPoint);
-            if (!instructionRenderer.isClickInside(touchPoint.x, touchPoint.y)) {
-                instructionsRequested = false;
-            }
-        }
-
-        batch.begin();
-        instructionRenderer.render(batch, shapeRenderer, font, viewport, input);
-        batch.end();
+        overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> instructionsRequested = false);
     }
 
     public void renderCameraConfig(GameInputProcessor input) {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
-            touchPoint.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            viewport.unproject(touchPoint);
-            if (!cameraConfigRenderer.isClickInside(touchPoint.x, touchPoint.y)) {
-                cameraConfigRequested = false;
-            }
-        }
-
-        batch.begin();
-        cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config, input);
-        batch.end();
+        overlayRenderer.renderCameraConfig(batch, shapeRenderer, font, viewport, config, input, () -> cameraConfigRequested = false);
     }
 
     public boolean wasCameraConfigRequested() {
@@ -480,9 +448,8 @@ public class HUD {
     }
 
     public boolean isTouchInsideCameraConfig(float x, float y) {
-        return cameraConfigRenderer.isClickInside(x, y);
+        return cameraConfigRequested && cameraConfigRenderer.isClickInside(x, y);
     }
-
     public boolean wasInstructionsRequested() {
         return instructionsRequested;
     }
