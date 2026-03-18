@@ -103,8 +103,8 @@ public class HUD {
     private boolean mobileUIInitialized = false;
 
     // Mobile UI Actors
-    private SpinIndicatorActor spinActor;
-    private PreShotDebugActor debugActor;
+    private final SpinIndicator spinIndicator;
+    private final PreShotDebugActor preShotDebugActor;
     private TextButton infoToggleBtn;
     private HoldButton resetBallBtn;
     private HoldButton newMapBtn;
@@ -139,88 +139,6 @@ public class HUD {
         pixmap.dispose();
         
         return new NinePatchDrawable(new NinePatch(new TextureRegion(texture), radius, radius, radius, radius));
-    }
-
-    class SpinIndicatorActor extends Actor {
-        public SpinIndicatorActor() {
-            setSize(160, 160);
-            addListener(new InputListener() {
-                @Override
-                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                    updateSpin(x, y);
-                    return true;
-                }
-                @Override
-                public void touchDragged(InputEvent event, float x, float y, int pointer) {
-                    updateSpin(x, y);
-                }
-                private void updateSpin(float x, float y) {
-                    float radius = getWidth() / 2f;
-                    float dx = (x - radius) / radius;
-                    float dy = (y - radius) / radius;
-                    float len = (float) Math.sqrt(dx * dx + dy * dy);
-                    if (len > 1) {
-                        dx /= len;
-                        dy /= len;
-                    }
-                    spinDot.set(dx, dy);
-                }
-            });
-        }
-        @Override
-        public void draw(Batch batch, float parentAlpha) {
-            batch.end();
-            shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());
-            shapeRenderer.setTransformMatrix(batch.getTransformMatrix());
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-            float radius = getWidth() / 2f;
-            float centerX = getX() + radius;
-            float centerY = getY() + radius;
-            shapeRenderer.setColor(1, 1, 1, 0.4f * parentAlpha);
-            shapeRenderer.circle(centerX, centerY, radius);
-            shapeRenderer.setColor(0.1f, 0.1f, 0.1f, 0.6f * parentAlpha);
-            shapeRenderer.circle(centerX, centerY, radius - 4);
-            shapeRenderer.setColor(Color.RED);
-            shapeRenderer.circle(centerX + spinDot.x * (radius - 12), centerY + spinDot.y * (radius - 12), 8);
-            shapeRenderer.end();
-            batch.begin();
-            
-            font.getData().setScale(1.1f);
-            drawShadowedText("SPIN", getX() + radius - 25, getY() - 10, Color.WHITE);
-        }
-    }
-
-    class PreShotDebugActor extends Actor {
-        private Terrain terrain;
-        private Ball ball;
-        private Camera camera;
-
-        public void update(Terrain terrain, Ball ball, Camera camera) {
-            this.terrain = terrain;
-            this.ball = ball;
-            this.camera = camera;
-        }
-
-        @Override
-        public void draw(Batch batch, float parentAlpha) {
-            if (terrain == null || ball == null || camera == null) return;
-            Vector3 ballPos = ball.getPosition();
-            Vector3 aimDir = camera.direction;
-            ShotDifficulty diff = terrain.getShotDifficulty(ballPos.x, ballPos.z, aimDir);
-            Vector3 normal = terrain.getNormalAt(ballPos.x, ballPos.z);
-            float sidePush = normal.dot(new Vector3(aimDir).crs(Vector3.Y).nor());
-            
-            font.getData().setScale(1.2f);
-            float x = getX();
-            float y = getY() + getHeight() - 20;
-            drawShadowedText("TERRAIN: " + terrain.getTerrainTypeAt(ballPos.x, ballPos.z), x, y, Color.YELLOW);
-            drawShadowedText(String.format("DIFFICULTY: %.2fx", diff.terrainDifficulty), x, y - 25, Color.YELLOW);
-            drawShadowedText(String.format("SLOPE: %.2fx", diff.slopeDifficulty), x, y - 50, Color.YELLOW);
-            if (Math.abs(sidePush) > 0.05f) {
-                Color kickColor = sidePush > 0 ? Color.RED : Color.CYAN;
-                drawShadowedText(String.format("KICK: %s (%.2f)", (sidePush > 0 ? "RIGHT" : "LEFT"), sidePush), x, y - 75, kickColor);
-            }
-        }
     }
 
     private class HoldButton extends TextButton {
@@ -288,7 +206,8 @@ public class HUD {
         );
 
         viewport = new ScreenViewport();
-        
+        this.spinIndicator = new SpinIndicator(shapeRenderer, font);
+        this.preShotDebugActor = new PreShotDebugActor(font);
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
         pm.fill();
@@ -402,11 +321,8 @@ public class HUD {
         leftButtons.add(clubPlus).width(btnW).height(btnH).padBottom(15).left().row();
         leftButtons.add(clubMinus).width(btnW).height(btnH).left().row();
 
-        debugActor = new PreShotDebugActor();
-        leftStack.add(debugActor).width(400).height(140).left().padBottom(10).row();
-
-        spinActor = new SpinIndicatorActor();
-        leftStack.add(spinActor).size(160).bottom().left().padBottom(20);
+        leftStack.add(preShotDebugActor).width(400).height(140).left().padBottom(10).row();
+        leftStack.add(spinIndicator).size(160).bottom().left().padBottom(20);
 
         // RIGHT STACK CONTENT
         rightStack.add().height(150).row(); // Spacer for Top-Right Wind Indicator
@@ -603,6 +519,7 @@ public class HUD {
     }
 
     public void renderPauseMenu(boolean isPractice, LevelData levelData, GameInputProcessor input) {
+        if (batch.isDrawing()) batch.end();
         if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) {
             config.animSpeed = GameConfig.AnimSpeed.values()[(config.animSpeed.ordinal() + 1) % GameConfig.AnimSpeed.values().length];
         }
@@ -671,7 +588,11 @@ public class HUD {
         }
     }
 
-    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input) {
+    public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo) {
+        // 1. Ensure any previous batching is closed before we start UI logic
+        if (batch.isDrawing()) batch.end();
+
+        // 2. Platform-specific initialization
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !mobileUIInitialized) {
             setupMobileUI((MobileInputProcessor) input);
         }
@@ -679,6 +600,7 @@ public class HUD {
         float delta = Gdx.graphics.getDeltaTime();
         this.isPracticeState = isPractice;
 
+        // 3. Logic Updates
         if (!minigameController.isActive()) {
             updateSpinInput(delta, input);
             if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
@@ -707,77 +629,87 @@ public class HUD {
             }
         }
 
-        if (mobileUIInitialized && stage != null) {
-            if (debugActor != null) debugActor.update(terrain, ball, gameCamera);
+        // 4. Update Actor Data (Essential for both Mobile and Desktop)
+        preShotDebugActor.update(terrain, ball, gameCamera);
 
-            if (newMapBtn != null) {
-                boolean isCompetitive = !isPractice && compScore != null;
-                newMapBtn.setDisabled(isCompetitive);
-                newMapBtn.setColor(isCompetitive ? Color.GRAY : Color.WHITE);
-            }
-
+        // 5. Render Mobile Stage (Buttons/Layout)
+        if (mobileUIInitialized && stage != null && Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             stage.getViewport().apply();
             stage.act(delta);
             stage.draw();
         }
 
+        // 6. Manual Rendering Setup
         viewport.apply();
-        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         batch.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
+        // 7. Render Spin UI (Desktop only)
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             drawSpinUI();
         }
 
+        // 8. Main HUD Batch
         batch.begin();
+
+        // --- DESKTOP DEBUG RENDER ---
+        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+            // We set bounds manually because there is no Table layout on Desktop
+            preShotDebugActor.setBounds(40, 150, 400, 140);
+            preShotDebugActor.draw(batch, 1.0f);
+        }
+        // ----------------------------
+
         if (levelData != null) renderWindIndicator(levelData.getWind(), gameCamera);
         renderFeedbackMessages(delta);
         renderDistanceDisplay(delta);
         renderHazardPopUp(delta);
+
         if (isPractice) renderShotDistance(ball, delta);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, gameSpeed, compScore, terrain);
 
-        if (seedFeedbackTimer > 0) {
-            seedFeedbackTimer -= delta;
-            font.getData().setScale(1.2f);
-            Color c = Color.GREEN.cpy();
-            c.a = MathUtils.clamp(seedFeedbackTimer, 0, 1);
-            drawShadowedText("SEED COPIED!", viewport.getWorldWidth() / 2f - 60, viewport.getWorldHeight() - 100, c);
-        }
-
-        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
-            if (ball.getState() == Ball.State.STATIONARY && !minigameController.isActive())
-                renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
-        } else if (showInfoDisplay) {
-            // We call this while the batch is already open
-            renderClubInfo(currentClub);
-
-            if (Gdx.input.justTouched()) {
-                tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-                viewport.unproject(tempV3);
-
-                if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
-                        tempV3.y > 220 && tempV3.y < 420) {
-                    showInfoDisplay = false;
-                    if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
-                }
-            }
-        }
-
         batch.end();
 
+        // 9. Club Info Overlays
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            if (showInfoDisplay) {
+                renderClubInfo(currentClub);
+                if (Gdx.input.justTouched()) {
+                    tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+                    viewport.unproject(tempV3);
+                    if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
+                            tempV3.y > 220 && tempV3.y < 420) {
+                        showInfoDisplay = false;
+                        if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
+                    }
+                }
+            }
+        } else if (showClubInfo) {
+            renderClubInfo(currentClub);
+        }
+
+        // 10. Minigame Layer
         if (minigameController.isActive()) {
             minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input);
-            if (minigameController.isNeedleStopped() && minigameController.getGlowTimer() >= 0.98f) {
-                MinigameResult res = minigameController.getResult();
-                shotFeedbackTimer = 1.5f;
-                shotFeedbackColor = res.rating.color.cpy();
-                shotFeedbackText = res.rating.getRandomPhrase() + " (" + (int) (res.powerMod * 100) + "%)";
-            }
-        } else if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            if (debugActor != null) debugActor.update(terrain, ball, gameCamera);
-            stage.draw();
         }
+    }
+
+    public void renderClubInfo(Club club) {
+        if (batch.isDrawing()) batch.end();
+        if (shapeRenderer.isDrawing()) shapeRenderer.end();
+
+        clubInfoRenderer.render(
+                batch,
+                shapeRenderer,
+                font,
+                viewport,
+                club.name(),
+                ClubInfoManager.getClubDescription(club),
+                ClubInfoManager.getCarryDistanceInfo(club),
+                ClubInfoManager.getPowerInfo(club),
+                ClubInfoManager.getLoftInfo(club),
+                220f
+        );
     }
 
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore, Terrain terrain) {
@@ -813,8 +745,8 @@ public class HUD {
 
         if (currentSpinMag > 0.1f) {
             Vector3 norm = terrain.getNormalAt(ball.getPosition().x, ball.getPosition().z);
-            tempV1.set(ball.getVelocity()).set(tempV1.x, 0, tempV1.z).nor(); // Movement Direction
-            tempV2.set(norm).crs(tempV1).nor(); // Proper Right-Hand axle for forward rolling
+            tempV1.set(ball.getVelocity()).set(tempV1.x, 0, tempV1.z).nor();
+            tempV2.set(norm).crs(tempV1).nor();
 
             float alignment = ball.getSpin().dot(tempV2);
             if (alignment > 25f) {
@@ -834,31 +766,6 @@ public class HUD {
         lastDisplayedSpin = currentSpinMag;
 
         drawShadowedText(String.format("Speed: %.1fx", config.getGameSpeed()), rightX, 60, Color.WHITE);
-    }
-
-    public void renderClubInfo(Club club) {
-        if (batch.isDrawing()) batch.end();
-
-        batch.setProjectionMatrix(viewport.getCamera().combined);
-        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
-
-        clubInfoRenderer.render(
-                batch,
-                shapeRenderer,
-                font,
-                viewport,
-                club.name(),
-                ClubInfoManager.getClubDescription(club),
-                ClubInfoManager.getCarryDistanceInfo(club),
-                ClubInfoManager.getPowerInfo(club),
-                ClubInfoManager.getLoftInfo(club),
-                220f // Pass explicit Y position
-        );
-
-        if (batch.isDrawing()) {
-            batch.end();
-        }
-        batch.begin();
     }
 
     private void renderShotDistance(Ball ball, float delta) {

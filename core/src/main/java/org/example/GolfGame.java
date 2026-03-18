@@ -399,11 +399,7 @@ public class GolfGame extends ApplicationAdapter {
             hud.renderPauseMenu(isPractice, currentLevelData, inputProcessor);
         } else {
             float displaySpeed = config.getGameSpeed();
-            hud.renderPlayingHUD(displaySpeed, currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor);
-
-            if (showClubInfo) {
-                hud.renderClubInfo(currentClub);
-            }
+            hud.renderPlayingHUD(displaySpeed, currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor, showClubInfo);
         }
     }
 

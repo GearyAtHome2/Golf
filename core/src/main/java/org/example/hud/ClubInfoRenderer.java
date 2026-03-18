@@ -20,17 +20,15 @@ public class ClubInfoRenderer {
         float height = 200f;
         float x = viewport.getWorldWidth() - width - 20;
 
-        // --- ANTIALIASING FIX ---
         font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
 
-        // --- FIXED TRANSLUCENT BACKGROUND ---
+        // --- SHAPE RENDERING ---
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        // Disable depth writing so the transparent box doesn't "cut out" 3D objects behind it
-        Gdx.gl.glDepthMask(false);
 
+        shape.setProjectionMatrix(viewport.getCamera().combined);
         shape.begin(ShapeRenderer.ShapeType.Filled);
-        shape.setColor(0, 0, 0, 0.7f); // 70% alpha black
+        shape.setColor(0, 0, 0, 0.7f);
         shape.rect(x, y, width, height);
         shape.end();
 
@@ -39,10 +37,10 @@ public class ClubInfoRenderer {
         shape.rect(x, y, width, height);
         shape.end();
 
-        Gdx.gl.glDepthMask(true);
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         // --- TEXT RENDERING ---
+        batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
 
         float padding = 15f;
@@ -68,6 +66,6 @@ public class ClubInfoRenderer {
         layout.setText(font, desc, Color.LIGHT_GRAY, width - (padding * 2), 0, true);
         font.draw(batch, layout, x + padding, currentY);
 
-        // Batch end is still handled by HUD.renderClubInfo()
+        batch.end(); // CRITICAL: This was missing and breaking the HUD state
     }
 }
