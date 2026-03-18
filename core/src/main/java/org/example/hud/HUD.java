@@ -190,10 +190,12 @@ public class HUD {
             pauseMenuStage.draw();
         }
     }
+
     private void handlePauseInput(LevelData levelData, GameInputProcessor input) {
         if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) config.cycleAnimation();
         if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) config.cycleDifficulty();
-        if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES)) config.particlesEnabled = !config.particlesEnabled;
+        if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES))
+            config.particlesEnabled = !config.particlesEnabled;
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) mainMenuRequested = true;
         if (input.isActionJustPressed(GameInputProcessor.Action.HELP)) instructionsRequested = true;
@@ -208,6 +210,7 @@ public class HUD {
             seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
         }
     }
+
     public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo) {
         if (batch.isDrawing()) batch.end();
 
@@ -290,6 +293,25 @@ public class HUD {
                 renderClubInfo(currentClub);
                 handleMobileInfoClick();
             }
+            if (spinIndicator.isBigModeActive()) {
+                batch.begin();
+                spinIndicator.renderBigOverlay(batch, viewport);
+                batch.end();
+
+                if (Gdx.input.isTouched()) {
+                    tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+                    viewport.unproject(tempV3);
+
+                    boolean insideBall = spinIndicator.isInsideBigBall(tempV3.x, tempV3.y, viewport);
+
+                    if (insideBall) {
+                        spinIndicator.updateBigInput(tempV3.x, tempV3.y, viewport);
+                        ((MobileInputProcessor) input).consumeCurrentTouch();
+                    } else if (Gdx.input.justTouched()) {
+                        spinIndicator.setBigModeActive(false);
+                    }
+                }
+            }
         } else if (showClubInfo) {
             renderClubInfo(currentClub);
         }
@@ -340,6 +362,7 @@ public class HUD {
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, CompetitiveScore compScore, Terrain terrain) {
         gameInfoRenderer.render(batch, font, viewport, config, isPractice, levelData, club, ball, compScore, terrain, shotCount);
     }
+
     private void renderShotDistance(Ball ball, float delta) {
         boolean isMoving = ball.getState() == Ball.State.AIR ||
                 ball.getState() == Ball.State.ROLLING ||
@@ -450,6 +473,7 @@ public class HUD {
     public boolean isTouchInsideCameraConfig(float x, float y) {
         return cameraConfigRequested && cameraConfigRenderer.isClickInside(x, y);
     }
+
     public boolean wasInstructionsRequested() {
         return instructionsRequested;
     }

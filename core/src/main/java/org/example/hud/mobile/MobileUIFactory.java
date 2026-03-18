@@ -68,7 +68,7 @@ public class MobileUIFactory {
         ui.gameplayTable.add(leftStack).expandY().fillY().left().padLeft(20).padTop(180);
 
         Table rightStack = new Table();
-        ui.gameplayTable.add(rightStack).expand().right().fillY().padRight(20);
+        ui.gameplayTable.add(rightStack).expand().top().right().padRight(20).padTop(-60);
 
         float btnW = 230;
         float btnH = 130;
@@ -131,7 +131,7 @@ public class MobileUIFactory {
         rightStack.add(ui.newMapBtn).width(btnW).height(110).right().expandY().top().row();
 
         ui.infoToggleBtn = new TextButton("INFO", style);
-        rightStack.add(ui.infoToggleBtn).width(120).height(80).bottom().right().padBottom(250);
+        rightStack.add(ui.infoToggleBtn).width(120).height(80).bottom().right().padTop(65);
 
         setupStartMenu(ui, font, viewport, input);
         setupPauseMenu(ui, font, viewport, config, input);

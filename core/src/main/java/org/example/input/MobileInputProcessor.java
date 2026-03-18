@@ -17,6 +17,9 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     // Multi-touch tracking
     private float lastPinchDistance = 0;
 
+    // Flag to prevent camera movement when interacting with HUD
+    private boolean isConsumed = false;
+
     public MobileInputProcessor() {
         for (Action action : Action.values()) {
             pressedMap.put(action, false);
@@ -25,8 +28,20 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
         }
     }
 
+    /**
+     * Prevents this processor from updating drag/zoom values until touches are released.
+     */
+    public void consumeCurrentTouch() {
+        this.isConsumed = true;
+    }
+
     @Override
     public void update(float delta) {
+        // If no fingers are on the screen, reset the consumption flag
+        if (!com.badlogic.gdx.Gdx.input.isTouched()) {
+            isConsumed = false;
+        }
+
         for (Action action : Action.values()) {
             currentFrameJustPressedMap.put(action, accumulatedJustPressedMap.get(action));
             accumulatedJustPressedMap.put(action, false);
@@ -35,7 +50,8 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
 
     @Override
     public boolean pan(float x, float y, float deltaX, float deltaY) {
-        // Only use pan if we aren't currently pinching (one finger rotation)
+        if (isConsumed) return true; // Pretend we handled it, but do nothing
+
         this.dragX += deltaX;
         this.dragY += deltaY;
         return true;
@@ -43,23 +59,18 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
 
     @Override
     public boolean zoom(float initialDistance, float distance) {
-        // We'll handle zoom inside 'pinch' for better multi-finger coordination
-        return false;
+        return isConsumed;
     }
 
     @Override
     public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) {
-        float currentDistance = pointer1.dst(pointer2);
+        if (isConsumed) return true;
 
+        float currentDistance = pointer1.dst(pointer2);
         if (lastPinchDistance > 0) {
             float deltaDistance = lastPinchDistance - currentDistance;
-
-            // SENSITIVITY FIX:
-            // We multiply by a larger factor to match the 'weight' of a mouse scroll.
-            // Positive deltaDistance means fingers got closer (Zoom Out).
             this.scrollY += (deltaDistance * 0.05f);
         }
-
         lastPinchDistance = currentDistance;
         return true;
     }
