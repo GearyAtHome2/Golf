@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.Viewport;
@@ -15,11 +16,14 @@ import org.example.input.GameInputProcessor;
 public class InstructionRenderer {
 
     private float instructionScrollY = 0;
-    private final float MAX_SCROLL = 1400f; // Increased to accommodate the Clubs section
+    private final float MAX_SCROLL = 1400f;
+    private Rectangle boxBounds = new Rectangle();
 
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameInputProcessor input) {
         float delta = Gdx.graphics.getDeltaTime();
         float scrollSpeed = 450f * delta;
+
+        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
@@ -28,11 +32,23 @@ public class InstructionRenderer {
             instructionScrollY = Math.min(MAX_SCROLL, instructionScrollY + scrollSpeed);
         }
 
+        // Touch-drag scrolling for Android
+        if (isAndroid && Gdx.input.isTouched()) {
+            float dragY = Gdx.input.getDeltaY();
+            if (Math.abs(dragY) > 0.1f) {
+                // Inverted: Drag finger UP (negative deltaY) should move content UP (increase scroll)
+                // User expects content to follow finger. If finger moves UP, content should move UP.
+                // instructionScrollY is the offset from top. Increasing it moves text UP.
+                instructionScrollY = MathUtils.clamp(instructionScrollY - dragY * 1.5f, 0, MAX_SCROLL);
+            }
+        }
+
         float centerX = viewport.getWorldWidth() / 2f;
         float boxW = 800;
         float boxH = viewport.getWorldHeight() - 180;
         float boxX = centerX - boxW / 2f;
         float boxY = 120;
+        boxBounds.set(boxX, boxY, boxW, boxH);
 
         // Draw Background
         Gdx.gl.glEnable(GL20.GL_BLEND);
@@ -44,14 +60,13 @@ public class InstructionRenderer {
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         // Prepare Scissor for Clipping
+        batch.end();
         Rectangle scissor = new Rectangle();
         Rectangle area = new Rectangle(boxX, boxY, boxW, boxH);
         ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), area, scissor);
 
-        batch.setProjectionMatrix(viewport.getCamera().combined);
-        batch.begin();
-
         if (ScissorStack.pushScissors(scissor)) {
+            batch.begin();
             float currentY = boxY + boxH - 50 + instructionScrollY;
 
             font.getData().setScale(2.5f);
@@ -157,14 +172,22 @@ public class InstructionRenderer {
             }
 
             batch.flush();
+            batch.end();
             ScissorStack.popScissors();
+            batch.begin();
         }
 
         font.getData().setScale(1.1f);
         font.setColor(Color.YELLOW);
-        font.draw(batch, "W/S or UP/DOWN to Scroll | [ESC] to Close", centerX - 180, boxY - 30);
+        if (isAndroid) {
+            font.draw(batch, "Drag to Scroll | Tap outside to Close", centerX - 210, boxY - 30);
+        } else {
+            font.draw(batch, "W/S or UP/DOWN to Scroll | [ESC] to Return", centerX - 200, boxY - 30);
+        }
+    }
 
-        batch.end();
+    public boolean isClickInside(float x, float y) {
+        return boxBounds.contains(x, y);
     }
 
     public void resetScroll() {

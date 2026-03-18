@@ -38,19 +38,17 @@ public class MinigameUI {
         float greenHw = (0.25f * engine.displayedWidthMult) / 2f * width;
         float greenCx = x + engine.greenCenter * width;
 
-        // 3. Penalty Zones (Solid colors to maintain the "Discontinuity" at the Green edge)
+        // 3. Penalty Zones
         float redHw = greenHw + (greenHw * 1.0f);
         float orangeHw = greenHw + (greenHw * 0.5f);
         drawZone(shapeRenderer, greenCx, redHw, y, height, colorRed);
         drawZone(shapeRenderer, greenCx, orangeHw, y, height, colorOrange);
 
-        // 4. Draw Green Zone (Base for the gradients)
+        // 4. Draw Green Zone
         drawZone(shapeRenderer, greenCx, greenHw, y, height, colorGreen);
 
         // 5. Nested Gradient Logic
-        // We start with the Green zone as the base color
         Color parentColor = colorGreen;
-        float parentCx = greenCx;
         float parentHw = greenHw;
 
         for (int i = 0; i < engine.sweetSpots.size; i++) {
@@ -58,20 +56,10 @@ public class MinigameUI {
             float childHw = parentHw * z.widthRatio;
             float childCx = x + z.center * width;
 
-            // Draw gradient from parent edge/center to child center
-            // Left Side Gradient
-            drawGradientRect(shapeRenderer,
-                    childCx - childHw, y, childHw, height,
-                    parentColor, z.color, true); // parent -> child
+            drawGradientRect(shapeRenderer, childCx - childHw, y, childHw, height, parentColor, z.color, true);
+            drawGradientRect(shapeRenderer, childCx, y, childHw, height, z.color, parentColor, true);
 
-            // Right Side Gradient
-            drawGradientRect(shapeRenderer,
-                    childCx, y, childHw, height,
-                    z.color, parentColor, true); // child -> parent
-
-            // Update parents for the next nested tier
             parentColor = z.color;
-            parentCx = childCx;
             parentHw = childHw;
         }
 
@@ -87,13 +75,16 @@ public class MinigameUI {
         shapeRenderer.end();
 
         // 8. Text Animations
-        batch.begin();
-        for (HUD.ModAnimation anim : activeAnims) {
-            font.getData().setScale(1.5f * anim.scale);
-            font.setColor(anim.color.r, anim.color.g, anim.color.b, anim.alpha);
-            font.draw(batch, anim.text, greenCx - 80, (screenH - 150f) + anim.yOffset);
+        if (activeAnims.size > 0) {
+            batch.begin();
+            for (HUD.ModAnimation anim : activeAnims) {
+                font.getData().setScale(1.5f * anim.scale);
+                font.setColor(anim.color.r, anim.color.g, anim.color.b, anim.alpha);
+                font.draw(batch, anim.text, greenCx - 80, (screenH - 150f) + anim.yOffset);
+            }
+            batch.end();
         }
-        batch.end();
+        com.badlogic.gdx.Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     private void drawZone(ShapeRenderer sr, float cx, float hw, float y, float h, Color c) {

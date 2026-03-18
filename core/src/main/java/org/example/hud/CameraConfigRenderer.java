@@ -20,6 +20,7 @@ public class CameraConfigRenderer {
     private final float MAX_SCROLL = 200f;
     private int selectedIndex = 0;
     private final int TOTAL_SETTINGS = 5;
+    private Rectangle boxBounds = new Rectangle();
 
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameConfig config, GameInputProcessor input) {
         handleNavigation(input);
@@ -40,6 +41,7 @@ public class CameraConfigRenderer {
         float boxH = viewport.getWorldHeight() - 180;
         float boxX = centerX - boxW / 2f;
         float boxY = 120;
+        boxBounds.set(boxX, boxY, boxW, boxH);
 
         // Draw Background
         Gdx.gl.glEnable(GL20.GL_BLEND);
@@ -49,15 +51,13 @@ public class CameraConfigRenderer {
         shapeRenderer.rect(boxX, boxY, boxW, boxH);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
-
+        batch.end();
         Rectangle scissor = new Rectangle();
         Rectangle area = new Rectangle(boxX, boxY, boxW, boxH);
         ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), area, scissor);
 
-        batch.setProjectionMatrix(viewport.getCamera().combined);
-        batch.begin();
-
         if (ScissorStack.pushScissors(scissor)) {
+            batch.begin();
             float currentY = boxY + boxH - 50 + scrollY;
 
             // --- TITLE ---
@@ -94,14 +94,18 @@ public class CameraConfigRenderer {
             font.draw(batch, "Use [LEFT/RIGHT] or [A/D] to change values", centerX - 330, currentY);
 
             batch.flush();
+            batch.end();
             ScissorStack.popScissors();
+            batch.begin();
         }
 
         font.getData().setScale(1.1f);
         font.setColor(Color.YELLOW);
-        font.draw(batch, "[ESC] to Return to Pause Menu", centerX - 140, boxY - 30);
-
-        batch.end();
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            font.draw(batch, "Tap outside to Return to Pause Menu", centerX - 180, boxY - 30);
+        } else {
+            font.draw(batch, "[ESC] to Return to Pause Menu", centerX - 140, boxY - 30);
+        }
     }
 
     private void handleNavigation(GameInputProcessor input) {
@@ -156,6 +160,10 @@ public class CameraConfigRenderer {
         else font.setColor(Color.GOLD);
 
         font.draw(batch, value, centerX + 120, y);
+    }
+
+    public boolean isClickInside(float x, float y) {
+        return boxBounds.contains(x, y);
     }
 
     public void resetScroll() {

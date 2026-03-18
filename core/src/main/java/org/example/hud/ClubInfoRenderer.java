@@ -14,12 +14,11 @@ public class ClubInfoRenderer {
     private final GlyphLayout layout = new GlyphLayout();
 
     public void render(SpriteBatch batch, ShapeRenderer shape, BitmapFont font, Viewport viewport,
-                       String name, String desc, String dist, String power, String loft) {
+                       String name, String desc, String dist, String power, String loft, float y) {
 
         float width = 320f;
         float height = 200f;
         float x = viewport.getWorldWidth() - width - 20;
-        float y = 160f;
 
         // --- ANTIALIASING FIX ---
         font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);

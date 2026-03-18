@@ -66,8 +66,15 @@ public class MinigameController {
 
     public void updateAndDraw(float delta, Camera camera, Terrain terrain, Vector2 spinDot, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff, ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font, Viewport viewport, GameInputProcessor input) {
         if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
-            cancel();
-            return;
+            // Check if it's a touch from an Android stage actor (like the HIT button)
+            // By default, Scene2D Stage handles touchDown and might prevent it reaching Gdx.input.isButtonJustPressed
+            // but if it doesn't, we should check if the touch was on a UI element.
+            // On Desktop, this is still valid for canceling.
+            if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+                System.out.println("[DEBUG_LOG] Minigame canceled by click/touch - needleStopped: " + needleStopped);
+                cancel();
+                return;
+            }
         }
 
         updateAnimations(delta);
@@ -88,7 +95,10 @@ public class MinigameController {
                 if (engine.needlePos >= 1.0f) { engine.needlePos = 1.0f; engine.needleMovingRight = false; }
                 else if (engine.needlePos <= 0f) { engine.needlePos = 0f; engine.needleMovingRight = true; }
                 
-                if (input.isActionJustPressed(GameInputProcessor.Action.STOP_NEEDLE)) stopNeedle();
+                if (input.isActionJustPressed(GameInputProcessor.Action.STOP_NEEDLE)) {
+                    System.out.println("[DEBUG_LOG] Minigame STOP_NEEDLE action triggered - needlePos: " + engine.needlePos);
+                    stopNeedle();
+                }
             }
         } else {
             glowTimer -= delta;

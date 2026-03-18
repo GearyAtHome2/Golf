@@ -54,22 +54,6 @@ public class CameraController {
         updateCursorState(); // Ensure cursor is released immediately on pause
     }
 
-    public boolean handleScroll(float amountY) {
-        if (isPaused) return false;
-
-        if (isOverhead) {
-            overheadZoom += amountY * 25.0f;
-            overheadZoom = MathUtils.clamp(overheadZoom, 50f, 1200f);
-            return true;
-        }
-
-        if (Gdx.input.isButtonPressed(Buttons.RIGHT)) {
-            targetDistance += amountY * 3.0f;
-            targetDistance = MathUtils.clamp(targetDistance, 2.1f, 150f);
-            return true;
-        }
-        return false;
-    }
 
     public void update(Vector3 ballPos, GameInputProcessor input) {
         if (isPaused) return;
@@ -78,28 +62,34 @@ public class CameraController {
         isOverhead = input.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW);
 
         if (isOverhead) {
-            updateOverheadMode(ballPos, delta);
+            updateOverheadMode(ballPos, delta, input);
             wasOverheadLastFrame = true;
         } else {
             if (wasOverheadLastFrame) {
                 currentLookAt.set(ballPos);
                 camera.up.set(0, 1f, 0);
             }
-            updateNormalMode(ballPos, delta);
+            updateNormalMode(ballPos, delta, input);
             wasOverheadLastFrame = false;
         }
 
         camera.update();
     }
 
-    private void updateOverheadMode(Vector3 ballPos, float delta) {
+    private void updateOverheadMode(Vector3 ballPos, float delta, GameInputProcessor input) {
         if (!wasOverheadLastFrame) {
             overheadCenter.set(ballPos);
             introActive = false;
         }
 
-        float deltaX = Gdx.input.getDeltaX();
-        float deltaY = Gdx.input.getDeltaY();
+        float deltaX = input.getActionValue(GameInputProcessor.Action.DRAG_X);
+        float deltaY = input.getActionValue(GameInputProcessor.Action.DRAG_Y);
+        float scrollY = input.getActionValue(GameInputProcessor.Action.SCROLL_Y);
+        if (scrollY != 0) {
+            System.out.println("[DEBUG_LOG] Overhead Zoom: " + overheadZoom + " | scroll: " + scrollY);
+            overheadZoom += scrollY * 25.0f;
+            overheadZoom = MathUtils.clamp(overheadZoom, 50f, 1200f);
+        }
 
         if (Gdx.input.isButtonPressed(Buttons.LEFT)) {
             float panScale = (overheadZoom / Gdx.graphics.getHeight()) * 1.5f;
@@ -109,7 +99,7 @@ public class CameraController {
 
             overheadCenter.x += ((-cosYaw) * deltaX * panScale) + ((-sinYaw) * deltaY * panScale);
             overheadCenter.z += (sinYaw * deltaX * panScale) + ((-cosYaw) * deltaY * panScale);
-        } else if (Gdx.input.isButtonPressed(Buttons.RIGHT)) {
+        } else if (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) {
             yaw += deltaX * config.mouseSensitivity * config.getXMult();
         }
 
@@ -124,7 +114,7 @@ public class CameraController {
                 overheadCenter.z + horizontalDist * MathUtils.cos(yawRad)
         );
 
-        if (Gdx.input.isButtonPressed(Buttons.LEFT) || Gdx.input.isButtonPressed(Buttons.RIGHT)) {
+        if (Gdx.input.isButtonPressed(Buttons.LEFT) || input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) {
             camera.position.set(tempTargetPos);
         } else {
             camera.position.lerp(tempTargetPos, 8f * delta);
@@ -134,7 +124,7 @@ public class CameraController {
         camera.lookAt(overheadCenter);
     }
 
-    private void updateNormalMode(Vector3 ballPos, float delta) {
+    private void updateNormalMode(Vector3 ballPos, float delta, GameInputProcessor input) {
         float dstToTarget = camera.position.dst(tempTargetPos);
         float lerpBase = introActive ? 1.5f : config.lerpSpeed;
         float lerpSpeed = lerpBase * delta;
@@ -144,16 +134,34 @@ public class CameraController {
         distance = MathUtils.lerp(distance, targetDistance, lerpSpeed);
         pitch = MathUtils.lerp(pitch, targetPitch, lerpSpeed);
 
+        float scrollY = input.getActionValue(GameInputProcessor.Action.SCROLL_Y);
+        if (scrollY != 0) {
+            boolean isMod = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || 
+                            input.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW) || 
+                            Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+            
+            System.out.println("[DEBUG_LOG] Normal Zoom check: " + scrollY + " | Mods: " + isMod);
+            
+            if (isMod) {
+                targetDistance += scrollY * 3.0f;
+                targetDistance = MathUtils.clamp(targetDistance, 2.1f, 150f);
+                System.out.println("[DEBUG_LOG] Target Distance: " + targetDistance);
+            }
+        }
+
         boolean canRotate = (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !introActive)
-                || (config.controlStyle == GameConfig.CameraConfig.ControlStyle.DRAG && Gdx.input.isButtonPressed(Buttons.RIGHT));
+                || (config.controlStyle == GameConfig.CameraConfig.ControlStyle.DRAG && (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android));
 
         if (canRotate) {
-            float sens = Gdx.input.isButtonPressed(Buttons.RIGHT) && config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE
+            float sens = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) && config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE
                     ? config.mouseSensitivity / config.fineTuneDivider
                     : config.mouseSensitivity;
 
-            yaw += Gdx.input.getDeltaX() * sens * config.getXMult();
-            targetPitch = MathUtils.clamp(targetPitch + (Gdx.input.getDeltaY() * sens * config.getYMult()), -10f, 85f);
+            float deltaX = input.getActionValue(GameInputProcessor.Action.DRAG_X);
+            float deltaY = input.getActionValue(GameInputProcessor.Action.DRAG_Y);
+
+            yaw += deltaX * sens * config.getXMult();
+            targetPitch = MathUtils.clamp(targetPitch + (deltaY * sens * config.getYMult()), -10f, 85f);
         }
 
         float radYaw = -MathUtils.degreesToRadians * yaw;

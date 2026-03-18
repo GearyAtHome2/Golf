@@ -6,9 +6,11 @@ import com.badlogic.gdx.Input;
 import java.util.EnumMap;
 import java.util.Map;
 
-public class DesktopInputProcessor implements GameInputProcessor {
+public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter implements GameInputProcessor {
 
     private final Map<Action, Integer> keyMap = new EnumMap<>(Action.class);
+    private float accumulatedScroll = 0f;
+    private float currentFrameScroll = 0f;
 
     public DesktopInputProcessor() {
         keyMap.put(Action.CHARGE_SHOT, Input.Keys.SPACE);
@@ -30,34 +32,48 @@ public class DesktopInputProcessor implements GameInputProcessor {
         keyMap.put(Action.OVERHEAD_VIEW, Input.Keys.TAB);
         keyMap.put(Action.SPIN_UP, Input.Keys.W);
         keyMap.put(Action.SPIN_DOWN, Input.Keys.S);
+        keyMap.put(Action.SPIN_LEFT, Input.Keys.A);
+        keyMap.put(Action.SPIN_RIGHT, Input.Keys.D);
         keyMap.put(Action.MENU_UP, Input.Keys.UP);
         keyMap.put(Action.MENU_DOWN, Input.Keys.DOWN);
+        keyMap.put(Action.SPEED_UP, Input.Keys.UP);
+        keyMap.put(Action.SPEED_DOWN, Input.Keys.DOWN);
         keyMap.put(Action.MENU_SELECT, Input.Keys.ENTER);
         keyMap.put(Action.CANCEL_MENU, Input.Keys.ESCAPE);
     }
 
     @Override
     public void update(float delta) {
-        // No per-frame updates needed for desktop keyboard
+        currentFrameScroll = accumulatedScroll;
+        accumulatedScroll = 0f;
+    }
+
+    @Override
+    public boolean scrolled(float amountX, float amountY) {
+        if (amountY != 0) {
+            accumulatedScroll += amountY;
+        }
+        return true;
+    }
+
+    @Override
+    public float getActionValue(Action action) {
+        if (action == Action.DRAG_X) return Gdx.input.getDeltaX();
+        if (action == Action.DRAG_Y) return Gdx.input.getDeltaY();
+        if (action == Action.SCROLL_Y) {
+            return currentFrameScroll;
+        }
+        return 0f;
     }
 
     @Override
     public boolean isActionPressed(Action action) {
+        if (action == Action.SECONDARY_ACTION) {
+            return Gdx.input.isButtonPressed(Input.Buttons.RIGHT);
+        }
         if (action == Action.MAX_POWER_SHOT) {
             return (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) || Gdx.input.isKeyPressed(Input.Keys.CONTROL_RIGHT)) &&
                     Gdx.input.isKeyPressed(Input.Keys.SPACE);
-        }
-        if (action == Action.MENU_UP) {
-            return Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W);
-        }
-        if (action == Action.MENU_DOWN) {
-            return Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S);
-        }
-        if (action == Action.SPIN_UP) {
-            return Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W);
-        }
-        if (action == Action.SPIN_DOWN) {
-            return Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S);
         }
         Integer key = keyMap.get(action);
         return key != null && Gdx.input.isKeyPressed(key);
@@ -68,12 +84,6 @@ public class DesktopInputProcessor implements GameInputProcessor {
         if (action == Action.MAX_POWER_SHOT) {
             return (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) || Gdx.input.isKeyPressed(Input.Keys.CONTROL_RIGHT)) &&
                     Gdx.input.isKeyJustPressed(Input.Keys.SPACE);
-        }
-        if (action == Action.MENU_UP) {
-            return Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W);
-        }
-        if (action == Action.MENU_DOWN) {
-            return Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S);
         }
         if (action == Action.CANCEL_MENU) {
             return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE);

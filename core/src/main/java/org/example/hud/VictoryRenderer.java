@@ -17,7 +17,6 @@ public class VictoryRenderer {
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
 
-        batch.begin();
         int par = (levelData != null) ? levelData.getPar() : 3;
         String shout = (shots == 1) ? ScoreShout.HIO.shout : ScoreShout.getShout(shots, par);
         int diff = shots - par;
@@ -32,16 +31,15 @@ public class VictoryRenderer {
         font.setColor(Color.WHITE);
         String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
         font.draw(batch, "Hole Strokes: " + shots + " (" + scoreType + ")", centerX - 160, viewport.getWorldHeight() - 150);
-        batch.end();
 
         if (compScore != null) {
+            batch.end();
             renderCompetitiveResults(batch, shapeRenderer, font, viewport, compScore, centerX, centerY);
-        } else {
             batch.begin();
+        } else {
             font.getData().setScale(1.5f);
             font.setColor(Color.WHITE);
             font.draw(batch, "Press [N] for New Level", centerX - 120, centerY - 100);
-            batch.end();
         }
     }
 

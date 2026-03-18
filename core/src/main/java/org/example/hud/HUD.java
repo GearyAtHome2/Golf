@@ -4,6 +4,8 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Pixmap;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -18,6 +20,12 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.graphics.g2d.NinePatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
+import com.badlogic.gdx.graphics.g2d.Batch;
 import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.Ball;
@@ -88,11 +96,186 @@ public class HUD {
     
     private Stage stage;
     private Skin skin;
+    private Stage startMenuStage;
+    private Stage pauseMenuStage;
+    private Table gameplayTable;
+    private Table victoryTable;
     private boolean mobileUIInitialized = false;
+
+    // Mobile UI Actors
+    private SpinIndicatorActor spinActor;
+    private PreShotDebugActor debugActor;
+    private TextButton infoToggleBtn;
+    private HoldButton resetBallBtn;
+    private HoldButton newMapBtn;
+    private boolean showInfoDisplay = false;
 
     // Temporary vectors for HUD calculations to avoid allocation
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
+    private final Vector3 tempV3 = new Vector3();
+    private Texture whitePixel;
+
+    private void setupCamera() {
+    }
+
+    private Drawable createRoundedRectDrawable(Color color, int radius) {
+        int size = 64; 
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0, 0, 0, 0);
+        pixmap.fill();
+        
+        pixmap.setColor(color);
+        pixmap.fillRectangle(radius, 0, size - 2 * radius, size);
+        pixmap.fillRectangle(0, radius, size, size - 2 * radius);
+        pixmap.fillCircle(radius, radius, radius);
+        pixmap.fillCircle(size - radius, radius, radius);
+        pixmap.fillCircle(radius, size - radius, radius);
+        pixmap.fillCircle(size - radius, size - radius, radius);
+        
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        
+        return new NinePatchDrawable(new NinePatch(new TextureRegion(texture), radius, radius, radius, radius));
+    }
+
+    class SpinIndicatorActor extends Actor {
+        public SpinIndicatorActor() {
+            setSize(160, 160);
+            addListener(new InputListener() {
+                @Override
+                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    updateSpin(x, y);
+                    return true;
+                }
+                @Override
+                public void touchDragged(InputEvent event, float x, float y, int pointer) {
+                    updateSpin(x, y);
+                }
+                private void updateSpin(float x, float y) {
+                    float radius = getWidth() / 2f;
+                    float dx = (x - radius) / radius;
+                    float dy = (y - radius) / radius;
+                    float len = (float) Math.sqrt(dx * dx + dy * dy);
+                    if (len > 1) {
+                        dx /= len;
+                        dy /= len;
+                    }
+                    spinDot.set(dx, dy);
+                }
+            });
+        }
+        @Override
+        public void draw(Batch batch, float parentAlpha) {
+            batch.end();
+            shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());
+            shapeRenderer.setTransformMatrix(batch.getTransformMatrix());
+            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            float radius = getWidth() / 2f;
+            float centerX = getX() + radius;
+            float centerY = getY() + radius;
+            shapeRenderer.setColor(1, 1, 1, 0.4f * parentAlpha);
+            shapeRenderer.circle(centerX, centerY, radius);
+            shapeRenderer.setColor(0.1f, 0.1f, 0.1f, 0.6f * parentAlpha);
+            shapeRenderer.circle(centerX, centerY, radius - 4);
+            shapeRenderer.setColor(Color.RED);
+            shapeRenderer.circle(centerX + spinDot.x * (radius - 12), centerY + spinDot.y * (radius - 12), 8);
+            shapeRenderer.end();
+            batch.begin();
+            
+            font.getData().setScale(1.1f);
+            drawShadowedText("SPIN", getX() + radius - 25, getY() - 10, Color.WHITE);
+        }
+    }
+
+    class PreShotDebugActor extends Actor {
+        private Terrain terrain;
+        private Ball ball;
+        private Camera camera;
+
+        public void update(Terrain terrain, Ball ball, Camera camera) {
+            this.terrain = terrain;
+            this.ball = ball;
+            this.camera = camera;
+        }
+
+        @Override
+        public void draw(Batch batch, float parentAlpha) {
+            if (terrain == null || ball == null || camera == null) return;
+            Vector3 ballPos = ball.getPosition();
+            Vector3 aimDir = camera.direction;
+            ShotDifficulty diff = terrain.getShotDifficulty(ballPos.x, ballPos.z, aimDir);
+            Vector3 normal = terrain.getNormalAt(ballPos.x, ballPos.z);
+            float sidePush = normal.dot(new Vector3(aimDir).crs(Vector3.Y).nor());
+            
+            font.getData().setScale(1.2f);
+            float x = getX();
+            float y = getY() + getHeight() - 20;
+            drawShadowedText("TERRAIN: " + terrain.getTerrainTypeAt(ballPos.x, ballPos.z), x, y, Color.YELLOW);
+            drawShadowedText(String.format("DIFFICULTY: %.2fx", diff.terrainDifficulty), x, y - 25, Color.YELLOW);
+            drawShadowedText(String.format("SLOPE: %.2fx", diff.slopeDifficulty), x, y - 50, Color.YELLOW);
+            if (Math.abs(sidePush) > 0.05f) {
+                Color kickColor = sidePush > 0 ? Color.RED : Color.CYAN;
+                drawShadowedText(String.format("KICK: %s (%.2f)", (sidePush > 0 ? "RIGHT" : "LEFT"), sidePush), x, y - 75, kickColor);
+            }
+        }
+    }
+
+    private class HoldButton extends TextButton {
+        private float holdTime = 0;
+        private final float requiredTime = 1.2f;
+        private final GameInputProcessor.Action action;
+        private final MobileInputProcessor mobileInput;
+
+        public HoldButton(String text, TextButtonStyle style, GameInputProcessor.Action action, MobileInputProcessor mobileInput) {
+            super(text, style);
+            this.action = action;
+            this.mobileInput = mobileInput;
+            
+            addListener(new InputListener() {
+                @Override
+                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    if (isDisabled()) return false;
+                    holdTime = 0;
+                    return true;
+                }
+
+                @Override
+                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                    if (holdTime >= requiredTime) {
+                        mobileInput.triggerAction(action);
+                    }
+                    holdTime = 0;
+                }
+            });
+        }
+
+        @Override
+        public void act(float delta) {
+            super.act(delta);
+            if (isPressed() && !isDisabled()) {
+                holdTime += delta;
+            } else {
+                holdTime = 0;
+            }
+        }
+
+        @Override
+        public void draw(Batch batch, float parentAlpha) {
+            super.draw(batch, parentAlpha);
+            if (isPressed() && !isDisabled() && holdTime > 0) {
+                float progress = Math.min(holdTime / requiredTime, 1f);
+                float barW = getWidth() * progress;
+                float barH = getHeight();
+                
+                batch.setColor(1f, 1f, 1f, 0.4f);
+                batch.draw(whitePixel, getX(), getY(), barW, barH);
+                batch.setColor(Color.WHITE);
+            }
+        }
+    }
 
     public HUD(GameConfig config) {
         this.config = config;
@@ -105,9 +288,16 @@ public class HUD {
         );
 
         viewport = new ScreenViewport();
+        
+        Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pm.setColor(Color.WHITE);
+        pm.fill();
+        whitePixel = new Texture(pm);
+        pm.dispose();
     }
 
     private void drawShadowedText(String text, float x, float y, Color color) {
+        if (batch == null || !batch.isDrawing()) return;
         float alpha = color.a;
         font.setColor(0, 0, 0, alpha * 0.7f);
         font.draw(batch, text, x + 1, y - 1);
@@ -121,47 +311,68 @@ public class HUD {
     public int getShotCount() { return shotCount; }
     public void resize(int width, int height) { 
         viewport.update(width, height, true); 
-        if (stage != null) stage.getViewport().update(width, height, true);
     }
     
     public void setupMobileUI(MobileInputProcessor input) {
         if (mobileUIInitialized) return;
+        System.out.println("[DEBUG_LOG] HUD.setupMobileUI() - Starting");
         
-        stage = new Stage(new ScreenViewport());
+        // Use the same viewport to ensure coordinates match manual text rendering
+        stage = new Stage(viewport, batch);
+        startMenuStage = new Stage(viewport, batch);
+        pauseMenuStage = new Stage(viewport, batch);
         
-        // Note: For a real app we'd load a .json skin, but for now we create a basic one
+        System.out.println("[DEBUG_LOG] HUD.setupMobileUI() - Stages created");
         skin = new Skin();
         skin.add("default", font);
         
+        // Translucent gray rounded backgrounds
+        Drawable btnUp = createRoundedRectDrawable(new Color(0.2f, 0.2f, 0.2f, 0.5f), 12);
+        Drawable btnDown = createRoundedRectDrawable(new Color(0.4f, 0.4f, 0.4f, 0.7f), 12);
+        skin.add("btnUp", btnUp, Drawable.class);
+        skin.add("btnDown", btnDown, Drawable.class);
+        
+        // Dark Red for HIT button pressed state
+        Drawable hitUp = createRoundedRectDrawable(new Color(0.8f, 0.2f, 0.2f, 0.7f), 15);
+        Drawable hitDown = createRoundedRectDrawable(new Color(0.5f, 0.1f, 0.1f, 0.8f), 15);
+        skin.add("hitUp", hitUp, Drawable.class);
+        skin.add("hitDown", hitDown, Drawable.class);
+
+        System.out.println("[DEBUG_LOG] HUD.setupMobileUI() - Skin created");
+
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
         style.font = font;
-        style.up = null; // We could add textures here if available
-        style.down = null;
+        style.up = skin.getDrawable("btnUp");
+        style.down = skin.getDrawable("btnDown");
         style.fontColor = Color.WHITE;
-        style.downFontColor = Color.YELLOW;
 
-        Table table = new Table();
-        table.setFillParent(true);
-        stage.addActor(table);
+        // --- GAMEPLAY UI ---
+        gameplayTable = new Table();
+        gameplayTable.setFillParent(true);
+        stage.addActor(gameplayTable);
 
-        // Club Up/Down buttons
-        TextButton clubUp = new TextButton("[ Club + ]", style);
-        clubUp.addListener(new ChangeListener() {
+        // LEFT SIDE - Split into Top (Hole Info), Middle (Buttons), and Bottom (Spin/Debug)
+        Table leftStack = new Table();
+        gameplayTable.add(leftStack).expandY().fillY().left().padLeft(20);
+
+        Table rightStack = new Table();
+        gameplayTable.add(rightStack).expand().right().fillY().padRight(20);
+
+        // LEFT STACK CONTENT
+        leftStack.add().height(150).row(); // Spacer for Top-Left Hole/Par Info
+
+        Table leftButtons = new Table();
+        leftStack.add(leftButtons).expandY().top().left().row();
+
+        TextButton menuBtn = new TextButton("MENU", style);
+        menuBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                input.triggerAction(GameInputProcessor.Action.CLUB_UP);
+                input.triggerAction(GameInputProcessor.Action.PAUSE);
             }
         });
 
-        TextButton clubDown = new TextButton("[ Club - ]", style);
-        clubDown.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                input.triggerAction(GameInputProcessor.Action.CLUB_DOWN);
-            }
-        });
-
-        TextButton projBtn = new TextButton("[ PROJ ]", style);
+        TextButton projBtn = new TextButton("PROJ", style);
         projBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
@@ -169,32 +380,226 @@ public class HUD {
             }
         });
 
-        // Power button (hold to charge)
-        TextButton powerBtn = new TextButton("[ HIT ]", style);
-        powerBtn.addListener(new InputListener() {
+        TextButton clubPlus = new TextButton("CLUB+", style);
+        clubPlus.addListener(new ChangeListener() {
             @Override
-            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, true);
-                return true;
-            }
-
-            @Override
-            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-                input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, false);
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CLUB_UP);
             }
         });
 
-        table.bottom().left().pad(20);
-        table.add(clubUp).pad(10);
-        table.add(clubDown).pad(10);
-        table.add(projBtn).pad(10);
-        table.add(powerBtn).pad(10);
+        TextButton clubMinus = new TextButton("CLUB-", style);
+        clubMinus.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CLUB_DOWN);
+            }
+        });
+
+        float btnW = 210f, btnH = 120f;
+        leftButtons.add(menuBtn).width(btnW).height(btnH).padBottom(15).left().row();
+        leftButtons.add(projBtn).width(btnW).height(btnH).padBottom(15).left().row();
+        leftButtons.add(clubPlus).width(btnW).height(btnH).padBottom(15).left().row();
+        leftButtons.add(clubMinus).width(btnW).height(btnH).left().row();
+
+        debugActor = new PreShotDebugActor();
+        leftStack.add(debugActor).width(400).height(140).left().padBottom(10).row();
+
+        spinActor = new SpinIndicatorActor();
+        leftStack.add(spinActor).size(160).bottom().left().padBottom(20);
+
+        // RIGHT STACK CONTENT
+        rightStack.add().height(150).row(); // Spacer for Top-Right Wind Indicator
+
+        TextButton hitBtn = new TextButton("HIT", style);
+        TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
+        hitStyle.up = skin.getDrawable("hitUp");
+        hitStyle.down = skin.getDrawable("hitDown");
+        hitBtn.setStyle(hitStyle);
+
+        // Right side buttons
+        hitBtn.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                System.out.println("[DEBUG_LOG] HIT button touchDown - pointer: " + pointer);
+                input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, true);
+                return true;
+            }
+            @Override
+            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                System.out.println("[DEBUG_LOG] HIT button touchUp - pointer: " + pointer);
+                input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, false);
+                input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
+            }
+        });
+        
+        // HIT button at the top right
+        rightStack.add(hitBtn).width(200).height(140).expandY().top().right().padTop(20).row();
+
+        // --- NEW BUTTONS (RESET & NEW MAP) ---
+        resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input);
+        newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input);
+
+        // Positioned between HIT and INFO, clearing the info box area (y=220-420)
+        // Enlarged and pushed UPWARDS from the bottom to avoid overlap
+        rightStack.add(resetBallBtn).width(210).height(100).right().padBottom(20).row();
+        rightStack.add(newMapBtn).width(210).height(100).right().padBottom(150).row(); 
+
+        infoToggleBtn = new TextButton("INFO", style);
+        infoToggleBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                showInfoDisplay = !showInfoDisplay;
+                infoToggleBtn.setVisible(!showInfoDisplay);
+            }
+        });
+        // Positioned just above the club name text (e.g. above DRIVER at y=180)
+        // anchored at y=220 to match the club info renderer's display area
+        rightStack.add(infoToggleBtn).width(120).height(80).bottom().right().padBottom(220);
+
+        // --- VICTORY UI ---
+        victoryTable = new Table();
+        victoryTable.setFillParent(true);
+        victoryTable.setVisible(false);
+        stage.addActor(victoryTable);
+
+        TextButton nextBtn = new TextButton("NEXT HOLE", style);
+        nextBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.NEW_LEVEL);
+            }
+        });
+
+        TextButton victoryMenuBtn = new TextButton("MENU", style);
+        victoryMenuBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.MAIN_MENU);
+            }
+        });
+
+        victoryTable.bottom().center().pad(50);
+        victoryTable.add(nextBtn).width(240).height(100).pad(10);
+        victoryTable.add(victoryMenuBtn).width(160).height(100).pad(10);
+
+        // --- START MENU UI ---
+        Table startTable = new Table();
+        startTable.setFillParent(true);
+        startMenuStage.addActor(startTable);
+
+        TextButton.TextButtonStyle menuStyle = new TextButton.TextButtonStyle();
+        menuStyle.font = font;
+        menuStyle.up = createRoundedRectDrawable(new Color(0.15f, 0.15f, 0.15f, 0.6f), 12);
+        menuStyle.down = createRoundedRectDrawable(new Color(0.4f, 0.4f, 0.1f, 0.8f), 12);
+        menuStyle.fontColor = Color.WHITE;
+
+        String[] options = {"START GAME", "COMPETITIVE (18 HOLES)", "INSTRUCTIONS", "PRACTICE RANGE", "PUTTING GREEN", "PLAY FROM CLIPBOARD SEED"};
+        for (int i = 0; i < options.length; i++) {
+            final int index = i;
+            TextButton optBtn = new TextButton(options[i], menuStyle);
+            optBtn.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent event, Actor actor) {
+                    input.triggerAction(GameInputProcessor.Action.valueOf("SELECT_OPTION_" + index));
+                }
+            });
+            startTable.add(optBtn).width(600).height(85).padBottom(12);
+            startTable.row();
+        }
+        startTable.top().padTop(320);
+
+        // --- PAUSE MENU UI ---
+        Table pauseTable = new Table();
+        pauseTable.setFillParent(true);
+        pauseMenuStage.addActor(pauseTable);
+
+        // Pause buttons that update their text dynamically
+        final TextButton animBtn = new TextButton("ANIMATION: " + config.animSpeed.name(), menuStyle);
+        animBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                config.cycleAnimation();
+                animBtn.setText("ANIMATION: " + config.animSpeed.name());
+                event.cancel(); // Prevent double-trigger if input multiplexer also fires
+            }
+        });
+
+        final TextButton diffBtn = new TextButton("DIFFICULTY: " + config.difficulty.name(), menuStyle);
+        diffBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                config.cycleDifficulty();
+                diffBtn.setText("DIFFICULTY: " + config.difficulty.name());
+                event.cancel();
+            }
+        });
+
+        final TextButton partBtn = new TextButton("PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"), menuStyle);
+        partBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                config.particlesEnabled = !config.particlesEnabled;
+                partBtn.setText("PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"));
+                event.cancel();
+            }
+        });
+
+        TextButton helpBtn = new TextButton("HELP", menuStyle);
+        helpBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.HELP);
+            }
+        });
+
+        TextButton camBtn = new TextButton("CAMERA", menuStyle);
+        camBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CAM_CONFIG);
+            }
+        });
+
+        TextButton pauseMenuBtn = new TextButton("MAIN MENU", menuStyle);
+        pauseMenuBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.MAIN_MENU);
+            }
+        });
+
+        TextButton resumeBtn = new TextButton("RESUME", menuStyle);
+        resumeBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.PAUSE); // Action.PAUSE toggles pause state
+            }
+        });
+
+        pauseTable.add(resumeBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.add(animBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.add(diffBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.add(partBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.add(helpBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.add(camBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.add(pauseMenuBtn).width(600).height(85).padBottom(12).row();
+        pauseTable.center();
+        pauseTable.top().padTop(320);
 
         mobileUIInitialized = true;
     }
 
     public void renderStartMenu(int selection) {
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
         mainMenuRenderer.render(batch, font, viewport, selection);
+        batch.end();
+
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && startMenuStage != null) {
+            startMenuStage.act();
+            startMenuStage.draw();
+        }
     }
 
     public void renderPauseMenu(boolean isPractice, LevelData levelData, GameInputProcessor input) {
@@ -223,39 +628,54 @@ public class HUD {
         float centerX = viewport.getWorldWidth() / 2f;
         float centerY = viewport.getWorldHeight() / 2f;
 
-        font.getData().setScale(2.5f);
-        drawShadowedText("PAUSED", centerX - 80, viewport.getWorldHeight() - 100, Color.WHITE);
+        float titleScale = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android ? 4.0f : 2.5f;
+        float textScale = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android ? 2.0f : 1.2f;
+        float spacing = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android ? 80f : 40f;
 
-        font.getData().setScale(1.2f);
-        drawShadowedText("--- SETTINGS ---", centerX - 80, centerY + 120, Color.YELLOW);
-        drawShadowedText("[A] ANIMATION: " + config.animSpeed.name(), centerX - 120, centerY + 80, Color.WHITE);
-        drawShadowedText("[D] DIFFICULTY: " + config.difficulty.name(), centerX - 120, centerY + 40, Color.WHITE);
-        drawShadowedText("[L] PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"), centerX - 120, centerY, config.particlesEnabled ? Color.GREEN : Color.RED);
+        font.getData().setScale(titleScale);
+        drawShadowedText("PAUSED", centerX - (80 * (titleScale / 2.5f)), viewport.getWorldHeight() - 100, Color.WHITE);
 
-        if (seedFeedbackTimer > 0) {
-            float delta = Gdx.graphics.getDeltaTime();
-            seedFeedbackTimer -= delta;
-            font.setColor(0, 1, 0, MathUtils.clamp(seedFeedbackTimer, 0, 1));
-            font.draw(batch, "SEED COPIED TO CLIPBOARD", centerX - 120, centerY - 60);
+        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+            font.getData().setScale(textScale);
+            drawShadowedText("--- SETTINGS ---", centerX - (80 * (textScale / 1.2f)), centerY + (spacing * 3), Color.YELLOW);
+            drawShadowedText("[A] ANIMATION: " + config.animSpeed.name(), centerX - (120 * (textScale / 1.2f)), centerY + (spacing * 2), Color.WHITE);
+            drawShadowedText("[D] DIFFICULTY: " + config.difficulty.name(), centerX - (120 * (textScale / 1.2f)), centerY + spacing, Color.WHITE);
+            drawShadowedText("[L] PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"), centerX - (120 * (textScale / 1.2f)), centerY, config.particlesEnabled ? Color.GREEN : Color.RED);
+
+            if (seedFeedbackTimer > 0) {
+                float delta = Gdx.graphics.getDeltaTime();
+                seedFeedbackTimer -= delta;
+                font.setColor(0, 1, 0, MathUtils.clamp(seedFeedbackTimer, 0, 1));
+                font.draw(batch, "SEED COPIED TO CLIPBOARD", centerX - (120 * (textScale / 1.2f)), centerY - spacing - 20);
+            }
+
+            font.setColor(Color.GRAY);
+            font.draw(batch, "----------------", centerX - (80 * (textScale / 1.2f)), centerY - spacing);
+
+            font.setColor(Color.WHITE);
+            drawShadowedText("[O] CAMERA CONFIG", centerX - (120 * (textScale / 1.2f)), centerY - (spacing * 2), Color.WHITE);
+            drawShadowedText("[I] INSTRUCTIONS", centerX - (120 * (textScale / 1.2f)), centerY - (spacing * 3), Color.WHITE);
+            drawShadowedText("[C] COPY SEED", centerX - (120 * (textScale / 1.2f)), centerY - (spacing * 4), Color.WHITE);
+            drawShadowedText("[M] EXIT TO MAIN MENU", centerX - (120 * (textScale / 1.2f)), centerY - (spacing * 5), Color.WHITE);
+            drawShadowedText("[ESC] RESUME", centerX - (120 * (textScale / 1.2f)), centerY - (spacing * 6), Color.YELLOW);
+        } else if (pauseMenuStage != null) {
+            font.getData().setScale(textScale);
+            font.setColor(Color.WHITE);
         }
 
-        font.setColor(Color.GRAY);
-        font.draw(batch, "----------------", centerX - 80, centerY - 40);
-        drawShadowedText("[R] RESET BALL  |  [N] NEW LEVEL  |  [M] MAIN MENU  |  [C] COPY SEED  |  [I] HELP  |  [O] CAM CONFIG", 50, 100, Color.WHITE);
-
         batch.end();
+
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && pauseMenuStage != null) {
+            pauseMenuStage.act();
+            pauseMenuStage.draw();
+        }
     }
 
     public void renderPlayingHUD(float gameSpeed, Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input) {
-        if (input instanceof MobileInputProcessor) {
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !mobileUIInitialized) {
             setupMobileUI((MobileInputProcessor) input);
-            if (stage != null) {
-                Gdx.input.setInputProcessor(stage);
-                stage.act(Gdx.graphics.getDeltaTime());
-                stage.draw();
-            }
         }
-        
+
         float delta = Gdx.graphics.getDeltaTime();
         this.isPracticeState = isPractice;
 
@@ -287,13 +707,30 @@ public class HUD {
             }
         }
 
-        batch.setProjectionMatrix(viewport.getCamera().combined);
-        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        if (mobileUIInitialized && stage != null) {
+            if (debugActor != null) debugActor.update(terrain, ball, gameCamera);
 
-        drawSpinUI();
-        if (levelData != null) renderWindIndicator(levelData.getWind(), gameCamera);
+            if (newMapBtn != null) {
+                boolean isCompetitive = !isPractice && compScore != null;
+                newMapBtn.setDisabled(isCompetitive);
+                newMapBtn.setColor(isCompetitive ? Color.GRAY : Color.WHITE);
+            }
+
+            stage.getViewport().apply();
+            stage.act(delta);
+            stage.draw();
+        }
+
+        viewport.apply();
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+
+        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+            drawSpinUI();
+        }
 
         batch.begin();
+        if (levelData != null) renderWindIndicator(levelData.getWind(), gameCamera);
         renderFeedbackMessages(delta);
         renderDistanceDisplay(delta);
         renderHazardPopUp(delta);
@@ -308,8 +745,25 @@ public class HUD {
             drawShadowedText("SEED COPIED!", viewport.getWorldWidth() / 2f - 60, viewport.getWorldHeight() - 100, c);
         }
 
-        if (ball.getState() == Ball.State.STATIONARY && !minigameController.isActive())
-            renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
+        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+            if (ball.getState() == Ball.State.STATIONARY && !minigameController.isActive())
+                renderShotDebug(ball.getPosition(), gameCamera.direction, terrain);
+        } else if (showInfoDisplay) {
+            // We call this while the batch is already open
+            renderClubInfo(currentClub);
+
+            if (Gdx.input.justTouched()) {
+                tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+                viewport.unproject(tempV3);
+
+                if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
+                        tempV3.y > 220 && tempV3.y < 420) {
+                    showInfoDisplay = false;
+                    if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
+                }
+            }
+        }
+
         batch.end();
 
         if (minigameController.isActive()) {
@@ -320,12 +774,16 @@ public class HUD {
                 shotFeedbackColor = res.rating.color.cpy();
                 shotFeedbackText = res.rating.getRandomPhrase() + " (" + (int) (res.powerMod * 100) + "%)";
             }
+        } else if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            if (debugActor != null) debugActor.update(terrain, ball, gameCamera);
+            stage.draw();
         }
     }
 
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, float speed, CompetitiveScore compScore, Terrain terrain) {
         float topY = viewport.getWorldHeight() - 40;
         font.getData().setScale(1.5f);
+        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
         if (isPractice) {
             drawShadowedText("PRACTICE", 40, topY, Color.CYAN);
@@ -342,7 +800,12 @@ public class HUD {
         drawShadowedText("Shots: " + shotCount, 40, shotsY, Color.WHITE);
 
         float rightX = viewport.getWorldWidth() - 250;
-        drawShadowedText("Club: " + club.name().replace("_", " "), rightX, 140, Color.WHITE);
+        if (!isAndroid) {
+            drawShadowedText("Club: " + club.name().replace("_", " "), rightX, 140, Color.WHITE);
+        } else {
+            font.getData().setScale(1.8f);
+            drawShadowedText(club.name().replace("_", " "), rightX + 50, 180, Color.WHITE);
+        }
 
         float currentSpinMag = ball.getSpin().len();
         String spinLabel = "NONE";
@@ -374,6 +837,8 @@ public class HUD {
     }
 
     public void renderClubInfo(Club club) {
+        if (batch.isDrawing()) batch.end();
+
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
@@ -386,12 +851,14 @@ public class HUD {
                 ClubInfoManager.getClubDescription(club),
                 ClubInfoManager.getCarryDistanceInfo(club),
                 ClubInfoManager.getPowerInfo(club),
-                ClubInfoManager.getLoftInfo(club)
+                ClubInfoManager.getLoftInfo(club),
+                220f // Pass explicit Y position
         );
 
         if (batch.isDrawing()) {
             batch.end();
         }
+        batch.begin();
     }
 
     private void renderShotDistance(Ball ball, float delta) {
@@ -463,6 +930,8 @@ public class HUD {
 
     private void renderWindIndicator(Vector3 worldWind, Camera camera) {
         float uiX = viewport.getWorldWidth() - 80, uiY = viewport.getWorldHeight() - 80, radius = 40f;
+        
+        batch.end();
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line); shapeRenderer.setColor(Color.WHITE); shapeRenderer.circle(uiX, uiY, radius); shapeRenderer.end();
         if (worldWind.len() > 0.1f) {
             Vector3 camForward = new Vector3(camera.direction.x, 0, camera.direction.z).nor();
@@ -474,7 +943,8 @@ public class HUD {
             shapeRenderer.triangle(uiX + MathUtils.cos(angle) * radius, uiY + MathUtils.sin(angle) * radius, uiX + MathUtils.cos(angle + 2.6f) * 15, uiY + MathUtils.sin(angle + 2.6f) * 15, uiX + MathUtils.cos(angle - 2.6f) * 15, uiY + MathUtils.sin(angle - 2.6f) * 15);
             shapeRenderer.end();
         }
-        batch.begin(); font.getData().setScale(1.2f); drawShadowedText(String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10, Color.WHITE); batch.end();
+        batch.begin();
+        font.getData().setScale(1.2f); drawShadowedText(String.format("%.0f MPH", worldWind.len()), uiX - 30, uiY - radius - 10, Color.WHITE);
     }
 
     public void showWaterHazard() { this.hazardText = "WATER HAZARD"; this.hazardColor = Color.CYAN; this.hazardTimer = 1.0f; }
@@ -502,10 +972,21 @@ public class HUD {
     }
 
     public void renderVictory(int shots, LevelData levelData, CompetitiveScore compScore) {
+        if (gameplayTable != null) gameplayTable.setVisible(false);
+        if (victoryTable != null) victoryTable.setVisible(true);
+        batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, compScore);
+        batch.end();
+        
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && stage != null) {
+            stage.act();
+            stage.draw();
+        }
     }
 
     public void reset() {
+        if (gameplayTable != null) gameplayTable.setVisible(true);
+        if (victoryTable != null) victoryTable.setVisible(false);
         minigameController.reset();
         hazardTimer = 0;
         shotFeedbackTimer = 0;
@@ -518,8 +999,8 @@ public class HUD {
     }
 
     public void updateSpinInput(float d, GameInputProcessor input) {
-        if (input.isActionPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) spinDot.x = MathUtils.clamp(spinDot.x - d * 2, -1f, 1f); // Reusing A/D
-        if (input.isActionPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) spinDot.x = MathUtils.clamp(spinDot.x + d * 2, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT)) spinDot.x = MathUtils.clamp(spinDot.x - d * 2, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT)) spinDot.x = MathUtils.clamp(spinDot.x + d * 2, -1f, 1f);
         
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) spinDot.y = MathUtils.clamp(spinDot.y + d * 2, -1f, 1f);
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) spinDot.y = MathUtils.clamp(spinDot.y - d * 2, -1f, 1f);
@@ -527,20 +1008,66 @@ public class HUD {
         if (spinDot.len() > 1f) spinDot.nor();
     }
 
-    public void renderInstructions(GameInputProcessor input) { instructionRenderer.render(batch, shapeRenderer, font, viewport, input); }
-    public boolean wasInstructionsRequested() { return instructionsRequested; }
-    public void clearInstructionsRequest() { instructionsRequested = false; }
-    public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
+    public void renderInstructions(GameInputProcessor input) {
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+            tempV1.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            viewport.unproject(tempV1);
+            if (!instructionRenderer.isClickInside(tempV1.x, tempV1.y)) {
+                instructionsRequested = false;
+            }
+        }
+        batch.begin();
+        instructionRenderer.render(batch, shapeRenderer, font, viewport, input);
+        batch.end();
+    }
 
-    public void renderCameraConfig(GameInputProcessor input) { cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config, input); }
+    public void renderCameraConfig(GameInputProcessor input) {
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+            tempV1.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            viewport.unproject(tempV1);
+            if (!cameraConfigRenderer.isClickInside(tempV1.x, tempV1.y)) {
+                cameraConfigRequested = false;
+            }
+        }
+        batch.begin();
+        cameraConfigRenderer.render(batch, shapeRenderer, font, viewport, config, input);
+        batch.end();
+    }
     public boolean wasCameraConfigRequested() { return cameraConfigRequested; }
     public void clearCameraConfigRequest() { cameraConfigRequested = false; }
     public void resetCameraConfigScroll() { cameraConfigRenderer.resetScroll(); }
+    public boolean isTouchInsideCameraConfig(float x, float y) { return cameraConfigRenderer.isClickInside(x, y); }
+
+    public boolean wasInstructionsRequested() { return instructionsRequested; }
+    public void clearInstructionsRequest() { instructionsRequested = false; }
+    public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
+    public boolean isTouchInsideInstructions(float x, float y) { return instructionRenderer.isClickInside(x, y); }
+    public boolean isTouchInsideClubInfo(float x, float y) {
+        float width = 320f, height = 200f;
+        float boxX = viewport.getWorldWidth() - width - 20;
+        float boxY = 220f; // Matches target y in renderClubInfo
+        return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
+    }
+    public void setClubInfoVisible(boolean visible) {
+        if (infoToggleBtn != null) infoToggleBtn.setVisible(!visible);
+    }
 
     public boolean isMinigameComplete() { return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null; }
     public boolean wasMinigameCanceled() { return minigameController.wasCanceled(); }
     public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }
     public MinigameResult getMinigameResult() { return minigameController.getResult(); }
     public Vector2 getSpinOffset() { return spinDot; }
-    public void dispose() { batch.dispose(); shapeRenderer.dispose(); font.dispose(); }
+    public Stage getStage() { return stage != null ? stage : new Stage(viewport, batch); }
+    public Stage getStartMenuStage() { return startMenuStage != null ? startMenuStage : new Stage(viewport, batch); }
+    public Stage getPauseMenuStage() { return pauseMenuStage != null ? pauseMenuStage : new Stage(viewport, batch); }
+    public void dispose() { 
+        batch.dispose(); 
+        shapeRenderer.dispose(); 
+        font.dispose(); 
+        if (whitePixel != null) whitePixel.dispose();
+        if (stage != null) stage.dispose();
+        if (startMenuStage != null) startMenuStage.dispose();
+        if (pauseMenuStage != null) pauseMenuStage.dispose();
+        if (skin != null) skin.dispose();
+    }
 }

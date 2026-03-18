@@ -508,7 +508,7 @@ public class LevelDataGenerator {
         }
     }
 
-    private static LevelData createLevelDataForArchetype(LevelData.Archetype arch) {
+    public static LevelData createLevelDataForArchetype(LevelData.Archetype arch) {
         LevelData ld = createRandomLevelData();
         int safety = 0;
         while (ld.getArchetype() != arch && safety < 100) {
