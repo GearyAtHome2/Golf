@@ -12,14 +12,11 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.Actor;
-import com.badlogic.gdx.scenes.scene2d.InputEvent;
-import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
-import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
@@ -31,8 +28,6 @@ import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
-
-import static org.example.hud.UIUtils.createRoundedRectDrawable;
 
 public class HUD {
     private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
@@ -298,7 +293,7 @@ public class HUD {
 
             if (showInfoDisplay) {
                 renderClubInfo(currentClub);
-                handleMobileInfoClick();
+                handleMobileInfoClick(input);
             }
             if (spinIndicator.isBigModeActive()) {
                 batch.begin();
@@ -332,14 +327,20 @@ public class HUD {
         }
     }
 
-    private void handleMobileInfoClick() {
+    private void handleMobileInfoClick(GameInputProcessor input) {
         if (Gdx.input.justTouched()) {
             tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             viewport.unproject(tempV3);
+
             if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
                     tempV3.y > 220 && tempV3.y < 420) {
+
                 showInfoDisplay = false;
                 if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
+
+                if (input instanceof MobileInputProcessor mobileInput) {
+                    mobileInput.consumeCurrentTouch();
+                }
             }
         }
     }

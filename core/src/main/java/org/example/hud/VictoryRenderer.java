@@ -37,9 +37,12 @@ public class VictoryRenderer {
             renderCompetitiveResults(batch, shapeRenderer, font, viewport, compScore, centerX, centerY);
             batch.begin();
         } else {
-            font.getData().setScale(1.5f);
-            font.setColor(Color.WHITE);
-            font.draw(batch, "Press [N] for New Level", centerX - 120, centerY - 100);
+            // FIXED: Only show key prompt on Desktop for standard levels
+            if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+                font.getData().setScale(1.5f);
+                font.setColor(Color.WHITE);
+                font.draw(batch, "Press [N] for New Level", centerX - 120, centerY - 100);
+            }
         }
     }
 
@@ -49,13 +52,11 @@ public class VictoryRenderer {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(0, 0, 0, 0.75f);
 
-        // Modal is now significantly taller (540px) and centered on Y
         shapeRenderer.rect(centerX - 300, centerY - 270, 600, 540);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         batch.begin();
-        // Start table at centerY + 230 to fit all 18 holes + footer comfortably
         renderScoreTable(batch, font, compScore, centerX, centerY + 230);
 
         if (compScore.isCourseComplete()) {
@@ -69,16 +70,20 @@ public class VictoryRenderer {
 
         font.getData().setScale(1.5f);
         font.setColor(Color.YELLOW);
-        String prompt = compScore.isCourseComplete() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
-        font.draw(batch, prompt, centerX - 210, centerY - 240);
+
+        // Key prompt only for Desktop in competitive mode
+        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+            String prompt = compScore.isCourseComplete() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
+            font.draw(batch, prompt, centerX - 210, centerY - 240);
+        }
         batch.end();
     }
 
     private void renderScoreTable(SpriteBatch batch, BitmapFont font, CompetitiveScore compScore, float x, float y) {
         float startX = x - 260;
-        float rowH = 20f; // Restored original spacing
+        float rowH = 20f;
 
-        font.getData().setScale(1.0f); // Restored original scale
+        font.getData().setScale(1.0f);
         font.setColor(Color.LIGHT_GRAY);
         font.draw(batch, "HOLE", startX, y);
         font.draw(batch, "PAR", startX + 80, y);

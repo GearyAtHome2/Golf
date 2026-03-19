@@ -49,14 +49,40 @@ public class MobileUIFactory {
         ui.gameplayTable.setFillParent(true);
         ui.stage.addActor(ui.gameplayTable);
 
+        // Initialize Victory Table
+        ui.victoryTable = new Table();
+        ui.victoryTable.setFillParent(true);
+        ui.victoryTable.setVisible(false);
+        ui.stage.addActor(ui.victoryTable);
+
         setupLeftStack(ui, input, spinIndicator, debugActor, baseStyle);
         setupRightStack(ui, input, whitePixel, baseStyle);
         setupClubSelection(ui, input, font, baseStyle);
 
         setupStartMenu(ui, font, viewport, input);
         setupPauseMenu(ui, font, viewport, config, input);
+        setupVictoryMenu(ui, input, baseStyle);
 
         return ui;
+    }
+
+    private static void setupVictoryMenu(MobileUIPackage ui, MobileInputProcessor input, TextButton.TextButtonStyle style) {
+        TextButton.TextButtonStyle nextStyle = new TextButton.TextButtonStyle(style);
+        nextStyle.up = ui.skin.getDrawable("hitUp");
+        nextStyle.down = ui.skin.getDrawable("hitDown");
+
+        TextButton nextBtn = new TextButton("NEXT LEVEL", nextStyle);
+        nextBtn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 1.2f);
+
+        nextBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.NEW_LEVEL);
+            }
+        });
+
+        ui.victoryTable.bottom().padBottom(40);
+        ui.victoryTable.add(nextBtn).width(300).height(100);
     }
 
     private static void setupLeftStack(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style) {
@@ -66,11 +92,7 @@ public class MobileUIFactory {
         Table leftButtons = new Table();
         addActionButton(leftButtons, "MENU", style, input, GameInputProcessor.Action.PAUSE, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).padBottom(BTN_SPACING_V).row();
         addActionButton(leftButtons, "PROJ", style, input, GameInputProcessor.Action.PROJECTION, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).padBottom(BTN_SPACING_V).row();
-
-        // DISTANCE -> SHOW_RANGE (Restored your fix)
         addActionButton(leftButtons, "DISTANCE", style, input, GameInputProcessor.Action.SHOW_RANGE, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).padBottom(BTN_SPACING_V).row();
-
-        // OVERVIEW -> Toggle logic handled in addActionButton
         addActionButton(leftButtons, "OVERVIEW", style, input, GameInputProcessor.Action.OVERHEAD_VIEW, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).row();
 
         leftStack.add(leftButtons).top().left().row();
@@ -115,7 +137,6 @@ public class MobileUIFactory {
         arrowContainer.bottom().right().padBottom(20).padRight(PAD_SCREEN_EDGE);
 
         Table arrowRow = new Table();
-        // Restored your arrow mapping: LEFT -> DOWN, RIGHT -> UP
         addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, 100, 80).padRight(20);
         addActionButton(arrowRow, ">", style, input, GameInputProcessor.Action.CLUB_DOWN, 100, 80);
         arrowContainer.add(arrowRow);
@@ -141,7 +162,6 @@ public class MobileUIFactory {
                 @Override
                 public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
                     if (action == GameInputProcessor.Action.OVERHEAD_VIEW) {
-                        // Toggle logic using the button's own state
                         input.setActionState(action, btn.isChecked());
                     } else {
                         input.triggerAction(action);
