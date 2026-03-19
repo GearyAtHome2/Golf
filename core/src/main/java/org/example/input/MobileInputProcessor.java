@@ -12,16 +12,14 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     private final Map<Action, Boolean> accumulatedJustPressedMap = new EnumMap<>(Action.class);
     private final Map<Action, Boolean> currentFrameJustPressedMap = new EnumMap<>(Action.class);
 
-    private ShotController shotController; // Add this
+    private ShotController shotController;
 
     private float dragX = 0;
     private float dragY = 0;
     private float scrollY = 0;
-
-    // Multi-touch tracking
+    private int lastPointerCount = 0;
+    private final Vector2 lastPinchMidpoint = new Vector2();
     private float lastPinchDistance = 0;
-
-    // Flag to prevent camera movement when interacting with HUD
     private boolean isConsumed = false;
 
     public MobileInputProcessor() {
@@ -54,7 +52,25 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
 
     @Override
     public boolean pan(float x, float y, float deltaX, float deltaY) {
-        if (isConsumed) return true; // Pretend we handled it, but do nothing
+        if (isConsumed) return true;
+
+        if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            int currentPointers = 0;
+            if (com.badlogic.gdx.Gdx.input.isTouched(0)) currentPointers++;
+            if (com.badlogic.gdx.Gdx.input.isTouched(1)) currentPointers++;
+
+            System.out.println("[DEBUG_INPUT] Pan Detected | Pointers: " + currentPointers + " | DeltaX: " + deltaX);
+
+            if (currentPointers != lastPointerCount) {
+                this.dragX = 0;
+                this.dragY = 0;
+                lastPointerCount = currentPointers;
+                return true;
+            }
+
+            boolean isMultiTouch = currentPointers >= 2;
+            pressedMap.put(Action.SECONDARY_ACTION, isMultiTouch);
+        }
 
         this.dragX += deltaX;
         this.dragY += deltaY;
@@ -70,19 +86,43 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) {
         if (isConsumed) return true;
 
+        // NEW: Force the secondary action flag to true so the camera knows we are in multi-touch mode
+        pressedMap.put(Action.SECONDARY_ACTION, true);
+
+        // 1. Handle Zoom
         float currentDistance = pointer1.dst(pointer2);
         if (lastPinchDistance > 0) {
             float deltaDistance = lastPinchDistance - currentDistance;
             this.scrollY += (deltaDistance * 0.05f);
         }
         lastPinchDistance = currentDistance;
+
+        // 2. Handle Pan (Midpoint Logic)
+        float currentMidX = (pointer1.x + pointer2.x) / 2f;
+        float currentMidY = (pointer1.y + pointer2.y) / 2f;
+
+        if (lastPinchMidpoint.x != 0 || lastPinchMidpoint.y != 0) {
+            float deltaMidX = currentMidX - lastPinchMidpoint.x;
+            float deltaMidY = currentMidY - lastPinchMidpoint.y;
+
+            this.dragX += deltaMidX;
+            this.dragY += deltaMidY;
+        }
+
+        lastPinchMidpoint.set(currentMidX, currentMidY);
         return true;
     }
 
     @Override
     public void pinchStop() {
         lastPinchDistance = 0;
+        lastPinchMidpoint.set(0, 0);
+
+        // NEW: Reset the secondary action flag when fingers are lifted
+        pressedMap.put(Action.SECONDARY_ACTION, false);
+        lastPointerCount = 0;
     }
+
 
     public void resetDrags() {
         this.dragX = 0;
@@ -121,7 +161,7 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     }
 
     public void setActionState(Action action, boolean pressed) {
-        if (!isClubChangeAllowed(action)) return; // BLOCKING PASSIVE CHECK
+        if (!isClubChangeAllowed(action)) return;
 
         if (pressed && !pressedMap.get(action)) {
             accumulatedJustPressedMap.put(action, true);
@@ -130,7 +170,7 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     }
 
     public void triggerAction(Action action) {
-        if (!isClubChangeAllowed(action)) return; // BLOCKING PASSIVE CHECK
+        if (!isClubChangeAllowed(action)) return;
 
         accumulatedJustPressedMap.put(action, true);
         pressedMap.put(action, true);

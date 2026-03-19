@@ -71,10 +71,8 @@ public class HUD {
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
     private TextButton infoToggleBtn;
-    private HoldButton resetBallBtn;
-    private HoldButton newMapBtn;
+    private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
     private boolean showInfoDisplay = false;
-    private final Vector3 touchPoint = new Vector3();
     private final Vector3 tempV3 = new Vector3();
     private Texture whitePixel;
 
@@ -139,8 +137,6 @@ public class HUD {
         this.gameplayTable = ui.gameplayTable;
         this.victoryTable = ui.victoryTable;
         this.infoToggleBtn = ui.infoToggleBtn;
-        this.resetBallBtn = ui.resetBallBtn;
-        this.newMapBtn = ui.newMapBtn;
         this.skin = ui.skin;
 
         // Hook up the specific toggle listener that needs HUD state
@@ -212,22 +208,26 @@ public class HUD {
     public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
         if (batch.isDrawing()) batch.end();
 
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !mobileUIInitialized) {
-            setupMobileUI((MobileInputProcessor) input);
+        // 1. Contextual Flags
+        boolean isAndroid = com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        float delta = com.badlogic.gdx.Gdx.graphics.getDeltaTime();
+
+        // 2. Mobile Initialization & Logic
+        if (isAndroid) {
+            if (!mobileUIInitialized) {
+                setupMobileUI((MobileInputProcessor) input);
+            }
+            this.spinDot.set(spinIndicator.getSpinDot());
         }
 
         if (mobileClubLabel != null) {
             mobileClubLabel.setText(currentClub.name.toUpperCase());
         }
 
-        float delta = Gdx.graphics.getDeltaTime();
-
+        // 3. Update States
         notificationManager.update(delta);
-
         updateSpinInput(delta, input);
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            this.spinDot.set(spinIndicator.getSpinDot());
-        }
+
         if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
             distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
             distanceDisplayTimer = 3.0f;
@@ -237,11 +237,11 @@ public class HUD {
             updatePracticeDistanceLogic(ball);
         }
 
+        // 4. Debug & Transformation Setup
         preShotDebugActor.update(terrain, ball, gameCamera);
-
         boolean shouldShowDebug = (ball.getState() == Ball.State.STATIONARY);
 
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (isAndroid) {
             preShotDebugActor.setVisible(shouldShowDebug);
         }
 
@@ -249,33 +249,39 @@ public class HUD {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
-        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+        // 5. Background / Shape Rendering
+        if (!isAndroid) {
             drawSpinUI();
         }
 
-        // 2. Main HUD Batch (Unified)
+        // 6. Main Text/HUD Batch
         batch.begin();
 
-        // DRAW WIND FIRST (Top layer of the world, bottom layer of the HUD)
+        // Wind Indicator
         if (levelData != null) {
             windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         }
 
-        // Draw Desktop Debug manually only when stationary
-        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
-            if (shouldShowDebug) {
-                preShotDebugActor.setBounds(40, 150, 400, 140);
-                preShotDebugActor.draw(batch, 1.0f);
-            }
+        // Desktop Debug Overlay
+        if (!isAndroid && shouldShowDebug) {
+            preShotDebugActor.setBounds(40, 150, 400, 140);
+            preShotDebugActor.draw(batch, 1.0f);
         }
 
         notificationManager.render(batch, font, viewport);
-        renderDistanceDisplay(delta);
 
-        if (isPractice) renderShotDistance(ball, delta);
+        float rangeScale = isAndroid ? 2.8f : 1.8f;
+        renderDistanceDisplay(delta, rangeScale);
+
+        if (isPractice) {
+            float shotScale = isAndroid ? 2.2f : 1.4f;
+            renderShotDistance(ball, shotScale);
+        }
+
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, compScore, terrain);
         batch.end();
 
+        // 7. Overlay Layer (Stage, Minigames, etc.)
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
 
@@ -366,7 +372,7 @@ public class HUD {
         gameInfoRenderer.render(batch, font, viewport, config, isPractice, levelData, club, ball, compScore, terrain, shotCount);
     }
 
-    private void renderShotDistance(Ball ball, float delta) {
+    private void renderShotDistance(Ball ball, float baseScale) {
         boolean isMoving = ball.getState() == Ball.State.AIR ||
                 ball.getState() == Ball.State.ROLLING ||
                 ball.getState() == Ball.State.CONTACT;
@@ -374,7 +380,8 @@ public class HUD {
         if (isMoving || distanceTracker.shouldShow()) {
             float distanceToShow = isMoving ? ball.getShotDistance() : distanceTracker.getDisplayDistance();
 
-            font.getData().setScale(1.4f);
+            // Apply the scale passed in
+            font.getData().setScale(baseScale);
 
             if (!isMoving) {
                 float alpha = MathUtils.clamp(distanceTracker.getTimer(), 0, 1);
@@ -383,23 +390,39 @@ public class HUD {
                 font.setColor(Color.WHITE);
             }
 
+            // We also scale the X/Y offsets so the text doesn't overlap or fall off on small screens
+            float xOffset = 300 * (baseScale / 1.4f);
+            float yOffset = 200 * (baseScale / 1.4f);
+
             drawShadowedText(
                     String.format("SHOT DISTANCE: %.1f yds", distanceToShow),
-                    viewport.getWorldWidth() - 300,
-                    200,
+                    viewport.getWorldWidth() - xOffset,
+                    yOffset,
                     font.getColor()
             );
 
             font.setColor(Color.WHITE);
+            font.getData().setScale(1.0f); // IMPORTANT: Reset scale for the rest of the HUD
         }
     }
 
-    private void renderDistanceDisplay(float delta) {
+    private void renderDistanceDisplay(float delta, float baseScale) {
         if (distanceDisplayTimer > 0) {
             distanceDisplayTimer -= delta;
-            font.getData().setScale(1.8f);
+
+            font.getData().setScale(baseScale);
+
+            layout.setText(font, distanceText);
+            float actualWidth = layout.width;
+
             Color fadeYellow = new Color(1, 1, 0, Math.min(1, distanceDisplayTimer));
-            drawShadowedText(distanceText, viewport.getWorldWidth() / 2f - 100, viewport.getWorldHeight() - 50, fadeYellow);
+
+            float x = (viewport.getWorldWidth() / 2f) - (actualWidth / 2f);
+            float y = viewport.getWorldHeight() - (50 * (baseScale / 1.8f));
+
+            drawShadowedText(distanceText, x, y, fadeYellow);
+
+            font.getData().setScale(1.0f);
         }
     }
 

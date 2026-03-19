@@ -16,9 +16,10 @@ public class CameraController {
 
     private float yaw = 180f;
     private float pitch = 20f;
-    private float distance = 10f;
+    private float distance;
+    private static final float ROTATION_DEADZONE = 1.5f;
     private float targetPitch = 20f;
-    private float targetDistance = 12f;
+    private float targetDistance;
 
     private float overheadZoom = 300f;
     private final Vector3 overheadCenter = new Vector3();
@@ -84,13 +85,20 @@ public class CameraController {
         float deltaX = input.getActionValue(GameInputProcessor.Action.DRAG_X);
         float deltaY = input.getActionValue(GameInputProcessor.Action.DRAG_Y);
         float scrollY = input.getActionValue(GameInputProcessor.Action.SCROLL_Y);
+
         if (scrollY != 0) {
-            System.out.println("[DEBUG_LOG] Overhead Zoom: " + overheadZoom + " | scroll: " + scrollY);
             overheadZoom += scrollY * 25.0f;
             overheadZoom = MathUtils.clamp(overheadZoom, 50f, 1200f);
         }
 
-        if (Gdx.input.isButtonPressed(Buttons.LEFT)) {
+        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isMultiTouch = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION);
+
+        boolean shouldPan = isAndroid ? isMultiTouch : Gdx.input.isButtonPressed(Buttons.LEFT);
+        // Only rotate if we aren't panning and there's an active touch
+        boolean shouldRotate = isAndroid ? (!isMultiTouch && Gdx.input.isTouched()) : input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION);
+
+        if (shouldPan) {
             float panScale = (overheadZoom / Gdx.graphics.getHeight()) * 1.5f;
             float radYaw = -MathUtils.degreesToRadians * yaw;
             float sinYaw = MathUtils.sin(radYaw);
@@ -98,8 +106,11 @@ public class CameraController {
 
             overheadCenter.x += ((-cosYaw) * deltaX * panScale) + ((-sinYaw) * deltaY * panScale);
             overheadCenter.z += (sinYaw * deltaX * panScale) + ((-cosYaw) * deltaY * panScale);
-        } else if (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) {
-            yaw += deltaX * config.mouseSensitivity * config.getXMult();
+        } else if (shouldRotate) {
+            // Apply deadzone to prevent jittering during finger placement/lifting
+            if (Math.abs(deltaX) > ROTATION_DEADZONE) {
+                yaw += deltaX * config.mouseSensitivity * config.getXMult();
+            }
         }
 
         float pitchRad = 70f * MathUtils.degreesToRadians;
@@ -113,7 +124,7 @@ public class CameraController {
                 overheadCenter.z + horizontalDist * MathUtils.cos(yawRad)
         );
 
-        if (Gdx.input.isButtonPressed(Buttons.LEFT) || input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) {
+        if (shouldPan || shouldRotate) {
             camera.position.set(tempTargetPos);
         } else {
             camera.position.lerp(tempTargetPos, 8f * delta);
@@ -122,7 +133,6 @@ public class CameraController {
         camera.up.set(0, 1, 0);
         camera.lookAt(overheadCenter);
     }
-
     private void updateNormalMode(Vector3 ballPos, float delta, GameInputProcessor input) {
         float dstToTarget = camera.position.dst(tempTargetPos);
         float lerpBase = introActive ? 1.5f : config.lerpSpeed;
