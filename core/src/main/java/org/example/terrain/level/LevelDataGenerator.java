@@ -18,12 +18,11 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = LevelData.Archetype.WHISTLING_ISLES;
+//        selectedType = LevelData.Archetype.WHISTLING_ISLES;
         data.setArchetype(selectedType);
 
-        // --- 1. Select Algorithm and TreeScheme ---
         LevelData.TerrainAlgorithm algo;
-        TreeScheme scheme = TreeScheme.OAK;
+        TreeScheme scheme;
 
         switch (selectedType) {
             case CLIFFSIDE_BLUFF:

@@ -151,30 +151,23 @@ public class Terrain {
     }
 
     public void render(ModelBatch batch, Environment env) {
-        // 1. Render land chunks first
         for (ModelInstance chunk : chunks) {
             batch.render(chunk, env);
         }
         batch.flush();
 
         if (waterInstance != null) {
-            // 2. Apply your "just right" micro-offset
             Gdx.gl.glEnable(GL20.GL_POLYGON_OFFSET_FILL);
-            // Pulling water slightly toward camera with your discovered values
             Gdx.gl.glPolygonOffset(-0.1f, -0.002f);
-
-            // Allow ties to favor the second-rendered object (water)
             Gdx.gl.glDepthFunc(GL20.GL_LEQUAL);
 
             batch.render(waterInstance, env);
             batch.flush();
 
-            // 3. Reset GPU state
             Gdx.gl.glDisable(GL20.GL_POLYGON_OFFSET_FILL);
             Gdx.gl.glDepthFunc(GL20.GL_LESS);
         }
 
-        // 4. Render the rest
         for (TerrainObject obj : allObjects) obj.render(batch, env);
         if (physicalHole != null) physicalHole.render(batch, env);
         if (flagInstance != null) batch.render(flagInstance, env);
@@ -363,7 +356,9 @@ public class Terrain {
     public void updateFlag(Vector3 cameraPosition) {
         if (flagInstance == null) return;
         float dist = cameraPosition.dst(holePosition);
-        float scale = Math.min(1.0f + (Math.max(0, dist - 50f) * 0.015f), 4.0f);
+        float distFactor = Math.max(0, dist - 50f);
+        float scale = 1.0f + (float)Math.sqrt(distFactor) * 0.15f;
+        scale *= org.example.hud.HUD.UI_SCALE;
         Vector3 dir = new Vector3(cameraPosition).sub(holePosition);
         float angle = MathUtils.atan2(dir.x, dir.z) * MathUtils.radiansToDegrees;
         updateFlagTransform(holePosition, scale, angle);

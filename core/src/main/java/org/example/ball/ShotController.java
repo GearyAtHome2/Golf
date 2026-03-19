@@ -1,7 +1,5 @@
 package org.example.ball;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
@@ -18,6 +16,13 @@ import org.example.input.GameInputProcessor;
 import org.example.terrain.Terrain;
 
 public class ShotController {
+    private static final float MIN_RENDER_SCALE = 0.15f;
+    private static final float MAX_RENDER_SCALE = 2.2f;
+    private static final float DISTANCE_SCALE_FACTOR = 0.04f;
+
+    private static final float BASE_VERTICAL_GAP = 0.2f; // The physical distance from ball center to bar base
+    private static final float GAP_SCALE_MODIFIER = 0.4f; // How much the gap grows with UI scaling (Lower = stays closer)
+
     private Model powerBarModel;
     private ModelInstance powerBarInstance;
     private ModelInstance maxPowerGhost;
@@ -58,7 +63,7 @@ public class ShotController {
     public ShotController() {
         ModelBuilder mb = new ModelBuilder();
         powerBarModel = mb.createBox(0.5f, 1f, 0.5f,
-                new Material(ColorAttribute.createDiffuse(Color.WHITE)),
+                new Material(ColorAttribute.createDiffuse(Color.WHITE), new BlendingAttribute(1f)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
         powerBarInstance = new ModelInstance(powerBarModel);
         maxPowerGhost = new ModelInstance(powerBarModel);
@@ -109,26 +114,13 @@ public class ShotController {
         lastBallPos.set(ball.getPosition());
         ballIsStationary = (ball.getState() == Ball.State.STATIONARY);
 
-        // --- GUIDELINE LOGIC ---
         if (ballIsStationary) {
             if (isSpinLocked) {
-                // BRANCH A: Frozen after minigame
                 calculateShotVector(projectionVector, lockedCamDir, club, lockedSpin, terrain, 0f);
-                if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
-                    Gdx.app.log("SHOT_DEBUG", "Branch A (Locked) | CamDir: " + lockedCamDir + " | Spin: " + lockedSpin);
-                }
             } else if (waitingForMinigame) {
-                // BRANCH B: Aim frozen, spin live (during minigame)
                 calculateShotVector(projectionVector, lockedCamDir, club, hud.getSpinOffset(), terrain, 0f);
-                if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
-                    Gdx.app.log("SHOT_DEBUG", "Branch B (Waiting) | LockedCam: " + lockedCamDir);
-                }
             } else {
-                // BRANCH C: Everything live
                 calculateShotVector(projectionVector, camDir, club, hud.getSpinOffset(), terrain, 0f);
-                if (Gdx.input.isKeyJustPressed(Input.Keys.L)) {
-                    Gdx.app.log("SHOT_DEBUG", "Branch C (Live) | CamDir: " + camDir + " | Spin: " + hud.getSpinOffset());
-                }
             }
         }
 
@@ -150,7 +142,6 @@ public class ShotController {
             return false;
         }
 
-        // --- DIFFICULTY & LOCK-IN LOGIC ---
         currentDifficulty = terrain.getShotDifficulty(ball.getPosition().x, ball.getPosition().z, lockedCamDir);
         currentDifficulty.clubDifficulty = MathUtils.clamp(club.powerMult / 20f, 1.0f, 2.0f);
         Vector2 spinOffset = hud.getSpinOffset();
@@ -163,7 +154,7 @@ public class ShotController {
                 float powerMod = 0.5f + (lockedPower / MAX_POWER);
 
                 lockedCamDir.set(camDir);
-                hud.logShotInitiated(ball.getPosition(), club, terrain, currentDifficulty, powerMod);
+                hud.logShotInitiated(ball.getPosition(), club, currentDifficulty, powerMod);
                 waitingForMinigame = true;
                 lockTimer = 0;
             }
@@ -227,7 +218,7 @@ public class ShotController {
         Vector2 quadOffset = getQuadraticSpinOffset(spin);
         float attackAngle = quadOffset.y * -20.0f;
         float sForce = (float) Math.sin(Math.abs(club.loft - attackAngle) * MathUtils.degreesToRadians);
-        float spinCurve = (float)Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
+        float spinCurve = (float) Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
         float quality = getQualityFactor(result.rating);
 
         float backspin = (power * finalPowerMult) * sForce * 14.5f * (1.0f + (quadOffset.y * 1.8f)) * quality * spinCurve;
@@ -276,12 +267,11 @@ public class ShotController {
     }
 
     public Vector3 getLockedCamDir() {
-        if (lockedCamDir.isZero()) return lastBallPos; // Or just return the vector if you handle it elsewhere
+        if (lockedCamDir.isZero()) return lastBallPos;
         return lockedCamDir;
     }
 
     public void render(ModelBatch batch, Environment env, Vector3 ballPos, Vector3 camPos) {
-        // --- GUIDELINE RENDERING ---
         if (showGuideline && ballIsStationary && ballPos != null) {
             float lineLength = 5.0f;
             projectionLineInstance.transform.setToTranslation(ballPos);
@@ -295,14 +285,17 @@ public class ShotController {
             batch.render(targetDotInstance, env);
         }
 
-        // --- POWER BAR RENDERING ---
         float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : shotPower);
         if (height <= 0 && !isCharging && !isPowerLocked && !waitingForMinigame) return;
 
         float dist = camPos.dst(ballPos);
-        float currentUnitScale = MathUtils.clamp(dist * 0.04f, 0.15f, 1.2f);
-        float bulge = 1.0f;
+        float currentUnitScale = MathUtils.clamp(dist * DISTANCE_SCALE_FACTOR * HUD.UI_SCALE, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
 
+        // --- NEW ATTACHMENT LOGIC ---
+        // Instead of scaling the offset linearly with the bar scale, we dampen it.
+        float vOffset = BASE_VERTICAL_GAP + (currentUnitScale * GAP_SCALE_MODIFIER);
+
+        float bulge = 1.0f;
         if (isPowerLocked || waitingForMinigame) {
             bulge = 1.0f + (MathUtils.sin((lockTimer / LOCK_DURATION) * MathUtils.PI) * 0.4f);
             if (waitingForMinigame) bulge = 1.4f;
@@ -310,7 +303,6 @@ public class ShotController {
             bulge = 1.2f + (MathUtils.sin(animationTimer * 18f) * 0.2f);
         }
 
-        float vOffset = currentUnitScale * 1.5f;
         float displayH = waitingForMinigame ? lockedPower : height;
 
         if (isCharging || isPowerLocked || waitingForMinigame) {
@@ -321,16 +313,21 @@ public class ShotController {
 
         if (displayH > 0) {
             Color color = displayH < (MAX_POWER / 2) ? Color.GREEN.cpy().lerp(Color.YELLOW, displayH / (MAX_POWER / 2)) : Color.YELLOW.cpy().lerp(Color.RED, (displayH - (MAX_POWER / 2)) / (MAX_POWER / 2));
+            color.a = (isPowerLocked || waitingForMinigame) ? 0.85f : 1.0f;
             if (isPowerLocked || waitingForMinigame) color.lerp(Color.WHITE, 0.5f);
 
             powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
+            ((BlendingAttribute) powerBarInstance.materials.get(0).get(BlendingAttribute.Type)).opacity = color.a;
+
             powerBarInstance.transform.setToTranslation(ballPos.x, ballPos.y + vOffset + (displayH * currentUnitScale / 2f), ballPos.z);
             powerBarInstance.transform.set(powerBarInstance.transform).scale(currentUnitScale * bulge, displayH * currentUnitScale, currentUnitScale * bulge);
             batch.render(powerBarInstance, env);
         }
     }
 
-    public boolean isCharging() { return isCharging || isPowerLocked || waitingForMinigame; }
+    public boolean isCharging() {
+        return isCharging || isPowerLocked || waitingForMinigame;
+    }
 
     public void dispose() {
         if (powerBarModel != null) powerBarModel.dispose();

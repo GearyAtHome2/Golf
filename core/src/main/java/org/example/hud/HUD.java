@@ -452,24 +452,12 @@ public class HUD {
         shapeRenderer.end();
     }
 
-    public void logShotInitiated(Vector3 ballPos, Club club, Terrain terrain, ShotDifficulty diff, float powerMod) {
+    public void logShotInitiated(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod) {
         minigameController.start(ballPos, club, diff, powerMod, config.animSpeed, config.difficulty);
     }
 
-    public void showShotResult(MinigameResult result) {
-        if (result == null || result.getRating() == null) return;
-
-        MinigameResult.Rating rating = result.getRating();
-        String phrase = rating.getRandomPhrase();
-        Color color = rating.getColor();
-
-        // Base scales for feedback (multiplied by UI_SCALE internally in NotificationManager)
-        float displayScale = 1.5f;
-        if (rating == MinigameResult.Rating.PERFECTION) displayScale = 3.5f;
-        else if (rating == MinigameResult.Rating.SUPER) displayScale = 2.8f;
-        else if (rating == MinigameResult.Rating.GREAT) displayScale = 2.2f;
-
-        notificationManager.showFeedback(phrase, color, 2.0f, displayScale);
+    public void cancelMinigame() {
+        minigameController.cancel();
     }
 
     public void showWaterHazard() {

@@ -391,10 +391,12 @@ public class GolfGame extends ApplicationAdapter {
             ball.resetToLastPosition();
             ball.setState(Ball.State.STATIONARY);
             shotController.reset();
+            hud.cancelMinigame();
             hasCurrentBallBeenHit = false;
             isVictory = false;
             resetTimer = 0f;
             cameraController.update(ball.getPosition(), inputProcessor);
+            System.out.println("[DEBUG] Ball and ShotController hard reset.");
         }
     }
 
