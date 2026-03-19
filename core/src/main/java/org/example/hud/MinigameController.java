@@ -69,12 +69,16 @@ public class MinigameController {
                               ShapeRenderer shapeRenderer, SpriteBatch batch, BitmapFont font,
                               Viewport viewport, GameInputProcessor input,
                               org.example.ball.ShotController shotController) {
-        if (!needleStopped && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
-            if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
-                System.out.println("[DEBUG_LOG] Minigame canceled by click/touch - needleStopped: " + needleStopped);
-                cancel();
-                return;
-            }
+        boolean shouldCancel;
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            shouldCancel = input.isActionJustPressed(GameInputProcessor.Action.TAP);
+        } else {
+            shouldCancel = Gdx.input.isButtonJustPressed(Input.Buttons.LEFT);
+        }
+
+        if (!needleStopped && shouldCancel) {
+            cancel();
+            return;
         }
 
         updateAnimations(delta);
@@ -109,7 +113,8 @@ public class MinigameController {
             }
         }
 
-        minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);    }
+        minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);
+    }
 
     private void advanceStep(GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff) {
         step++;

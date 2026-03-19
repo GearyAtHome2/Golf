@@ -123,6 +123,12 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
         lastPointerCount = 0;
     }
 
+    @Override
+    public boolean tap(float x, float y, int count, int button) {
+        if (isConsumed) return true;
+        triggerAction(Action.TAP);
+        return true;
+    }
 
     public void resetDrags() {
         this.dragX = 0;

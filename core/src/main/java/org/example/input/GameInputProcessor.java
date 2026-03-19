@@ -44,6 +44,7 @@ public interface GameInputProcessor {
         DRAG_X,
         DRAG_Y,
         SCROLL_Y,
-        SECONDARY_ACTION
+        SECONDARY_ACTION,
+        TAP
     }
 }

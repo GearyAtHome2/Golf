@@ -316,6 +316,7 @@ public class HUD {
                         ((MobileInputProcessor) input).consumeCurrentTouch();
                     } else if (Gdx.input.justTouched()) {
                         spinIndicator.setBigModeActive(false);
+                        ((MobileInputProcessor) input).consumeCurrentTouch();
                     }
                 }
             }
