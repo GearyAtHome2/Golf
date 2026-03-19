@@ -47,7 +47,7 @@ public class HUD {
     private final InstructionRenderer instructionRenderer = new InstructionRenderer();
     private final CameraConfigRenderer cameraConfigRenderer = new CameraConfigRenderer();
     private final VictoryRenderer victoryRenderer = new VictoryRenderer();
-    private final ClubInfoRenderer clubInfoRenderer = new ClubInfoRenderer();
+    private com.badlogic.gdx.scenes.scene2d.ui.Label mobileClubLabel;
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
     private final GameInfoRenderer gameInfoRenderer = new GameInfoRenderer();
     private final PauseMenuRenderer pauseMenuRenderer = new PauseMenuRenderer();
@@ -152,6 +152,7 @@ public class HUD {
             }
         });
 
+        this.mobileClubLabel = ui.clubLabel;
         mobileUIInitialized = true;
     }
 
@@ -213,6 +214,10 @@ public class HUD {
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !mobileUIInitialized) {
             setupMobileUI((MobileInputProcessor) input);
+        }
+
+        if (mobileClubLabel != null) {
+            mobileClubLabel.setText(currentClub.name.toUpperCase());
         }
 
         float delta = Gdx.graphics.getDeltaTime();

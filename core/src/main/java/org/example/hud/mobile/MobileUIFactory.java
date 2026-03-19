@@ -21,6 +21,7 @@ import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 
 import static org.example.hud.UIUtils.createRoundedRectDrawable;
+import static org.example.hud.mobile.MobileUIValues.*;
 
 public class MobileUIFactory {
 
@@ -29,6 +30,7 @@ public class MobileUIFactory {
         public Table gameplayTable, victoryTable;
         public TextButton infoToggleBtn;
         public HoldButton resetBallBtn, newMapBtn;
+        public com.badlogic.gdx.scenes.scene2d.ui.Label clubLabel; // Add this!
         public Skin skin;
     }
 
@@ -42,16 +44,13 @@ public class MobileUIFactory {
         ui.skin = new Skin();
         ui.skin.add("default", font);
 
-        ui.skin.add("btnUp", createRoundedRectDrawable(new Color(0.2f, 0.2f, 0.2f, 0.5f), 12), Drawable.class);
-        ui.skin.add("btnDown", createRoundedRectDrawable(new Color(0.4f, 0.4f, 0.4f, 0.7f), 12), Drawable.class);
-
-        // Standard HIT colors
-        ui.skin.add("hitUp", createRoundedRectDrawable(new Color(0.8f, 0.2f, 0.2f, 0.7f), 15), Drawable.class);
-        ui.skin.add("hitDown", createRoundedRectDrawable(new Color(0.5f, 0.1f, 0.1f, 0.8f), 15), Drawable.class);
-
-        // MAX HIT colors (Darker red/maroon)
-        ui.skin.add("maxHitUp", createRoundedRectDrawable(new Color(0.5f, 0.05f, 0.05f, 0.75f), 15), Drawable.class);
-        ui.skin.add("maxHitDown", createRoundedRectDrawable(new Color(0.3f, 0.02f, 0.02f, 0.85f), 15), Drawable.class);
+        // Populate Skin with Drawables using MobileUIValues
+        ui.skin.add("btnUp", createRoundedRectDrawable(COLOR_BTN_UP, RADIUS_STD), Drawable.class);
+        ui.skin.add("btnDown", createRoundedRectDrawable(COLOR_BTN_DOWN, RADIUS_STD), Drawable.class);
+        ui.skin.add("hitUp", createRoundedRectDrawable(COLOR_HIT_UP, RADIUS_HIT), Drawable.class);
+        ui.skin.add("hitDown", createRoundedRectDrawable(COLOR_HIT_DOWN, RADIUS_HIT), Drawable.class);
+        ui.skin.add("maxHitUp", createRoundedRectDrawable(COLOR_MAX_UP, RADIUS_HIT), Drawable.class);
+        ui.skin.add("maxHitDown", createRoundedRectDrawable(COLOR_MAX_DOWN, RADIUS_HIT), Drawable.class);
 
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
         style.font = font;
@@ -59,37 +58,35 @@ public class MobileUIFactory {
         style.down = ui.skin.getDrawable("btnDown");
         style.fontColor = Color.WHITE;
 
-        // --- GAMEPLAY UI ---
+        // --- GAMEPLAY UI LAYOUT ---
         ui.gameplayTable = new Table();
         ui.gameplayTable.setFillParent(true);
         ui.stage.addActor(ui.gameplayTable);
 
         Table leftStack = new Table();
-        ui.gameplayTable.add(leftStack).expandY().fillY().left().padLeft(20).padTop(180);
+        ui.gameplayTable.add(leftStack).expandY().fillY().left().padLeft(PAD_SCREEN_EDGE).padTop(LEFT_STACK_TOP_PAD);
 
         Table rightStack = new Table();
-        ui.gameplayTable.add(rightStack).expand().top().right().padRight(20).padTop(-60);
+        ui.gameplayTable.add(rightStack).expand().top().right().padRight(PAD_SCREEN_EDGE).padTop(RIGHT_STACK_TOP_PAD);
 
-        float btnW = 230;
-        float btnH = 130;
-
+        // LEFT BUTTONS
         Table leftButtons = new Table();
         leftStack.add(leftButtons).top().left().row();
 
-        addActionButton(leftButtons, "MENU", style, input, GameInputProcessor.Action.PAUSE, btnW, btnH).padBottom(15).row();
-        addActionButton(leftButtons, "PROJ", style, input, GameInputProcessor.Action.PROJECTION, btnW, btnH).padBottom(15).row();
-        addActionButton(leftButtons, "CLUB+", style, input, GameInputProcessor.Action.CLUB_UP, btnW, btnH).padBottom(15).row();
-        addActionButton(leftButtons, "CLUB-", style, input, GameInputProcessor.Action.CLUB_DOWN, btnW, btnH).row();
+        addActionButton(leftButtons, "MENU", style, input, GameInputProcessor.Action.PAUSE, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).padBottom(BTN_SPACING_V).row();
+        addActionButton(leftButtons, "PROJ", style, input, GameInputProcessor.Action.PROJECTION, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).padBottom(BTN_SPACING_V).row();
+        addActionButton(leftButtons, "DISTANCE", style, null, null, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).padBottom(BTN_SPACING_V).row();
+        addActionButton(leftButtons, "OVERVIEW", style, null, null, BTN_WIDTH_STD, BTN_HEIGHT_LARGE).row();
 
-        leftStack.add(debugActor).width(400).height(140).left().padTop(10).row();
-        leftStack.add(spinIndicator).size(160).bottom().left().expandY().padBottom(20);
+        leftStack.add(debugActor).width(DEBUG_ACTOR_WIDTH).height(DEBUG_ACTOR_HEIGHT).left().padTop(10).row();
+        leftStack.add(spinIndicator).size(SPIN_INDICATOR_SIZE).bottom().left().expandY().padBottom(PAD_SCREEN_EDGE);
 
-        // RIGHT SIDE: HIT + Controls
-        // Spacer reduced slightly to accommodate the extra button in the vertical stack
-        rightStack.add().height(180).row();
+        // RIGHT BUTTONS
+        rightStack.add().height(RIGHT_STACK_SPACER).row();
 
-        // --- MAX BUTTON (New) ---
+        // MAX Button
         TextButton maxBtn = new TextButton("MAX", style);
+        maxBtn.getLabel().setFontScale(MobileUIValues.FONT_SCALE_GAMEPLAY);
         TextButton.TextButtonStyle maxStyle = new TextButton.TextButtonStyle(style);
         maxStyle.up = ui.skin.getDrawable("maxHitUp");
         maxStyle.down = ui.skin.getDrawable("maxHitDown");
@@ -103,11 +100,11 @@ public class MobileUIFactory {
                 input.setActionState(GameInputProcessor.Action.MAX_POWER_SHOT, false);
             }
         });
-        // Slightly smaller width/height than the main HIT button
-        rightStack.add(maxBtn).width(200).height(110).right().padBottom(10).row();
+        rightStack.add(maxBtn).width(MAX_BTN_WIDTH).height(MAX_BTN_HEIGHT).right().padBottom(10).row();
 
-        // --- HIT BUTTON ---
+        // HIT Button
         TextButton hitBtn = new TextButton("HIT", style);
+        hitBtn.getLabel().setFontScale(MobileUIValues.FONT_SCALE_GAMEPLAY*2f);
         TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
         hitStyle.up = ui.skin.getDrawable("hitUp");
         hitStyle.down = ui.skin.getDrawable("hitDown");
@@ -122,16 +119,66 @@ public class MobileUIFactory {
                 input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
             }
         });
-        rightStack.add(hitBtn).width(240).height(150).right().padBottom(15).row();
+        rightStack.add(hitBtn).width(HIT_BTN_WIDTH).height(HIT_BTN_HEIGHT).right().padBottom(BTN_SPACING_V).row();
 
         ui.resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, whitePixel);
-        ui.newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, whitePixel);
+        ui.resetBallBtn.getLabel().setFontScale(MobileUIValues.FONT_SCALE_GAMEPLAY);
 
-        rightStack.add(ui.resetBallBtn).width(btnW).height(110).right().padBottom(15).row();
-        rightStack.add(ui.newMapBtn).width(btnW).height(110).right().expandY().top().row();
+        ui.newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, whitePixel);
+        ui.newMapBtn.getLabel().setFontScale(MobileUIValues.FONT_SCALE_GAMEPLAY);
+
+        rightStack.add(ui.resetBallBtn).width(BTN_WIDTH_STD).height(BTN_HEIGHT_STD).right().padBottom(BTN_SPACING_V).row();
+        rightStack.add(ui.newMapBtn).width(BTN_WIDTH_STD).height(BTN_HEIGHT_STD).right().expandY().top().row();
 
         ui.infoToggleBtn = new TextButton("INFO", style);
-        rightStack.add(ui.infoToggleBtn).width(120).height(80).bottom().right().padTop(65);
+        ui.infoToggleBtn.getLabel().setFontScale(MobileUIValues.FONT_SCALE_GAMEPLAY);
+        rightStack.add(ui.infoToggleBtn).width(INFO_BTN_WIDTH).height(INFO_BTN_HEIGHT).bottom().right().padTop(65);
+
+        // --- REFACTORED CLUB SELECTION (FIXED ARROWS, FLEXIBLE LARGE NAME) ---
+
+        // 1. ARROW CONTAINER: This keeps the buttons locked in place
+        Table arrowContainer = new Table();
+        ui.stage.addActor(arrowContainer);
+        arrowContainer.setFillParent(true);
+        arrowContainer.bottom().right().padBottom(20).padRight(PAD_SCREEN_EDGE);
+
+        Table arrowRow = new Table();
+        TextButton leftArrow = new TextButton("<", style);
+        leftArrow.getLabel().setFontScale(FONT_SCALE_GAMEPLAY);
+        leftArrow.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CLUB_UP);
+            }
+        });
+
+        TextButton rightArrow = new TextButton(">", style);
+        rightArrow.getLabel().setFontScale(FONT_SCALE_GAMEPLAY);
+        rightArrow.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.CLUB_DOWN);
+            }
+        });
+
+        arrowRow.add(leftArrow).width(100).height(80).padRight(20);
+        arrowRow.add(rightArrow).width(100).height(80);
+        arrowContainer.add(arrowRow);
+
+        // 2. CLUB NAME CONTAINER: Independent floating table above the arrows
+        Table labelContainer = new Table();
+        ui.stage.addActor(labelContainer);
+        labelContainer.setFillParent(true);
+        // Positioned 110px from bottom to sit neatly above the 80px high arrows + padding
+        labelContainer.bottom().right().padBottom(110).padRight(PAD_SCREEN_EDGE);
+
+        com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle labelStyle = new com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle(font, Color.WHITE);
+        ui.clubLabel = new com.badlogic.gdx.scenes.scene2d.ui.Label("DRIVER", labelStyle);
+        ui.clubLabel.setFontScale(6.4f);
+        ui.clubLabel.setAlignment(com.badlogic.gdx.utils.Align.right); // Pinned to right, grows left
+
+        // No fixed width here means it is fully flexible
+        labelContainer.add(ui.clubLabel).right();
 
         setupStartMenu(ui, font, viewport, input);
         setupPauseMenu(ui, font, viewport, config, input);
@@ -141,11 +188,16 @@ public class MobileUIFactory {
 
     private static com.badlogic.gdx.scenes.scene2d.ui.Cell<TextButton> addActionButton(Table table, String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float w, float h) {
         TextButton btn = new TextButton(text, style);
-        btn.addListener(new ChangeListener() {
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                input.triggerAction(action);
-            }
-        });
+        btn.getLabel().setFontScale(MobileUIValues.FONT_SCALE_GAMEPLAY);
+        if (input != null && action != null) {
+            btn.addListener(new ChangeListener() {
+                public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                    input.triggerAction(action);
+                }
+            });
+        } else {
+            btn.setColor(Color.GRAY); // Visual cue that it's unplugged for now
+        }
         return table.add(btn).width(w).height(h);
     }
 
@@ -153,43 +205,46 @@ public class MobileUIFactory {
         Table startTable = new Table();
         startTable.setFillParent(true);
         ui.startMenuStage.addActor(startTable);
+
         float h = viewport.getWorldHeight() > 0 ? viewport.getWorldHeight() : 720;
         float w = viewport.getWorldWidth() > 0 ? viewport.getWorldWidth() : 1280;
 
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
-        menuStyle.font.getData().setScale(2.0f);
 
-        String[] options = {"START GAME", "COMPETITIVE (18 HOLES)", "INSTRUCTIONS", "PRACTICE RANGE", "PUTTING GREEN", "PLAY FROM CLIPBOARD SEED"};
+        String[] options = {"START GAME", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE RANGE", "PUTTING GREEN", "CLIPBOARD SEED"};
         for (int i = 0; i < options.length; i++) {
             final int index = i;
             TextButton optBtn = new TextButton(options[i], menuStyle);
+            optBtn.getLabel().setFontScale(FONT_SCALE_START_MENU);
+
             optBtn.addListener(new ChangeListener() {
                 public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
                     input.triggerAction(GameInputProcessor.Action.valueOf("SELECT_OPTION_" + index));
                 }
             });
-            startTable.add(optBtn).width(w * 0.65f).height(h * 0.11f).padBottom(h * 0.015f).row();
+            startTable.add(optBtn).width(w * MENU_BTN_WIDTH_PCT).height(h * MENU_BTN_HEIGHT_PCT).padBottom(h * 0.015f).row();
         }
-        startTable.top().padTop(h * 0.22f);
+        startTable.top().padTop(h * MENU_TOP_OFFSET_PCT);
     }
 
     private static void setupPauseMenu(MobileUIPackage ui, BitmapFont font, Viewport viewport, GameConfig config, MobileInputProcessor input) {
         Table pauseTable = new Table();
         pauseTable.setFillParent(true);
         ui.pauseMenuStage.addActor(pauseTable);
+
         float h = viewport.getWorldHeight() > 0 ? viewport.getWorldHeight() : 720;
         float w = viewport.getWorldWidth() > 0 ? viewport.getWorldWidth() : 1280;
 
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
-        menuStyle.font.getData().setScale(1.8f);
 
-        float bW = w * 0.65f;
-        float bH = h * 0.11f;
+        float bW = w * MENU_BTN_WIDTH_PCT;
+        float bH = h * MENU_BTN_HEIGHT_PCT;
         float pB = h * 0.015f;
 
-        pauseTable.add(createMenuButton("RESUME", menuStyle, input, GameInputProcessor.Action.PAUSE)).width(bW).height(bH).padBottom(pB).row();
+        pauseTable.add(createMenuButton("RESUME", menuStyle, input, GameInputProcessor.Action.PAUSE, FONT_SCALE_PAUSE_MENU)).width(bW).height(bH).padBottom(pB).row();
 
         final TextButton animBtn = new TextButton("ANIMATION: " + config.animSpeed.name(), menuStyle);
+        animBtn.getLabel().setFontScale(FONT_SCALE_PAUSE_MENU);
         animBtn.addListener(new ChangeListener() {
             public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
                 config.cycleAnimation();
@@ -199,11 +254,20 @@ public class MobileUIFactory {
         });
         pauseTable.add(animBtn).width(bW).height(bH).padBottom(pB).row();
 
-        pauseTable.add(createMenuButton("HELP", menuStyle, input, GameInputProcessor.Action.HELP)).width(bW).height(bH).padBottom(pB).row();
-        pauseTable.add(createMenuButton("CAMERA", menuStyle, input, GameInputProcessor.Action.CAM_CONFIG)).width(bW).height(bH).padBottom(pB).row();
-        pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU)).width(bW).height(bH).padBottom(pB).row();
+        pauseTable.add(createMenuButton("HELP", menuStyle, input, GameInputProcessor.Action.HELP, FONT_SCALE_PAUSE_MENU)).width(bW).height(bH).padBottom(pB).row();
+        pauseTable.add(createMenuButton("CAMERA", menuStyle, input, GameInputProcessor.Action.CAM_CONFIG, FONT_SCALE_PAUSE_MENU)).width(bW).height(bH).padBottom(pB).row();
+        pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, FONT_SCALE_PAUSE_MENU)).width(bW).height(bH).padBottom(pB).row();
 
-        pauseTable.top().padTop(h * 0.22f);
+        pauseTable.top().padTop(h * MENU_TOP_OFFSET_PCT);
+    }
+
+    private static TextButton createMenuButton(String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float fontScale) {
+        TextButton btn = new TextButton(text, style);
+        btn.getLabel().setFontScale(fontScale); // Set the scale here
+        btn.addListener(new ChangeListener() {
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) { input.triggerAction(action); }
+        });
+        return btn;
     }
 
     private static TextButton createMenuButton(String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action) {
@@ -217,8 +281,8 @@ public class MobileUIFactory {
     private static TextButton.TextButtonStyle createMenuStyle(BitmapFont font) {
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
         style.font = font;
-        style.up = createRoundedRectDrawable(new Color(0.15f, 0.15f, 0.15f, 0.6f), 12);
-        style.down = createRoundedRectDrawable(new Color(0.4f, 0.4f, 0.1f, 0.8f), 12);
+        style.up = createRoundedRectDrawable(COLOR_MENU_UP, RADIUS_STD);
+        style.down = createRoundedRectDrawable(COLOR_MENU_DOWN, RADIUS_STD);
         style.fontColor = Color.WHITE;
         return style;
     }

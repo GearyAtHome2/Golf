@@ -49,15 +49,8 @@ public class GameInfoRenderer {
             font.getData().setScale(1.6f * uiScale);
             float shotsY = topY - (50 * uiScale);
             drawShadowedText(batch, font, "Shots: " + shotCount, marginX, shotsY, Color.WHITE);
-
-            float rightX = viewport.getWorldWidth() * 0.82f;
-            font.getData().setScale(2.4f * uiScale);
-            drawShadowedText(batch, font, club.name().replace("_", " "), rightX + 130, 140 * uiScale, Color.WHITE);
-            renderDebugInfo(batch, font, config, ball, terrain, rightX + 130, 80 * uiScale, 60 * uiScale, uiScale);
-
         } else {
 
-            // 1. Level Info (Top Left)
             float headerX = 40;
             float headerY = viewport.getWorldHeight() - 40;
 
