@@ -92,9 +92,6 @@ public class MinigameUI {
         sr.rect(cx - hw, y, hw * 2, h);
     }
 
-    /**
-     * Draws a rectangle with a horizontal color gradient.
-     */
     private void drawGradientRect(ShapeRenderer sr, float x, float y, float w, float h,
                                   Color c1, Color c2, boolean horizontal) {
         // rect(x, y, width, height, colorBottomLeft, colorBottomRight, colorTopRight, colorTopLeft)

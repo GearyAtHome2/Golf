@@ -17,6 +17,7 @@ import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
+import org.example.hud.renderer.NotificationManager;
 import org.example.input.GameInputProcessor;
 import org.example.terrain.Terrain;
 
@@ -24,6 +25,7 @@ public class MinigameController {
     private final MinigameEngine engine = new MinigameEngine();
     private final MinigameUI minigameUI = new MinigameUI();
     private final Array<ModAnimation> activeAnims = new Array<>();
+    private NotificationManager notificationManager;
 
     private boolean active = false;
     private boolean needleStopped = false;
@@ -35,11 +37,15 @@ public class MinigameController {
     private float activePowerMod;
     private ShotDifficulty activeDiff;
     private MinigameResult lastResult = null;
-    
+
     private float barSwellTimer = 0;
     private float glowTimer = 0;
     private Color glowColor = new Color(0, 0, 0, 0);
     private final Vector3 activeBallPos = new Vector3();
+
+    public void setNotificationManager(NotificationManager notificationManager) {
+        this.notificationManager = notificationManager;
+    }
 
     public void start(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod, GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff) {
         this.activeDiff = diff;
@@ -51,7 +57,7 @@ public class MinigameController {
         this.lastResult = null;
         this.step = 0;
         this.shotRandomness = MathUtils.random(-0.1f, 0.1f);
-        
+
         engine.reset(club.baseDifficulty);
         activeAnims.clear();
 
@@ -99,9 +105,8 @@ public class MinigameController {
                 engine.needlePos += (engine.needleMovingRight ? move : -move);
                 if (engine.needlePos >= 1.0f) { engine.needlePos = 1.0f; engine.needleMovingRight = false; }
                 else if (engine.needlePos <= 0f) { engine.needlePos = 0f; engine.needleMovingRight = true; }
-                
+
                 if (input.isActionJustPressed(GameInputProcessor.Action.STOP_NEEDLE)) {
-                    System.out.println("[DEBUG_LOG] Minigame STOP_NEEDLE action triggered - needlePos: " + engine.needlePos);
                     stopNeedle(spinDot, shotController);
                 }
             }
@@ -139,7 +144,18 @@ public class MinigameController {
         glowTimer = 1.0f;
         lastResult = engine.calculateResult(engine.needlePos);
         glowColor = lastResult.rating.color;
-        step++;
+
+        // Trigger notification directly via reference
+        if (notificationManager != null && lastResult.rating != null) {
+            MinigameResult.Rating rating = lastResult.rating;
+
+            float displayScale = 1.5f;
+            if (rating == MinigameResult.Rating.PERFECTION) displayScale = 3.5f;
+            else if (rating == MinigameResult.Rating.SUPER) displayScale = 2.8f;
+            else if (rating == MinigameResult.Rating.GREAT) displayScale = 2.2f;
+
+            notificationManager.showFeedback(rating.getRandomPhrase(), rating.color, 2.0f, displayScale);
+        }
 
         if (shotController != null) {
             shotController.snapshotFinalSpin(currentSpin);
@@ -172,7 +188,6 @@ public class MinigameController {
         timer = 0;
         glowTimer = 0;
         activeAnims.clear();
-        // Also reset the internal engine if it holds state
         engine.needlePos = 0.5f;
     }
 
