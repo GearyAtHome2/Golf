@@ -2,8 +2,6 @@ package org.example;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
-import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
@@ -33,11 +31,9 @@ import org.example.performance.PhysicsProfiler;
 import org.example.terrain.ClassicGenerator;
 import org.example.terrain.ITerrainGenerator;
 import org.example.terrain.Terrain;
-import org.example.terrain.features.PuttingGreenGenerator;
 import org.example.terrain.level.LevelData;
 import org.example.terrain.level.LevelDataGenerator;
 import org.example.terrain.level.LevelFactory;
-import org.example.terrain.practiceRange.PracticeRangeGenerator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +47,7 @@ public class GolfGame extends ApplicationAdapter {
     private GameState returnState = GameState.PLAYING;
 
     private GhostManager ghostManager;
-    private float practiceResetTimer = 0f;
+    private float resetTimer = 0f;
     private static final float RESET_DELAY = 1.0f;
     private boolean hasCurrentBallBeenHit = false;
 
@@ -160,7 +156,7 @@ public class GolfGame extends ApplicationAdapter {
 
         hud.resetShots();
         isVictory = false;
-        practiceResetTimer = 0f;
+        resetTimer = 0f;
         particleManager.clear();
     }
 
@@ -299,7 +295,6 @@ public class GolfGame extends ApplicationAdapter {
         particleManager.update(delta, terrain);
 
         if (terrain != null) {
-            // Profile occlusion (this involves raycasting or height checks)
             PhysicsProfiler.startSection("CameraOcclusion");
             terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
             terrain.updateFlag(camera.position);
@@ -309,28 +304,83 @@ public class GolfGame extends ApplicationAdapter {
 
     private void handleBallStationaryLogic(float delta) {
         Terrain terrain = levelManager.getTerrain();
-        if (hasCurrentBallBeenHit && ball.getState() == Ball.State.STATIONARY) {
-            practiceResetTimer += delta;
-            if (practiceResetTimer >= RESET_DELAY) {
-                if (currentState == GameState.PRACTICE_RANGE) {
-                    ghostManager.archiveBall(ball);
-                    Vector3 tee = terrain.getTeePosition();
-                    ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
-                    hasCurrentBallBeenHit = false;
-                    practiceResetTimer = 0f;
-                } else if (terrain.isPointOutOfBounds(ball.getPosition().x, ball.getPosition().z)) {
-                    hud.showOutOfBounds();
-                    hud.incrementShots(); // Penalty stroke
-                    resetBallToLastShot();
-                } else if (ball.isInWater(terrain)) {
-                    hud.showWaterHazard();
-                    hud.incrementShots(); // Penalty stroke
-                    resetBallToLastShot();
-                }
+
+        // LOGIC FIX: Don't wipe the timer if we are in the air BUT in water.
+        // This allows the timer to persist through skips/bounces.
+        if (ball.getState() == Ball.State.AIR && !ball.isInWater(terrain)) {
+            if (resetTimer > 0) System.out.println("[DEBUG] Timer reset: Ball entered AIR (not in water)");
+            resetTimer = 0f;
+            return;
+        }
+
+        if (currentState != GameState.PRACTICE_RANGE) {
+            if (checkInstantHazards(terrain)) return;
+        }
+
+        updateResetTimer(delta, terrain);
+    }
+
+    private boolean checkInstantHazards(Terrain terrain) {
+        Vector3 pos = ball.getPosition();
+
+        if (terrain.isPointOutOfBounds(pos.x, pos.z)) {
+            System.out.println("[DEBUG] Instant OB Triggered at: " + pos);
+            hud.showOutOfBounds();
+            hud.incrementShots();
+            resetBallToLastShot();
+            resetTimer = 0f;
+            return true;
+        }
+        return false;
+    }
+
+    private void updateResetTimer(float delta, Terrain terrain) {
+        if (shouldActiveTimer(terrain)) {
+            resetTimer += delta;
+
+            // Log every half-second so we can see the countdown in the console
+            if ((int)(resetTimer * 10) % 5 == 0 && resetTimer > 0.1f) {
+                System.out.println("[DEBUG] Reset Timer: " + String.format("%.2f", resetTimer) + " / " + RESET_DELAY);
+            }
+
+            if (resetTimer >= RESET_DELAY) {
+                System.out.println("[DEBUG] Timer Threshold Reached. Handling reset...");
+                handleTimerThresholdReached(terrain);
             }
         } else {
-            practiceResetTimer = 0f;
+            resetTimer = 0f;
         }
+    }
+
+    private boolean shouldActiveTimer(Terrain terrain) {
+        if (!hasCurrentBallBeenHit) return false;
+
+        boolean inWater = ball.isInWater(terrain);
+        boolean isStationary = ball.getState() == Ball.State.STATIONARY;
+        boolean isPractice = (currentState == GameState.PRACTICE_RANGE);
+
+        return inWater || isPractice || isStationary;
+    }
+
+    private void handleTimerThresholdReached(Terrain terrain) {
+        if (currentState == GameState.PRACTICE_RANGE) {
+            resetPracticeBall(terrain);
+        } else if (ball.isInWater(terrain)) {
+            System.out.println("[DEBUG] Penalty: Water Hazard Confirmed.");
+            hud.showWaterHazard();
+            hud.incrementShots();
+            resetBallToLastShot();
+            resetTimer = 0f;
+        }
+    }
+
+    private void resetPracticeBall(Terrain terrain) {
+        System.out.println("[DEBUG] Practice Range Reset.");
+        ghostManager.archiveBall(ball);
+        Vector3 tee = terrain.getTeePosition();
+        ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
+        hasCurrentBallBeenHit = false;
+        resetTimer = 0f;
     }
 
     private void resetBallToLastShot() {
@@ -343,7 +393,7 @@ public class GolfGame extends ApplicationAdapter {
             shotController.reset();
             hasCurrentBallBeenHit = false;
             isVictory = false;
-            practiceResetTimer = 0f;
+            resetTimer = 0f;
             cameraController.update(ball.getPosition(), inputProcessor);
         }
     }
