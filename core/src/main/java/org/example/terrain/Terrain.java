@@ -151,28 +151,30 @@ public class Terrain {
     }
 
     public void render(ModelBatch batch, Environment env) {
-        // 1. Render land chunks normally.
-        // They write their true depth to the buffer.
+        // 1. Render land chunks first
         for (ModelInstance chunk : chunks) {
             batch.render(chunk, env);
         }
         batch.flush();
 
         if (waterInstance != null) {
-            Gdx.gl.glDepthFunc(GL20.GL_LEQUAL);
-
+            // 2. Apply your "just right" micro-offset
             Gdx.gl.glEnable(GL20.GL_POLYGON_OFFSET_FILL);
-            Gdx.gl.glPolygonOffset(-1.0f, -0.002f);
+            // Pulling water slightly toward camera with your discovered values
+            Gdx.gl.glPolygonOffset(-0.1f, -0.002f);
+
+            // Allow ties to favor the second-rendered object (water)
+            Gdx.gl.glDepthFunc(GL20.GL_LEQUAL);
 
             batch.render(waterInstance, env);
             batch.flush();
 
-            // 3. Reset to standard behavior
+            // 3. Reset GPU state
             Gdx.gl.glDisable(GL20.GL_POLYGON_OFFSET_FILL);
-            Gdx.gl.glDepthFunc(GL20.GL_LEQUAL);
+            Gdx.gl.glDepthFunc(GL20.GL_LESS);
         }
 
-        // 4. Render everything else
+        // 4. Render the rest
         for (TerrainObject obj : allObjects) obj.render(batch, env);
         if (physicalHole != null) physicalHole.render(batch, env);
         if (flagInstance != null) batch.render(flagInstance, env);
@@ -374,7 +376,7 @@ public class Terrain {
 
         Material waterMaterial = new Material(
                 ColorAttribute.createDiffuse(new Color(0.3f, 0.47f, 0.9f, 0.7f)),
-                new BlendingAttribute(0.95f)
+                new BlendingAttribute(0.97f)
         );
 
         Model water = builder.createRect(
