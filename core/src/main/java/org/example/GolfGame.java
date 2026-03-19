@@ -704,8 +704,11 @@ public class GolfGame extends ApplicationAdapter {
 
     private void setupCamera() {
         camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.near = 0.1f;
-        camera.far = 1000f;
+
+        camera.near = 1.1f;
+
+        camera.far = 950f;
+
         gameViewport = new FitViewport(1280, 720, camera);
     }
 

@@ -11,7 +11,7 @@ public class AndroidLauncher extends AndroidApplication {
         super.onCreate(savedInstanceState);
         
         AndroidApplicationConfiguration config = new AndroidApplicationConfiguration();
-        
+        config.stencil = 8;
         // Mobile-specific battery/sensor optimizations
         config.useAccelerometer = false;
         config.useCompass = false;

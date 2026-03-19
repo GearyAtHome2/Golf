@@ -1,9 +1,11 @@
 package org.example.terrain;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
@@ -149,8 +151,28 @@ public class Terrain {
     }
 
     public void render(ModelBatch batch, Environment env) {
-        for (ModelInstance chunk : chunks) batch.render(chunk, env);
-        if (waterInstance != null) batch.render(waterInstance, env);
+        // 1. Render land chunks normally.
+        // They write their true depth to the buffer.
+        for (ModelInstance chunk : chunks) {
+            batch.render(chunk, env);
+        }
+        batch.flush();
+
+        if (waterInstance != null) {
+            Gdx.gl.glDepthFunc(GL20.GL_LEQUAL);
+
+            Gdx.gl.glEnable(GL20.GL_POLYGON_OFFSET_FILL);
+            Gdx.gl.glPolygonOffset(-1.0f, -0.002f);
+
+            batch.render(waterInstance, env);
+            batch.flush();
+
+            // 3. Reset to standard behavior
+            Gdx.gl.glDisable(GL20.GL_POLYGON_OFFSET_FILL);
+            Gdx.gl.glDepthFunc(GL20.GL_LEQUAL);
+        }
+
+        // 4. Render everything else
         for (TerrainObject obj : allObjects) obj.render(batch, env);
         if (physicalHole != null) physicalHole.render(batch, env);
         if (flagInstance != null) batch.render(flagInstance, env);
@@ -161,14 +183,10 @@ public class Terrain {
         float offsetX = (SIZE_X * SCALE) / 2f;
         float offsetZ = (SIZE_Z * SCALE) / 2f;
 
-        // 1. Reset all objects to visible (alpha 1.0)
-        // In a massive game, you'd only reset "nearby" objects,
-        // but for now, we just need to avoid the heavy math on all of them.
         for (TerrainObject obj : allObjects) {
             obj.setTargetAlpha(1.0f);
         }
 
-        // 2. Determine grid range for the ray
         int x1 = MathUtils.clamp((int) ((cameraPos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
         int z1 = MathUtils.clamp((int) ((cameraPos.z + offsetZ) / CELL_SIZE), 0, gridRows - 1);
         int x2 = MathUtils.clamp((int) ((ballPos.x + offsetX) / CELL_SIZE), 0, gridCols - 1);
@@ -182,7 +200,6 @@ public class Terrain {
         tempRayDir.set(ballPos).sub(cameraPos).nor();
         float rayLength = cameraPos.dst(ballPos);
 
-        // 3. Only check objects in cells the ray actually touches
         for (int gx = minX; gx <= maxX; gx++) {
             for (int gz = minZ; gz <= maxZ; gz++) {
                 for (TerrainObject obj : objectGrid[gx][gz]) {
@@ -196,7 +213,6 @@ public class Terrain {
             }
         }
 
-        // 4. Run the visual fade update
         for (TerrainObject obj : allObjects) {
             obj.update(delta);
         }
@@ -354,9 +370,22 @@ public class Terrain {
     private void createWaterPlane() {
         ModelBuilder builder = new ModelBuilder();
         float w = SIZE_X * SCALE, h = SIZE_Z * SCALE;
-        Model water = builder.createRect(0, waterLevel, h, w, waterLevel, h, w, waterLevel, 0, 0, waterLevel, 0, 0, 1, 0,
-                new Material(ColorAttribute.createDiffuse(new Color(0.2f, 0.4f, 0.8f, 0.6f))),
+        float safeWaterY = waterLevel;
+
+        Material waterMaterial = new Material(
+                ColorAttribute.createDiffuse(new Color(0.3f, 0.47f, 0.9f, 0.7f)),
+                new BlendingAttribute(0.95f)
+        );
+
+        Model water = builder.createRect(
+                0, safeWaterY, h,
+                w, safeWaterY, h,
+                w, safeWaterY, 0,
+                0, safeWaterY, 0,
+                0, 1, 0,
+                waterMaterial,
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+
         waterInstance = new ModelInstance(water);
         waterInstance.transform.setToTranslation(-w / 2f, 0, -h / 2f);
     }
