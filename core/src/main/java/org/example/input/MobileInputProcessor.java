@@ -59,8 +59,6 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
             if (com.badlogic.gdx.Gdx.input.isTouched(0)) currentPointers++;
             if (com.badlogic.gdx.Gdx.input.isTouched(1)) currentPointers++;
 
-            System.out.println("[DEBUG_INPUT] Pan Detected | Pointers: " + currentPointers + " | DeltaX: " + deltaX);
-
             if (currentPointers != lastPointerCount) {
                 this.dragX = 0;
                 this.dragY = 0;

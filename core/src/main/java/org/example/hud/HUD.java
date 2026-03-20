@@ -515,9 +515,8 @@ public class HUD {
     }
 
     public boolean isTouchInsideCameraConfig(float x, float y) {
-        return cameraConfigRequested && cameraConfigRenderer.isClickInside(x, y);
+        return cameraConfigRequested && overlayRenderer.getCameraConfigRenderer().isClickInside(x, y);
     }
-
     public boolean wasInstructionsRequested() {
         return instructionsRequested;
     }
@@ -531,13 +530,12 @@ public class HUD {
     }
 
     public boolean isTouchInsideInstructions(float x, float y) {
-        return instructionRenderer.isClickInside(x, y);
-    }
+        return overlayRenderer.getInstructionRenderer().isClickInside(x, y);    }
 
     public boolean isTouchInsideClubInfo(float x, float y) {
         float width = 320f, height = 200f;
         float boxX = viewport.getWorldWidth() - width - 20;
-        float boxY = 220f; // Matches target y in renderClubInfo
+        float boxY = 220f;
         return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
     }
 

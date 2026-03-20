@@ -7,44 +7,60 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.hud.HUD;
+import org.example.ball.MinigameResult;
 
 public class NotificationManager {
     private static class Notification {
-        String text;
-        Color color;
+        final String mainText;
+        final String subText;
+        final Color color;
         float timer;
-        float maxDuration;
-        float scale;
-        boolean isHazard;
+        final float scale;
 
-        Notification(String text, Color color, float duration, float scale, boolean isHazard) {
-            this.text = text;
+        Notification(String main, String sub, Color color, float duration, float scale) {
+            this.mainText = main;
+            this.subText = sub;
             this.color = color;
             this.timer = duration;
-            this.maxDuration = duration;
             this.scale = scale;
-            this.isHazard = isHazard;
         }
     }
 
     private Notification activeNotification;
     private final GlyphLayout layout = new GlyphLayout();
+    private final Color tempColor = new Color();
 
     public void showHazard(String text, Color color, float duration) {
-        // High visibility scale for hazards
-        activeNotification = new Notification(text, color, duration, 3.5f, true);
+        activeNotification = new Notification(text, "+1 STROKE PENALTY", color, duration, 4.0f);
     }
 
-    public void showFeedback(String text, Color color, float duration, float scale) {
-        activeNotification = new Notification(text, color, duration, scale, false);
+    public void showFeedback(MinigameResult result, float duration) {
+        if (result == null || result.getRating() == null) return;
+
+        MinigameResult.Rating rating = result.getRating();
+        activeNotification = new Notification(
+                rating.name(),
+                rating.getRandomPhrase(),
+                rating.getColor(),
+                duration,
+                getScaleForRating(rating)
+        );
+    }
+
+    private float getScaleForRating(MinigameResult.Rating rating) {
+        return switch (rating) {
+            case PERFECTION -> 5.5f;
+            case SUPER -> 4.5f;
+            case GREAT -> 3.5f;
+            case GOOD -> 2.5f;
+            default -> 1.8f;
+        };
     }
 
     public void update(float delta) {
         if (activeNotification != null) {
             activeNotification.timer -= delta;
-            if (activeNotification.timer <= 0) {
-                activeNotification = null;
-            }
+            if (activeNotification.timer <= 0) activeNotification = null;
         }
     }
 
@@ -52,36 +68,42 @@ public class NotificationManager {
         if (activeNotification == null) return;
 
         float centerX = viewport.getWorldWidth() / 2f;
-        float centerY = viewport.getWorldHeight() / 2f;
+        float anchorY = viewport.getWorldHeight() * 0.72f;
 
-        // Apply the global platform scale from HUD
         float finalScale = activeNotification.scale * HUD.UI_SCALE;
         float alpha = MathUtils.clamp(activeNotification.timer, 0, 1f);
 
-        // 1. Render Main Text (Hazard or Shot Rating)
+        tempColor.set(activeNotification.color).a *= alpha;
+
+        // 1. Draw Main Text
         font.getData().setScale(finalScale);
-        font.setColor(activeNotification.color.r, activeNotification.color.g, activeNotification.color.b, alpha);
+        font.setColor(tempColor);
+        layout.setText(font, activeNotification.mainText);
 
-        layout.setText(font, activeNotification.text);
-        // Vertical offset is also scaled to ensure the gap looks correct on all screens
-        float mainY = centerY + (100 * HUD.UI_SCALE);
-        font.draw(batch, activeNotification.text, centerX - (layout.width / 2f), mainY);
+        float mainWidth = layout.width;
+        float mainHeight = layout.height;
+        float textY = anchorY + (mainHeight / 2f);
 
-        // 2. Render Secondary Text for Hazards
-        if (activeNotification.isHazard) {
-            // Half size of the scaled main text
-            font.getData().setScale(finalScale * 0.5f);
-            font.setColor(1, 1, 1, alpha * 0.8f);
+        font.draw(batch, activeNotification.mainText, centerX - (mainWidth / 2f), textY);
 
-            String penaltyText = "+1 STROKE PENALTY";
-            layout.setText(font, penaltyText);
+        // 2. Draw Subtext
+        if (activeNotification.subText != null) {
+            // Scale up subtext to be closer to main text size
+            font.getData().setScale(finalScale * 0.7f);
+            font.setColor(1, 1, 1, alpha * 0.9f);
+            layout.setText(font, activeNotification.subText);
 
-            // Offset the penalty line based on the current font size
-            float penaltyOffset = (finalScale * 25f);
-            font.draw(batch, penaltyText, centerX - (layout.width / 2f), mainY - penaltyOffset);
+            // Gap is now based on half the height of both strings + a small buffer
+            float subHeight = layout.height;
+            float verticalGap = mainHeight + (subHeight * 0.5f) + (10 * HUD.UI_SCALE);
+
+            font.draw(batch, activeNotification.subText, centerX - (layout.width / 2f), textY - verticalGap);
         }
 
-        // Reset font properties for the rest of the HUD loop
+        resetFont(font);
+    }
+
+    private void resetFont(BitmapFont font) {
         font.getData().setScale(1.0f);
         font.setColor(Color.WHITE);
     }

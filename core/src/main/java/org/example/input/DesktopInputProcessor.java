@@ -34,8 +34,11 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
         keyMap.put(Action.SPIN_DOWN, Input.Keys.S);
         keyMap.put(Action.SPIN_LEFT, Input.Keys.A);
         keyMap.put(Action.SPIN_RIGHT, Input.Keys.D);
+
+        // Use the primary key in the map
         keyMap.put(Action.MENU_UP, Input.Keys.UP);
         keyMap.put(Action.MENU_DOWN, Input.Keys.DOWN);
+
         keyMap.put(Action.SPEED_UP, Input.Keys.UP);
         keyMap.put(Action.SPEED_DOWN, Input.Keys.DOWN);
         keyMap.put(Action.MENU_SELECT, Input.Keys.ENTER);
@@ -75,6 +78,11 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
             return (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) || Gdx.input.isKeyPressed(Input.Keys.CONTROL_RIGHT)) &&
                     Gdx.input.isKeyPressed(Input.Keys.SPACE);
         }
+
+        // Hardcode the OR logic for W/S keys
+        if (action == Action.MENU_UP && Gdx.input.isKeyPressed(Input.Keys.W)) return true;
+        if (action == Action.MENU_DOWN && Gdx.input.isKeyPressed(Input.Keys.S)) return true;
+
         Integer key = keyMap.get(action);
         return key != null && Gdx.input.isKeyPressed(key);
     }
@@ -88,6 +96,11 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
         if (action == Action.CANCEL_MENU) {
             return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE);
         }
+
+        // Hardcode the OR logic for W/S keys
+        if (action == Action.MENU_UP && Gdx.input.isKeyJustPressed(Input.Keys.W)) return true;
+        if (action == Action.MENU_DOWN && Gdx.input.isKeyJustPressed(Input.Keys.S)) return true;
+
         Integer key = keyMap.get(action);
         return key != null && Gdx.input.isKeyJustPressed(key);
     }

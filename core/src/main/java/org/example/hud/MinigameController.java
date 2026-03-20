@@ -145,16 +145,8 @@ public class MinigameController {
         lastResult = engine.calculateResult(engine.needlePos);
         glowColor = lastResult.rating.color;
 
-        // Trigger notification directly via reference
-        if (notificationManager != null && lastResult.rating != null) {
-            MinigameResult.Rating rating = lastResult.rating;
-
-            float displayScale = 1.5f;
-            if (rating == MinigameResult.Rating.PERFECTION) displayScale = 3.5f;
-            else if (rating == MinigameResult.Rating.SUPER) displayScale = 2.8f;
-            else if (rating == MinigameResult.Rating.GREAT) displayScale = 2.2f;
-
-            notificationManager.showFeedback(rating.getRandomPhrase(), rating.color, 2.0f, displayScale);
+        if (notificationManager != null) {
+            notificationManager.showFeedback(lastResult, 2.0f);
         }
 
         if (shotController != null) {

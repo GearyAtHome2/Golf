@@ -21,6 +21,7 @@ public class OverlayRenderer {
     public void renderInstructions(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameInputProcessor input, Runnable onClose) {
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
             if (isClickOutside(viewport, instructionRenderer::isClickInside)) {
+                System.out.println("closing in overlay");
                 onClose.run();
             }
         }
@@ -73,5 +74,13 @@ public class OverlayRenderer {
     public void resetScrolls() {
         instructionRenderer.resetScroll();
         cameraConfigRenderer.resetScroll();
+    }
+
+    public InstructionRenderer getInstructionRenderer() {
+        return instructionRenderer;
+    }
+
+    public CameraConfigRenderer getCameraConfigRenderer() {
+        return cameraConfigRenderer;
     }
 }

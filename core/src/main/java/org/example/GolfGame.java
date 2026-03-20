@@ -85,7 +85,6 @@ public class GolfGame extends ApplicationAdapter {
 
     @Override
     public void create() {
-        System.out.println("[DEBUG_LOG] GolfGame.create() - START");
         try {
             // MOVE VIEWPORT INITIALIZATION TO THE VERY TOP
             setupCamera();
@@ -99,10 +98,8 @@ public class GolfGame extends ApplicationAdapter {
             shotController = new ShotController();
             particleManager = new ParticleManager();
             windManager = new WindManager();
-            
-            System.out.println("[DEBUG_LOG] GolfGame.create() - CORE COMPONENTS READY");
+
             if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-                System.out.println("[DEBUG_LOG] GolfGame.create() - ANDROID MODE");
                 inputProcessor = new MobileInputProcessor(); 
                 hud.setupMobileUI((MobileInputProcessor) inputProcessor);
             } else {
@@ -111,9 +108,7 @@ public class GolfGame extends ApplicationAdapter {
 
             setupHighlight();
             setupInputProcessor();
-            System.out.println("[DEBUG_LOG] GolfGame.create() - FINISHED SUCCESS");
         } catch (Exception e) {
-            System.out.println("[DEBUG_LOG] CRITICAL ERROR IN GolfGame.create(): " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -186,21 +181,17 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void setupInputProcessor() {
-        System.out.println("[DEBUG_LOG] setupInputProcessor() - State: " + currentState);
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
             
             // Add stages only if they are not null OR HUD can provide a placeholder
             if (currentState == GameState.START) {
-                System.out.println("[DEBUG_LOG] setupInputProcessor() - Adding startMenuStage");
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStartMenuStage();
                 if (s != null) multiplexer.addProcessor(s);
             } else if (currentState == GameState.PAUSED) {
-                System.out.println("[DEBUG_LOG] setupInputProcessor() - Adding pauseMenuStage");
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getPauseMenuStage();
                 if (s != null) multiplexer.addProcessor(s);
             } else if (isGameplayState()) {
-                System.out.println("[DEBUG_LOG] setupInputProcessor() - Adding gameplay stage");
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStage();
                 if (s != null) multiplexer.addProcessor(s);
             }
@@ -208,7 +199,6 @@ public class GolfGame extends ApplicationAdapter {
             // only the GestureDetector for scrolling via inputProcessor
             multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
             Gdx.input.setInputProcessor(multiplexer);
-            System.out.println("[DEBUG_LOG] setupInputProcessor() - Multiplexer set as InputProcessor");
         } else {
             Gdx.input.setInputProcessor((com.badlogic.gdx.InputProcessor) inputProcessor);
         }
@@ -309,7 +299,6 @@ public class GolfGame extends ApplicationAdapter {
         // LOGIC FIX: Don't wipe the timer if we are in the air BUT in water.
         // This allows the timer to persist through skips/bounces.
         if (ball.getState() == Ball.State.AIR && !ball.isInWater(terrain)) {
-            if (resetTimer > 0) System.out.println("[DEBUG] Timer reset: Ball entered AIR (not in water)");
             resetTimer = 0f;
             return;
         }
@@ -325,7 +314,6 @@ public class GolfGame extends ApplicationAdapter {
         Vector3 pos = ball.getPosition();
 
         if (terrain.isPointOutOfBounds(pos.x, pos.z)) {
-            System.out.println("[DEBUG] Instant OB Triggered at: " + pos);
             hud.showOutOfBounds();
             hud.incrementShots();
             resetBallToLastShot();
@@ -339,13 +327,7 @@ public class GolfGame extends ApplicationAdapter {
         if (shouldActiveTimer(terrain)) {
             resetTimer += delta;
 
-            // Log every half-second so we can see the countdown in the console
-            if ((int)(resetTimer * 10) % 5 == 0 && resetTimer > 0.1f) {
-                System.out.println("[DEBUG] Reset Timer: " + String.format("%.2f", resetTimer) + " / " + RESET_DELAY);
-            }
-
             if (resetTimer >= RESET_DELAY) {
-                System.out.println("[DEBUG] Timer Threshold Reached. Handling reset...");
                 handleTimerThresholdReached(terrain);
             }
         } else {
@@ -367,7 +349,6 @@ public class GolfGame extends ApplicationAdapter {
         if (currentState == GameState.PRACTICE_RANGE) {
             resetPracticeBall(terrain);
         } else if (ball.isInWater(terrain)) {
-            System.out.println("[DEBUG] Penalty: Water Hazard Confirmed.");
             hud.showWaterHazard();
             hud.incrementShots();
             resetBallToLastShot();
@@ -376,7 +357,6 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void resetPracticeBall(Terrain terrain) {
-        System.out.println("[DEBUG] Practice Range Reset.");
         ghostManager.archiveBall(ball);
         Vector3 tee = terrain.getTeePosition();
         ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
@@ -397,7 +377,6 @@ public class GolfGame extends ApplicationAdapter {
             isVictory = false;
             resetTimer = 0f;
             cameraController.update(ball.getPosition(), inputProcessor);
-            System.out.println("[DEBUG] Ball and ShotController hard reset.");
         }
     }
 
@@ -477,7 +456,7 @@ public class GolfGame extends ApplicationAdapter {
                 tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
                 hud.getStage().getViewport().unproject(tempV3);
                 if (!hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) {
-                    System.out.println("[DEBUG_LOG] Instructions closed by tap outside");
+                    System.out.println("closing from hud");
                     currentState = returnState;
                     if (cameraController != null) cameraController.updateCursorState();
                 }
@@ -493,7 +472,6 @@ public class GolfGame extends ApplicationAdapter {
                 tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
                 hud.getStage().getViewport().unproject(tempV3);
                 if (!hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) {
-                    System.out.println("[DEBUG_LOG] Camera Config closed by tap outside");
                     currentState = returnState;
                     if (cameraController != null) cameraController.updateCursorState();
                 }
@@ -570,7 +548,6 @@ public class GolfGame extends ApplicationAdapter {
         for (int i = 0; i < 6; i++) {
             GameInputProcessor.Action selectAction = GameInputProcessor.Action.valueOf("SELECT_OPTION_" + i);
             if (inputProcessor.isActionJustPressed(selectAction)) {
-                System.out.println("[DEBUG_LOG] Start Menu Option selected (Android/Touch): " + i);
                 menuSelection = i;
                 // Re-trigger MENU_SELECT logic for the new selection
                 handleStartMenuSelection();
@@ -623,14 +600,11 @@ public class GolfGame extends ApplicationAdapter {
             if (scroll != 0) {
                 boolean isMod = inputProcessor.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) ||
                                inputProcessor.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW);
-                
-                System.out.println("[DEBUG_LOG] Scroll detected: " + scroll + " | Modifiers (RMB/TAB): " + isMod + " | Charging: " + shotController.isCharging());
 
                 if (!shotController.isCharging() && !isMod) {
                     // Normal scroll: change club
                     int index = MathUtils.clamp(currentClub.ordinal() + (scroll > 0 ? 1 : -1), 0, Club.values().length - 1);
                     currentClub = Club.values()[index];
-                    System.out.println("[DEBUG_LOG] Club changed to: " + currentClub);
                 }
             }
         }
