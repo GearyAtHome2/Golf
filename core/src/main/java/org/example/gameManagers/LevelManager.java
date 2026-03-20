@@ -11,6 +11,7 @@ import org.example.terrain.ITerrainGenerator;
 import org.example.terrain.Terrain;
 import org.example.terrain.practiceRange.DistanceSign;
 import org.example.terrain.practiceRange.PracticeRangeGenerator;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,7 +23,7 @@ public class LevelManager implements Disposable {
 
     public void buildLevel(ITerrainGenerator generator, float waterLevel, int distance) {
         disposeCurrentAssets();
-        
+
         terrain = new Terrain(generator, waterLevel, distance);
 
         if (generator instanceof PracticeRangeGenerator gen) {
@@ -35,7 +36,7 @@ public class LevelManager implements Disposable {
         markerLineModel = mb.createBox(70f, 0.05f, 0.3f,
                 new Material(ColorAttribute.createDiffuse(new Color(1, 1, 1, 0.6f)), new BlendingAttribute(0.6f)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-        
+
         for (Float zPos : gen.getMarkerZPositions()) {
             ModelInstance marker = new ModelInstance(markerLineModel);
             marker.transform.setToTranslation(0, 0.02f, zPos);
@@ -54,10 +55,16 @@ public class LevelManager implements Disposable {
     }
 
     public void disposeCurrentAssets() {
-        if (terrain != null) { terrain.dispose(); terrain = null; }
-        if (markerLineModel != null) { markerLineModel.dispose(); markerLineModel = null; }
+        if (terrain != null) {
+            terrain.dispose();
+            terrain = null;
+        }
+        if (markerLineModel != null) {
+            markerLineModel.dispose();
+            markerLineModel = null;
+        }
         for (DistanceSign s : rangeSigns) s.dispose();
-        
+
         yardageMarkers.clear();
         rangeSigns.clear();
     }
@@ -68,5 +75,7 @@ public class LevelManager implements Disposable {
     }
 
     // Getters
-    public Terrain getTerrain() { return terrain; }
+    public Terrain getTerrain() {
+        return terrain;
+    }
 }

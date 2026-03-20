@@ -30,7 +30,8 @@ public class CenoteGenerator {
                 int cx = gx + rng.nextInt(gridSize / 2) - gridSize / 4;
                 int cz = gz + rng.nextInt(gridSize / 2) - gridSize / 4;
 
-                if (map[cx][cz] != Terrain.TerrainType.ROUGH || TerrainUtils.isNearProtectedZone(cx, cz, map, TEE_BUFFER, GREEN_BUFFER)) continue;
+                if (map[cx][cz] != Terrain.TerrainType.ROUGH || TerrainUtils.isNearProtectedZone(cx, cz, map, TEE_BUFFER, GREEN_BUFFER))
+                    continue;
                 applyCenoteOval(map, heights, cx, cz, targetDepth);
             }
         }
@@ -54,7 +55,8 @@ public class CenoteGenerator {
                 if (dNorm < 1.0f) {
                     float factor = (float) Math.pow(1.0f - MathUtils.clamp((dNorm - 0.5f) / 0.5f, 0, 1), CENOTE_EXPONENT);
                     heights[x][z] = MathUtils.lerp(heights[x][z], targetDepth, factor);
-                    if (factor > 0.1f && map[x][z] != Terrain.TerrainType.FAIRWAY) map[x][z] = Terrain.TerrainType.STONE;
+                    if (factor > 0.1f && map[x][z] != Terrain.TerrainType.FAIRWAY)
+                        map[x][z] = Terrain.TerrainType.STONE;
                 }
             }
         }
@@ -93,7 +95,8 @@ public class CenoteGenerator {
                 if (dist < maxR) {
                     float factor = (float) Math.pow(1.0f - (dist / maxR), CENOTE_EXPONENT);
                     heights[x][z] = MathUtils.lerp(heights[x][z], depth, factor);
-                    if (factor > 0.4f && map[x][z] != Terrain.TerrainType.FAIRWAY) map[x][z] = Terrain.TerrainType.STONE;
+                    if (factor > 0.4f && map[x][z] != Terrain.TerrainType.FAIRWAY)
+                        map[x][z] = Terrain.TerrainType.STONE;
                 }
             }
         }
@@ -101,23 +104,30 @@ public class CenoteGenerator {
 
 
     private boolean isBorderingRough(int x, int z, Terrain.TerrainType[][] map) {
-        return map[x+1][z] == Terrain.TerrainType.ROUGH || map[x-1][z] == Terrain.TerrainType.ROUGH || map[x][z+1] == Terrain.TerrainType.ROUGH || map[x][z-1] == Terrain.TerrainType.ROUGH;
+        return map[x + 1][z] == Terrain.TerrainType.ROUGH || map[x - 1][z] == Terrain.TerrainType.ROUGH || map[x][z + 1] == Terrain.TerrainType.ROUGH || map[x][z - 1] == Terrain.TerrainType.ROUGH;
     }
 
     private List<Vector2> buildSpine(Vector2 start, boolean[][] mask, int maxLen) {
         List<Vector2> spine = new ArrayList<>();
         boolean[][] v = new boolean[mask.length][mask[0].length];
-        Vector2 cur = start.cpy(); spine.add(cur); v[(int)cur.x][(int)cur.y] = true;
+        Vector2 cur = start.cpy();
+        spine.add(cur);
+        v[(int) cur.x][(int) cur.y] = true;
         for (int i = 0; i < maxLen; i++) {
             Vector2 next = null;
-            search: for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
-                int nx = (int)cur.x + dx, nz = (int)cur.y + dz;
-                if (nx >= 0 && nx < mask.length && nz >= 0 && nz < mask[0].length && mask[nx][nz] && !v[nx][nz]) {
-                    next = new Vector2(nx, nz); break search;
+            search:
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = -1; dz <= 1; dz++) {
+                    int nx = (int) cur.x + dx, nz = (int) cur.y + dz;
+                    if (nx >= 0 && nx < mask.length && nz >= 0 && nz < mask[0].length && mask[nx][nz] && !v[nx][nz]) {
+                        next = new Vector2(nx, nz);
+                        break search;
+                    }
                 }
-            }
             if (next == null) break;
-            spine.add(next); v[(int)next.x][(int)next.y] = true; cur = next;
+            spine.add(next);
+            v[(int) next.x][(int) next.y] = true;
+            cur = next;
         }
         return spine;
     }

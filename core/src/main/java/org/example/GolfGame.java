@@ -14,7 +14,6 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
-import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
 import org.example.ball.CompetitiveScore;
@@ -89,7 +88,7 @@ public class GolfGame extends ApplicationAdapter {
             // MOVE VIEWPORT INITIALIZATION TO THE VERY TOP
             setupCamera();
             setupEnvironment();
-            
+
             modelBatch = new ModelBatch();
             hud = new HUD(config);
             levelManager = new LevelManager();
@@ -100,7 +99,7 @@ public class GolfGame extends ApplicationAdapter {
             windManager = new WindManager();
 
             if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-                inputProcessor = new MobileInputProcessor(); 
+                inputProcessor = new MobileInputProcessor();
                 hud.setupMobileUI((MobileInputProcessor) inputProcessor);
             } else {
                 inputProcessor = new DesktopInputProcessor();
@@ -134,7 +133,7 @@ public class GolfGame extends ApplicationAdapter {
 
         LevelFactory.GameMode mode = LevelFactory.GameMode.valueOf(currentState.name());
         LevelFactory.LevelCreationResult result;
-        
+
         if (currentState == GameState.COMPETITIVE && !competitiveCourse.isEmpty()) {
             currentLevelData = competitiveCourse.get(currentHoleIndex);
             ITerrainGenerator generator = new ClassicGenerator(currentLevelData);
@@ -146,7 +145,7 @@ public class GolfGame extends ApplicationAdapter {
 
         currentClub = result.defaultClub;
         levelManager.buildLevel(result.generator, result.waterLevel, result.distance);
-        
+
         setupSpawnAndPins();
         setupInputProcessor();
 
@@ -183,7 +182,7 @@ public class GolfGame extends ApplicationAdapter {
     private void setupInputProcessor() {
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
-            
+
             // Add stages only if they are not null OR HUD can provide a placeholder
             if (currentState == GameState.START) {
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStartMenuStage();
@@ -577,7 +576,8 @@ public class GolfGame extends ApplicationAdapter {
                 String clip = Gdx.app.getClipboard().getContents();
                 try {
                     if (clip != null) seed = Long.parseLong(clip.trim());
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
                 currentState = GameState.PLAYING;
                 initLevel(seed);
                 return;
@@ -599,7 +599,7 @@ public class GolfGame extends ApplicationAdapter {
             float scroll = inputProcessor.getActionValue(GameInputProcessor.Action.SCROLL_Y);
             if (scroll != 0) {
                 boolean isMod = inputProcessor.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) ||
-                               inputProcessor.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW);
+                        inputProcessor.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW);
 
                 if (!shotController.isCharging() && !isMod) {
                     // Normal scroll: change club
@@ -647,7 +647,7 @@ public class GolfGame extends ApplicationAdapter {
         }
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL)) resetBallToLastShot();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
-        
+
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) {
             config.adjustGameSpeed(true);
         }

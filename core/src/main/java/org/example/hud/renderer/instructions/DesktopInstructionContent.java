@@ -1,9 +1,18 @@
 package org.example.hud.renderer.instructions;
 
 public class DesktopInstructionContent implements InstructionContent {
-    @Override public String getTitle() { return "HOW TO PLAY"; }
-    @Override public String getControlsHeader() { return "CONTROLS"; }
-    @Override public String[] getControlLines() {
+    @Override
+    public String getTitle() {
+        return "HOW TO PLAY";
+    }
+
+    @Override
+    public String getControlsHeader() {
+        return "CONTROLS";
+    }
+
+    @Override
+    public String[] getControlLines() {
         return new String[]{
                 "[WASD] - Aim Contact Point (Spin and loft)",
                 "[RCLICK + DRAG] - Aim Direction",
@@ -20,8 +29,14 @@ public class DesktopInstructionContent implements InstructionContent {
                 "[UP/DOWN] - Change game speed"
         };
     }
-    @Override public String getClubsHeader() { return "THE BAG (CLUBS)"; }
-    @Override public String[][] getClubInfo() {
+
+    @Override
+    public String getClubsHeader() {
+        return "THE BAG (CLUBS)";
+    }
+
+    @Override
+    public String[][] getClubInfo() {
         return new String[][]{
                 {"DRIVER", "Maximum power and Tee bonus."},
                 {"WOODS (3/5)", "Long range from the fairway."},
@@ -33,8 +48,14 @@ public class DesktopInstructionContent implements InstructionContent {
                 {"PUTTER", "Zero loft. Designed for the green."}
         };
     }
-    @Override public String getGameplayHeader() { return "GAMEPLAY"; }
-    @Override public String[] getGameplayLines() {
+
+    @Override
+    public String getGameplayHeader() {
+        return "GAMEPLAY";
+    }
+
+    @Override
+    public String[] getGameplayLines() {
         return new String[]{
                 "SPIN: 'Bottom' = High loft / Low spin.",
                 "Physics: engine simulates lift based on",
@@ -44,10 +65,14 @@ public class DesktopInstructionContent implements InstructionContent {
                 "WIND: Affects altitudes more significantly."
         };
     }
-    @Override public String getFooter() { return "W/S or UP/DOWN to Scroll | [ESC] to Return"; }
 
     @Override
-    public float getMaxScroll(){
+    public String getFooter() {
+        return "W/S or UP/DOWN to Scroll | [ESC] to Return";
+    }
+
+    @Override
+    public float getMaxScroll() {
         return 850f;
     }
 

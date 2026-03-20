@@ -26,7 +26,8 @@ public class MainMenuRenderer {
             try {
                 Long.parseLong(clipboardContent.trim());
                 hasValidSeed = true;
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
 
         // --- THE TITLE FIX ---
@@ -40,8 +41,8 @@ public class MainMenuRenderer {
         font.getData().setScale(pulse);
 
         String title = "GEARY GOLF";
-        float titleX = (float)Math.floor(centerX - (180 * (pulse / 3.0f)));
-        float titleY = (float)Math.floor(centerY + (isAndroid ? 450 : 180));
+        float titleX = (float) Math.floor(centerX - (180 * (pulse / 3.0f)));
+        float titleY = (float) Math.floor(centerY + (isAndroid ? 450 : 180));
 
         // Draw shadow and title
         font.setColor(0, 0, 0, 0.5f);
@@ -55,7 +56,7 @@ public class MainMenuRenderer {
         float optionScale = isAndroid ? 2.5f : 1.5f;
         float spacing = isAndroid ? 80f : 40f;
         font.getData().setScale(optionScale);
-        
+
         if (!isAndroid) {
             drawOption(batch, font, selection == 0, true, "PLAY GAME", centerX - 80, centerY + (spacing * 2));
             drawOption(batch, font, selection == 1, true, "18 HOLES (COMPETITIVE)", centerX - 80, centerY + spacing);
@@ -76,7 +77,7 @@ public class MainMenuRenderer {
     private void drawOption(SpriteBatch batch, BitmapFont font, boolean selected, boolean enabled, String text, float x, float y) {
         boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
         boolean showSelected = selected && !isAndroid;
-        
+
         Color targetColor = !enabled ? Color.DARK_GRAY : (showSelected ? Color.YELLOW : Color.WHITE);
 
         font.setColor(0, 0, 0, 0.7f);

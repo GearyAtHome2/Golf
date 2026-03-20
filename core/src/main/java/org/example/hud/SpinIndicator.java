@@ -39,8 +39,13 @@ public class SpinIndicator extends Actor {
         this.input = input;
     }
 
-    public boolean isBigModeActive() { return bigModeActive; }
-    public void setBigModeActive(boolean active) { this.bigModeActive = active; }
+    public boolean isBigModeActive() {
+        return bigModeActive;
+    }
+
+    public void setBigModeActive(boolean active) {
+        this.bigModeActive = active;
+    }
 
     /**
      * Checks if a world-space coordinate is inside the large spin ball
@@ -148,5 +153,7 @@ public class SpinIndicator extends Actor {
         font.draw(batch, "SPIN", getX() + radius - 25, getY() - 10);
     }
 
-    public Vector2 getSpinDot() { return spinDot; }
+    public Vector2 getSpinDot() {
+        return spinDot;
+    }
 }

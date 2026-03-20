@@ -80,7 +80,7 @@ public class ClubInfoRenderer {
             font.getData().setScale(1.1f);
             font.setColor(Color.CYAN);
             font.draw(batch, dist, x + padding, currentY);
-            font.draw(batch, power, x + width/2f + padding, currentY);
+            font.draw(batch, power, x + width / 2f + padding, currentY);
             currentY -= 22f;
 
             font.setColor(Color.WHITE);

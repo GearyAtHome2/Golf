@@ -162,8 +162,13 @@ public class ParticleManager {
         }
     }
 
-    public void clear() { particles.clear(); }
-    public void dispose() { boxModel.dispose(); }
+    public void clear() {
+        particles.clear();
+    }
+
+    public void dispose() {
+        boxModel.dispose();
+    }
 
     private static class ParticleParams {
         Color color = Color.WHITE;

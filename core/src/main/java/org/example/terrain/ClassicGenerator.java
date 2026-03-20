@@ -2,7 +2,6 @@ package org.example.terrain;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.features.*;
 import org.example.terrain.level.LevelData;
@@ -305,7 +304,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             for (CraterRecord crater : craters) {
                 float dist = (float) Math.sqrt(Math.pow(tx - crater.x, 2) + Math.pow(tz - crater.z, 2));
                 if (dist < crater.radius) {
-                    treeChance = 0; break;
+                    treeChance = 0;
+                    break;
                 } else if (dist < crater.radius * 2.0f)
                     treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
             }
@@ -382,7 +382,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                             Terrain.TerrainType t = map[nx][nz];
                             boolean neighborIsPath = (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE);
                             if (isPath != neighborIsPath) {
-                                neighborIsOpposite = true; break;
+                                neighborIsOpposite = true;
+                                break;
                             }
                         }
                     }
@@ -419,7 +420,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                                 if (ix >= 0 && ix < SIZE_X && iz >= 0 && iz < SIZE_Z && isPathMask[ix][iz]) {
                                     float dSq = (x - ix) * (x - ix) + (z - iz) * (z - iz);
                                     if (dSq < closestDistSq) {
-                                        closestDistSq = dSq; targetDroppedHeight = heights[ix][iz];
+                                        closestDistSq = dSq;
+                                        targetDroppedHeight = heights[ix][iz];
                                     }
                                 }
                             }
@@ -443,7 +445,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                 boolean isGreen = map[x][z] == Terrain.TerrainType.GREEN;
                 boolean isIslandRough = !skipRough && data.getArchetype() == LevelData.Archetype.ISLAND_COAST && map[x][z] == Terrain.TerrainType.ROUGH;
                 if ((isGreen || isIslandRough) && isBorderTile(x, z, map)) {
-                    float avg = 0; int kIdx = 0;
+                    float avg = 0;
+                    int kIdx = 0;
                     for (int dx = -1; dx <= 1; dx++) {
                         for (int dz = -1; dz <= 1; dz++) {
                             int nx = MathUtils.clamp(x + dx, 0, SIZE_X - 1), nz = MathUtils.clamp(z + dz, 0, SIZE_Z - 1);
@@ -461,7 +464,8 @@ public class ClassicGenerator implements ITerrainGenerator {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 int nx = x + dx, nz = z + dz;
-                if (nx >= 0 && nx < map.length && nz >= 0 && nz < map[0].length && map[nx][nz] != map[x][z]) return true;
+                if (nx >= 0 && nx < map.length && nz >= 0 && nz < map[0].length && map[nx][nz] != map[x][z])
+                    return true;
             }
         }
         return false;
@@ -512,16 +516,20 @@ public class ClassicGenerator implements ITerrainGenerator {
             }
         }
         if (data.getMinFairwayWidth() <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
-        else processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
+        else
+            processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
     }
 
     private float calculateHeightNoise(int x, int z, float freq, float und, float maxH, LevelData.TerrainAlgorithm algo) {
         float wX = x * SCALE + off1, wZ = z * SCALE + off2;
         return switch (algo) {
             case MULTI_WAVE -> processor.generateMultiWaveNoise(wX, wZ, freq) * und * maxH * 2.5f;
-            case TERRACED -> Math.signum(processor.generateMultiWaveNoise(wX, wZ, freq)) * (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 0.4f) * und * maxH * 2.5f;
-            case MOUNDS -> (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 1.5f) * und * maxH * 4.0f;
-            case RAISED_FAIRWAY, SUNKEN_FAIRWAY -> processor.generateMultiWaveNoise(wX, wZ, freq * 0.5f) * und * maxH * 1.5f;
+            case TERRACED ->
+                    Math.signum(processor.generateMultiWaveNoise(wX, wZ, freq)) * (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 0.4f) * und * maxH * 2.5f;
+            case MOUNDS ->
+                    (float) Math.pow(Math.abs(processor.generateMultiWaveNoise(wX, wZ, freq)), 1.5f) * und * maxH * 4.0f;
+            case RAISED_FAIRWAY, SUNKEN_FAIRWAY ->
+                    processor.generateMultiWaveNoise(wX, wZ, freq * 0.5f) * und * maxH * 1.5f;
             case CRAGGY_RIDGES -> {
                 float noise = processor.generateMultiWaveNoise(wX, wZ, freq);
                 yield (1.0f - Math.abs(noise)) * und * maxH * 3.0f;

@@ -42,7 +42,7 @@ public class LevelFactory {
         return new LevelCreationResult(generator, data, defaultClub, waterLevel, distance);
     }
 
-    public enum GameMode { START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN }
+    public enum GameMode {START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN}
 
     public static class LevelCreationResult {
         public final ITerrainGenerator generator;

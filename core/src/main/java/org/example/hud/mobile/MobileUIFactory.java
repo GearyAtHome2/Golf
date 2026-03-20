@@ -87,7 +87,7 @@ public class MobileUIFactory {
 
     private static void setupLeftStack(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style) {
         Table leftStack = new Table();
-        leftStack.setBackground((Drawable)null);
+        leftStack.setBackground((Drawable) null);
         ui.gameplayTable.add(leftStack).expandY().fillY().left().padLeft(PAD_SCREEN_EDGE).padTop(LEFT_STACK_TOP_PAD);
 
         Table leftButtons = new Table();
@@ -103,7 +103,7 @@ public class MobileUIFactory {
 
     private static void setupRightStack(MobileUIPackage ui, MobileInputProcessor input, Texture whitePixel, TextButton.TextButtonStyle style) {
         Table rightStack = new Table();
-        rightStack.setBackground((Drawable)null);
+        rightStack.setBackground((Drawable) null);
         ui.gameplayTable.add(rightStack).expand().top().right().padRight(PAD_SCREEN_EDGE).padTop(RIGHT_STACK_TOP_PAD);
         rightStack.add().height(RIGHT_STACK_SPACER).row();
 
@@ -185,6 +185,7 @@ public class MobileUIFactory {
                 input.setActionState(action, true);
                 return true;
             }
+
             @Override
             public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
                 input.setActionState(action, false);
@@ -274,7 +275,9 @@ public class MobileUIFactory {
         if (action != null) {
             btn.addListener(new ChangeListener() {
                 @Override
-                public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) { input.triggerAction(action); }
+                public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                    input.triggerAction(action);
+                }
             });
         }
         return btn;

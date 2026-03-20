@@ -208,7 +208,8 @@ public class BallRenderer {
                 builder.setColor(tempColor);
                 builder.rect(prevLeft, prevRight, rightPos, leftPos, camDir);
             }
-            prevLeft.set(leftPos); prevRight.set(rightPos);
+            prevLeft.set(leftPos);
+            prevRight.set(rightPos);
         }
 
         trailMeshModel = modelBuilder.end();

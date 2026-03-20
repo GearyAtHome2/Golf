@@ -66,7 +66,7 @@ public class MobileInstructionContent implements InstructionContent {
         return "Drag to scroll, tap outside to return";
     }
 
-    public float getMaxScroll(){
+    public float getMaxScroll() {
         return 1950f;
     }
 }

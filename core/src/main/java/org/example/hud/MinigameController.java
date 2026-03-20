@@ -103,8 +103,13 @@ public class MinigameController {
             if (step == 4) {
                 float move = delta * needleSpeed;
                 engine.needlePos += (engine.needleMovingRight ? move : -move);
-                if (engine.needlePos >= 1.0f) { engine.needlePos = 1.0f; engine.needleMovingRight = false; }
-                else if (engine.needlePos <= 0f) { engine.needlePos = 0f; engine.needleMovingRight = true; }
+                if (engine.needlePos >= 1.0f) {
+                    engine.needlePos = 1.0f;
+                    engine.needleMovingRight = false;
+                } else if (engine.needlePos <= 0f) {
+                    engine.needlePos = 0f;
+                    engine.needleMovingRight = true;
+                }
 
                 if (input.isActionJustPressed(GameInputProcessor.Action.STOP_NEEDLE)) {
                     stopNeedle(spinDot, shotController);
@@ -127,10 +132,25 @@ public class MinigameController {
         String text = "";
         float mult = 1.0f;
         switch (step) {
-            case 1 -> { mult = activeDiff.terrainDifficulty; text = "TERRAIN x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 2 -> { mult = activeDiff.clubDifficulty; text = "WEIGHT x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 3 -> { mult = activeDiff.swingDifficulty; text = "PRECISION x" + String.format("%.2f", mult); engine.barWidthMult *= (1.0f / mult); }
-            case 4 -> { text = "GO!"; needleSpeed = activePowerMod * 1.5f * gameDiff.needleSpeedMult; }
+            case 1 -> {
+                mult = activeDiff.terrainDifficulty;
+                text = "TERRAIN x" + String.format("%.2f", mult);
+                engine.barWidthMult *= (1.0f / mult);
+            }
+            case 2 -> {
+                mult = activeDiff.clubDifficulty;
+                text = "WEIGHT x" + String.format("%.2f", mult);
+                engine.barWidthMult *= (1.0f / mult);
+            }
+            case 3 -> {
+                mult = activeDiff.swingDifficulty;
+                text = "PRECISION x" + String.format("%.2f", mult);
+                engine.barWidthMult *= (1.0f / mult);
+            }
+            case 4 -> {
+                text = "GO!";
+                needleSpeed = activePowerMod * 1.5f * gameDiff.needleSpeedMult;
+            }
         }
         if (animSetting != GameConfig.AnimSpeed.NONE) {
             Color c = (mult <= 1.05f) ? Color.GREEN : Color.RED;
@@ -183,11 +203,37 @@ public class MinigameController {
         engine.needlePos = 0.5f;
     }
 
-    public void cancel() { active = false; needleStopped = false; canceled = true; lastResult = null; activeAnims.clear(); }
-    public boolean isActive() { return active; }
-    public boolean isNeedleStopped() { return needleStopped; }
-    public boolean wasCanceled() { boolean c = canceled; canceled = false; return c; }
-    public MinigameResult getResult() { return lastResult; }
-    public float getGlowTimer() { return glowTimer; }
-    public Color getGlowColor() { return glowColor; }
+    public void cancel() {
+        active = false;
+        needleStopped = false;
+        canceled = true;
+        lastResult = null;
+        activeAnims.clear();
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public boolean isNeedleStopped() {
+        return needleStopped;
+    }
+
+    public boolean wasCanceled() {
+        boolean c = canceled;
+        canceled = false;
+        return c;
+    }
+
+    public MinigameResult getResult() {
+        return lastResult;
+    }
+
+    public float getGlowTimer() {
+        return glowTimer;
+    }
+
+    public Color getGlowColor() {
+        return glowColor;
+    }
 }

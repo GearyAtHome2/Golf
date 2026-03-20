@@ -517,6 +517,7 @@ public class HUD {
     public boolean isTouchInsideCameraConfig(float x, float y) {
         return cameraConfigRequested && overlayRenderer.getCameraConfigRenderer().isClickInside(x, y);
     }
+
     public boolean wasInstructionsRequested() {
         return instructionsRequested;
     }
@@ -530,7 +531,8 @@ public class HUD {
     }
 
     public boolean isTouchInsideInstructions(float x, float y) {
-        return overlayRenderer.getInstructionRenderer().isClickInside(x, y);    }
+        return overlayRenderer.getInstructionRenderer().isClickInside(x, y);
+    }
 
     public boolean isTouchInsideClubInfo(float x, float y) {
         float width = 320f, height = 200f;

@@ -30,11 +30,14 @@ public class InstructionRenderer {
         // Input Logic
         if (!isAndroid) {
             float scrollSpeed = 450f * delta;
-            if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
-            if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) instructionScrollY = Math.min(content.getMaxScroll(), instructionScrollY + scrollSpeed);
+            if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP))
+                instructionScrollY = Math.max(0, instructionScrollY - scrollSpeed);
+            if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN))
+                instructionScrollY = Math.min(content.getMaxScroll(), instructionScrollY + scrollSpeed);
         } else if (Gdx.input.isTouched()) {
             float dragY = Gdx.input.getDeltaY();
-            if (Math.abs(dragY) > 0.1f) instructionScrollY = MathUtils.clamp(instructionScrollY - dragY * 3.5f, 0, content.getMaxScroll());
+            if (Math.abs(dragY) > 0.1f)
+                instructionScrollY = MathUtils.clamp(instructionScrollY - dragY * 3.5f, 0, content.getMaxScroll());
         }
 
         // Layout Calculations

@@ -14,7 +14,11 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
     public static class SignData {
         public Vector3 position;
         public int distance;
-        public SignData(Vector3 pos, int dist) { this.position = pos; this.distance = dist; }
+
+        public SignData(Vector3 pos, int dist) {
+            this.position = pos;
+            this.distance = dist;
+        }
     }
 
     private final List<SignData> signPositions = new ArrayList<>();
@@ -29,7 +33,7 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
 
         float teeZ = 25f - halfDepth;
         float teeAreaZLimit = teeZ + 10f;
-        int greenZoneStartIdx = (int)(depth * 0.9f);
+        int greenZoneStartIdx = (int) (depth * 0.9f);
 
         // Define radial strip widths (distance from the center line)
         float waterHalfWidth = width * 0.10f;
@@ -40,7 +44,7 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
 
         // Tee is back in the center (x=0), but we'll ensure height is above water
         teePos.set(0, 0.38f, teeZ);
-        holePos.set(0, 0, (depth - 50f) - halfDepth +2);
+        holePos.set(0, 0, (depth - 50f) - halfDepth + 2);
 
         signPositions.clear();
         monoliths.clear(); // Clear existing buildings before adding new ones
@@ -97,14 +101,19 @@ public class PracticeRangeGenerator implements ITerrainGenerator {
                 markerZPositions.add(worldZ);
             }
 
-            if (distFromTee > 40 && (int)distFromTee % 50 == 0) {
+            if (distFromTee > 40 && (int) distFromTee % 50 == 0) {
                 // Signs on the outer edge of the stone strip
-                signPositions.add(new SignData(new Vector3(stoneMaxDist, 0, worldZ), (int)distFromTee));
-                signPositions.add(new SignData(new Vector3(-stoneMaxDist, 0, worldZ), (int)distFromTee));
+                signPositions.add(new SignData(new Vector3(stoneMaxDist, 0, worldZ), (int) distFromTee));
+                signPositions.add(new SignData(new Vector3(-stoneMaxDist, 0, worldZ), (int) distFromTee));
             }
         }
     }
 
-    public List<SignData> getSignPositions() { return signPositions; }
-    public List<Float> getMarkerZPositions() { return markerZPositions; }
+    public List<SignData> getSignPositions() {
+        return signPositions;
+    }
+
+    public List<Float> getMarkerZPositions() {
+        return markerZPositions;
+    }
 }

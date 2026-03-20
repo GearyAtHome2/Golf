@@ -3,12 +3,18 @@ package org.example.terrain.objects;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.VertexAttributes;
-import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.Environment;
+import com.badlogic.gdx.graphics.g3d.Material;
+import com.badlogic.gdx.graphics.g3d.ModelBatch;
+import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.MeshPartBuilder;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
-import com.badlogic.gdx.math.*;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
 
 public class Tree extends TerrainObject {
     private final ModelInstance trunk, foliage;
@@ -38,8 +44,13 @@ public class Tree extends TerrainObject {
             this.leafMax = lMax;
         }
 
-        public Color getRandomBark() { return barkMin.cpy().lerp(barkMax, MathUtils.random()); }
-        public Color getRandomFoliage() { return leafMin.cpy().lerp(leafMax, MathUtils.random()); }
+        public Color getRandomBark() {
+            return barkMin.cpy().lerp(barkMax, MathUtils.random());
+        }
+
+        public Color getRandomFoliage() {
+            return leafMin.cpy().lerp(leafMax, MathUtils.random());
+        }
     }
 
     public Tree(float x, float y, float z, float th, float tr, float fr, TreeScheme scheme, java.util.Random rng, float mapRotation) {
@@ -157,7 +168,15 @@ public class Tree extends TerrainObject {
         foliage.model.dispose();
     }
 
-    public float getTrunkHeight() { return tH; }
-    public float getTrunkRadius() { return tR; }
-    public TreeScheme getScheme() { return scheme; }
+    public float getTrunkHeight() {
+        return tH;
+    }
+
+    public float getTrunkRadius() {
+        return tR;
+    }
+
+    public TreeScheme getScheme() {
+        return scheme;
+    }
 }

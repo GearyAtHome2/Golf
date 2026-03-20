@@ -15,7 +15,7 @@ public class PauseMenuRenderer {
         float centerY = viewport.getWorldHeight() / 2f;
 
         boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
-        
+
         float titleScale = isAndroid ? 4.0f : 2.5f;
         float textScale = isAndroid ? 2.0f : 1.2f;
         float spacing = isAndroid ? 80f : 40f;

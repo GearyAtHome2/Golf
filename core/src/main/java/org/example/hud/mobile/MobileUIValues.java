@@ -1,26 +1,6 @@
 package org.example.hud.mobile;
 
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.scenes.scene2d.InputEvent;
-import com.badlogic.gdx.scenes.scene2d.InputListener;
-import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.Skin;
-import com.badlogic.gdx.scenes.scene2d.ui.Table;
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
-import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
-import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
-import com.badlogic.gdx.utils.viewport.Viewport;
-import org.example.GameConfig;
-import org.example.hud.HoldButton;
-import org.example.hud.PreShotDebugActor;
-import org.example.hud.SpinIndicator;
-import org.example.input.GameInputProcessor;
-import org.example.input.MobileInputProcessor;
-
-import static org.example.hud.UIUtils.createRoundedRectDrawable;
 
 public class MobileUIValues {
 

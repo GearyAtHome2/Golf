@@ -6,8 +6,8 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
-import org.example.hud.HUD;
 import org.example.ball.MinigameResult;
+import org.example.hud.HUD;
 
 public class NotificationManager {
     private static class Notification {
@@ -75,7 +75,6 @@ public class NotificationManager {
 
         tempColor.set(activeNotification.color).a *= alpha;
 
-        // 1. Draw Main Text
         font.getData().setScale(finalScale);
         font.setColor(tempColor);
         layout.setText(font, activeNotification.mainText);
@@ -88,12 +87,10 @@ public class NotificationManager {
 
         // 2. Draw Subtext
         if (activeNotification.subText != null) {
-            // Scale up subtext to be closer to main text size
             font.getData().setScale(finalScale * 0.7f);
             font.setColor(1, 1, 1, alpha * 0.9f);
             layout.setText(font, activeNotification.subText);
 
-            // Gap is now based on half the height of both strings + a small buffer
             float subHeight = layout.height;
             float verticalGap = mainHeight + (subHeight * 0.5f) + (10 * HUD.UI_SCALE);
 

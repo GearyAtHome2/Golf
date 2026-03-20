@@ -2,7 +2,6 @@ package org.example.performance;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.utils.ObjectLongMap;
-import com.badlogic.gdx.utils.ObjectMap;
 
 public class PhysicsProfiler {
     private static final ObjectLongMap<String> currentFrameTimings = new ObjectLongMap<>();

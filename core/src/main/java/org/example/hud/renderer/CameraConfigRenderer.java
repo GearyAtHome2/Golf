@@ -133,8 +133,10 @@ public class CameraConfigRenderer {
                 if (left || right) config.cameraSettings.invertY = !config.cameraSettings.invertY;
                 break;
             case 3: // Sensitivity
-                if (left) config.cameraSettings.mouseSensitivity = Math.max(0.05f, config.cameraSettings.mouseSensitivity - 0.05f);
-                if (right) config.cameraSettings.mouseSensitivity = Math.min(2.0f, config.cameraSettings.mouseSensitivity + 0.05f);
+                if (left)
+                    config.cameraSettings.mouseSensitivity = Math.max(0.05f, config.cameraSettings.mouseSensitivity - 0.05f);
+                if (right)
+                    config.cameraSettings.mouseSensitivity = Math.min(2.0f, config.cameraSettings.mouseSensitivity + 0.05f);
                 break;
             case 4: // Smoothing
                 if (left) config.cameraSettings.lerpSpeed = Math.max(1f, config.cameraSettings.lerpSpeed - 0.5f);

@@ -1,7 +1,8 @@
 package org.example.ball;
 
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.g3d.*;
+import com.badlogic.gdx.graphics.g3d.Environment;
+import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
@@ -9,14 +10,15 @@ import org.example.GameConfig;
 import org.example.glamour.ParticleManager;
 import org.example.performance.PhysicsProfiler;
 import org.example.terrain.Terrain;
-import org.example.terrain.objects.Tree;
 import org.example.terrain.objects.Monolith;
+import org.example.terrain.objects.Tree;
 
 import java.util.List;
 
 public class Ball {
 
     public enum State {AIR, CONTACT, ROLLING, STATIONARY}
+
     public enum Interaction {NONE, LEAVES, WATER, TERRAIN}
 
     public static final float BALL_RADIUS = 0.2f;
@@ -471,7 +473,10 @@ public class Ball {
         renderer.updateVisuals(position, state);
     }
 
-    public boolean isInWater(Terrain terrain) { return position.y < terrain.getWaterLevel(); }
+    public boolean isInWater(Terrain terrain) {
+        return position.y < terrain.getWaterLevel();
+    }
+
     public boolean checkVictory(Terrain terrain) {
         Vector3 holePos = terrain.getHolePosition();
         float dist = position.dst(holePos);
@@ -479,19 +484,52 @@ public class Ball {
         return dist < holeRadius * 1.5 && position.y < holePos.y - 0.3f;
     }
 
-    public Vector3 getPosition() { return position; }
-    public Vector3 getVelocity() { return velocity; }
-    public Vector3 getSpin() { return spin; }
-    public State getState() { return state; }
-    public void setState(State state) { this.state = state; }
-    public Interaction getLastInteraction() { return lastInteraction; }
-    public void clearInteraction() { lastInteraction = Interaction.NONE; }
+    public Vector3 getPosition() {
+        return position;
+    }
+
+    public Vector3 getVelocity() {
+        return velocity;
+    }
+
+    public Vector3 getSpin() {
+        return spin;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public void setState(State state) {
+        this.state = state;
+    }
+
+    public Interaction getLastInteraction() {
+        return lastInteraction;
+    }
+
+    public void clearInteraction() {
+        lastInteraction = Interaction.NONE;
+    }
+
     public float getFlatDistanceToHole(Terrain terrain) {
         if (terrain == null) return 0;
         return Vector2.dst(position.x, position.z, terrain.getHolePosition().x, terrain.getHolePosition().z);
     }
-    public float getShotDistance() { return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z); }
-    public void render(ModelBatch batch, Environment env) { renderer.render(batch, env); }
-    public void renderTrail(ModelBatch batch, Environment env) { renderer.renderTrail(batch, env); }
-    public void dispose() { renderer.dispose(); }
+
+    public float getShotDistance() {
+        return Vector2.dst(lastStationaryPosition.x, lastStationaryPosition.z, position.x, position.z);
+    }
+
+    public void render(ModelBatch batch, Environment env) {
+        renderer.render(batch, env);
+    }
+
+    public void renderTrail(ModelBatch batch, Environment env) {
+        renderer.renderTrail(batch, env);
+    }
+
+    public void dispose() {
+        renderer.dispose();
+    }
 }

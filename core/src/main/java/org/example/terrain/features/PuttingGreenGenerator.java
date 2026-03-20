@@ -88,19 +88,19 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
             }
         }
 
-        float startRight =(rng.nextFloat()*16) -8;
-        float endRight =(rng.nextFloat()*16) -8;
+        float startRight = (rng.nextFloat() * 16) - 8;
+        float endRight = (rng.nextFloat() * 16) - 8;
 
-        float startX = midX+startRight;
-        float startZ = midZ-20;
-        float endX = midX+endRight;
-        float endZ = midZ+10 ;
+        float startX = midX + startRight;
+        float startZ = midZ - 20;
+        float endX = midX + endRight;
+        float endZ = midZ + 10;
 
         // Note: We subtract half width/depth if your world coordinates are centered at 0,0
         float worldCenterX = width / 2f;
         float worldCenterZ = depth / 2f;
 
-        teePos.set(startX - worldCenterX, heights[(int)startX][(int)startZ]+0.15f, startZ - worldCenterZ);
-        holePos.set(endX - worldCenterX, heights[(int)endX][(int)endZ], endZ - worldCenterZ);
+        teePos.set(startX - worldCenterX, heights[(int) startX][(int) startZ] + 0.15f, startZ - worldCenterZ);
+        holePos.set(endX - worldCenterX, heights[(int) endX][(int) endZ], endZ - worldCenterZ);
     }
 }

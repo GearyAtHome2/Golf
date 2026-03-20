@@ -130,7 +130,8 @@ public class Terrain {
             }
         }
         if (greenHeights.isEmpty()) {
-            greenMinH = 0; greenMaxH = 10;
+            greenMinH = 0;
+            greenMaxH = 10;
             return;
         }
         float averageHeight = sum / greenHeights.size();
@@ -283,7 +284,9 @@ public class Terrain {
         return baseHeight;
     }
 
-    public Vector3 getNormalAt(float worldX, float worldZ) { return getNormalAt(worldX, worldZ, true); }
+    public Vector3 getNormalAt(float worldX, float worldZ) {
+        return getNormalAt(worldX, worldZ, true);
+    }
 
     public Vector3 getNormalAt(float worldX, float worldZ, boolean forPhysics) {
         float rimRadius = holeSize / 2.0f;
@@ -321,7 +324,9 @@ public class Terrain {
         return instance;
     }
 
-    private Vector3 vertex(int x, int z) { return new Vector3(x * SCALE, heightMap[x][z], z * SCALE); }
+    private Vector3 vertex(int x, int z) {
+        return new Vector3(x * SCALE, heightMap[x][z], z * SCALE);
+    }
 
     private void createFlag(Vector3 pos) {
         ModelBuilder mb = new ModelBuilder();
@@ -357,7 +362,7 @@ public class Terrain {
         if (flagInstance == null) return;
         float dist = cameraPosition.dst(holePosition);
         float distFactor = Math.max(0, dist - 50f);
-        float scale = 1.0f + (float)Math.sqrt(distFactor) * 0.15f;
+        float scale = 1.0f + (float) Math.sqrt(distFactor) * 0.15f;
         scale *= org.example.hud.HUD.UI_SCALE;
         Vector3 dir = new Vector3(cameraPosition).sub(holePosition);
         float angle = MathUtils.atan2(dir.x, dir.z) * MathUtils.radiansToDegrees;
@@ -423,16 +428,41 @@ public class Terrain {
         if (teeInstance != null) teeInstance.transform.setToTranslation(teeCenter.x, teeCenter.y + 0.075f, teeCenter.z);
     }
 
-    public Vector3 getTeePosition() { return teeCenter; }
-    public Vector3 getHolePosition() { return holePosition; }
-    public float getHoleSize() { return holeSize; }
-    public float getWaterLevel() { return waterLevel; }
-    public float getMaxDistanceX() { return (SIZE_X * SCALE) / 2f; }
-    public float getMaxDistanceZ() { return (SIZE_Z * SCALE) / 2f; }
-    public boolean isPointOutOfBounds(float worldX, float worldZ) { return Math.abs(worldX) > getMaxDistanceX() || Math.abs(worldZ) > getMaxDistanceZ(); }
+    public Vector3 getTeePosition() {
+        return teeCenter;
+    }
 
-    public List<Tree> getTrees() { return trees; }
-    public List<Monolith> getMonoliths() { return monoliths; }
+    public Vector3 getHolePosition() {
+        return holePosition;
+    }
+
+    public float getHoleSize() {
+        return holeSize;
+    }
+
+    public float getWaterLevel() {
+        return waterLevel;
+    }
+
+    public float getMaxDistanceX() {
+        return (SIZE_X * SCALE) / 2f;
+    }
+
+    public float getMaxDistanceZ() {
+        return (SIZE_Z * SCALE) / 2f;
+    }
+
+    public boolean isPointOutOfBounds(float worldX, float worldZ) {
+        return Math.abs(worldX) > getMaxDistanceX() || Math.abs(worldZ) > getMaxDistanceZ();
+    }
+
+    public List<Tree> getTrees() {
+        return trees;
+    }
+
+    public List<Monolith> getMonoliths() {
+        return monoliths;
+    }
 
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
@@ -443,14 +473,20 @@ public class Terrain {
         STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.02f, new Color(0.18f, 0.18f, 0.2f, 1f));
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
         public final Color color;
+
         TerrainType(float kf, float rr, float sm, float diff, float softness, Color col) {
-            this.kineticFriction = kf; this.rollingResistance = rr; this.staticMultiplier = sm;
-            this.difficulty = diff; this.softness = softness; this.color = col;
+            this.kineticFriction = kf;
+            this.rollingResistance = rr;
+            this.staticMultiplier = sm;
+            this.difficulty = diff;
+            this.softness = softness;
+            this.color = col;
         }
     }
 
     public static class Hole {
         private final ModelInstance cupInstance;
+
         public Hole(Vector3 pos, Vector3 surfaceNormal, float radius) {
             ModelBuilder mb = new ModelBuilder();
             Model discModel = mb.createCylinder(radius * 2f, 0.01f, radius * 2f, 24,
@@ -464,7 +500,13 @@ public class Terrain {
             Vector3 finalPos = new Vector3(pos).add(new Vector3(surfaceNormal).scl(0.005f));
             cupInstance.transform.setTranslation(finalPos);
         }
-        public void render(ModelBatch b, Environment e) { b.render(cupInstance, e); }
-        public void dispose() { cupInstance.model.dispose(); }
+
+        public void render(ModelBatch b, Environment e) {
+            b.render(cupInstance, e);
+        }
+
+        public void dispose() {
+            cupInstance.model.dispose();
+        }
     }
 }

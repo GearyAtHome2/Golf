@@ -57,7 +57,7 @@ public class BeachBluffsGenerator {
                     float d = Vector2.dst(x, z, b.x, b.z);
 
                     boolean isGreenBluff = (i == 1);
-                    boolean isNub = (i > 1) && (new Random((long)(b.x * b.z)).nextInt(40) == 0);
+                    boolean isNub = (i > 1) && (new Random((long) (b.x * b.z)).nextInt(40) == 0);
 
                     float baseRadius = isGreenBluff ? 22.0f : 14f;
 

@@ -12,18 +12,24 @@ public class GameConfig {
     private final float[] speedValues = {0.25f, 0.5f, 1.0f, 2.0f, 3.0f, 5.0f};
     private int speedIndex = 2; // Default to 1.0f
 
-    public enum CameraType { FREE, DRAG, FIXED }
+    public enum CameraType {FREE, DRAG, FIXED}
 
     public enum AnimSpeed {
         NONE(0f), SLOW(0.6f), FAST(1.4f);
         public final float mult;
-        AnimSpeed(float m){this.mult=m;}
+
+        AnimSpeed(float m) {
+            this.mult = m;
+        }
     }
 
     public enum Difficulty {
         EASY(0.3f), MEDIUM(0.6f), HARD(1.0f); // Updated to 0.3, 0.6, 1.0
         public final float needleSpeedMult;
-        Difficulty(float s){this.needleSpeedMult=s;}
+
+        Difficulty(float s) {
+            this.needleSpeedMult = s;
+        }
     }
 
     public void cycleAnimation() {
@@ -51,7 +57,7 @@ public class GameConfig {
     }
 
     public class CameraConfig {
-        public enum ControlStyle { FREE, DRAG } // FREE = Always active, DRAG = Right Click to move
+        public enum ControlStyle {FREE, DRAG} // FREE = Always active, DRAG = Right Click to move
 
         public ControlStyle controlStyle = ControlStyle.FREE;
         public float mouseSensitivity = 0.3f;
@@ -61,7 +67,12 @@ public class GameConfig {
         public boolean invertX = false;
         public boolean invertY = false;
 
-        public float getXMult() { return invertX ? 1f : -1f; }
-        public float getYMult() { return invertY ? 1f : -1f; }
+        public float getXMult() {
+            return invertX ? 1f : -1f;
+        }
+
+        public float getYMult() {
+            return invertY ? 1f : -1f;
+        }
     }
 }

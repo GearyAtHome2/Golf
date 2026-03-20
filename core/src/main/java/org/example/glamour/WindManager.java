@@ -84,7 +84,7 @@ public class WindManager {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
 
         // Increase the multiplier for more streaks, and set a higher minimum (15)
-        int streaksToShow = MathUtils.clamp((int)(trueWindSpeed * 3.0f) + 10, 15, MAX_STREAKS);
+        int streaksToShow = MathUtils.clamp((int) (trueWindSpeed * 3.0f) + 10, 15, MAX_STREAKS);
 
         for (int i = 0; i < streaksToShow; i++) {
             WindStreak s = streaks.get(i);

@@ -1,7 +1,6 @@
 package org.example.camera;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Input.Buttons;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.math.MathUtils;
@@ -133,6 +132,7 @@ public class CameraController {
         camera.up.set(0, 1, 0);
         camera.lookAt(overheadCenter);
     }
+
     private void updateNormalMode(Vector3 ballPos, float delta, GameInputProcessor input) {
         float dstToTarget = camera.position.dst(tempTargetPos);
         float lerpBase = introActive ? 1.5f : config.lerpSpeed;
@@ -145,12 +145,12 @@ public class CameraController {
 
         float scrollY = input.getActionValue(GameInputProcessor.Action.SCROLL_Y);
         if (scrollY != 0) {
-            boolean isMod = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || 
-                            input.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW) || 
-                            Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
-            
+            boolean isMod = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) ||
+                    input.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW) ||
+                    Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+
             System.out.println("[DEBUG_LOG] Normal Zoom check: " + scrollY + " | Mods: " + isMod);
-            
+
             if (isMod) {
                 targetDistance += scrollY * 3.0f;
                 targetDistance = MathUtils.clamp(targetDistance, 2.1f, 150f);
@@ -197,6 +197,11 @@ public class CameraController {
         this.introActive = false;
     }
 
-    public float getYaw() { return yaw; }
-    public boolean isOverhead() { return isOverhead; }
+    public float getYaw() {
+        return yaw;
+    }
+
+    public boolean isOverhead() {
+        return isOverhead;
+    }
 }

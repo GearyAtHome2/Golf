@@ -27,10 +27,18 @@ public class ShotDistanceTracker {
         if (displayTimer > 0) displayTimer -= delta;
     }
 
-    public float getDisplayDistance() { return persistentShotDistance; }
-    public boolean shouldShow() { return displayTimer > 0; }
-    public float getTimer() { return displayTimer; }
-    
+    public float getDisplayDistance() {
+        return persistentShotDistance;
+    }
+
+    public boolean shouldShow() {
+        return displayTimer > 0;
+    }
+
+    public float getTimer() {
+        return displayTimer;
+    }
+
     public void reset() {
         persistentShotDistance = 0;
         maxDistanceSeen = 0;

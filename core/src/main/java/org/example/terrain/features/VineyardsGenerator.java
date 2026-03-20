@@ -3,6 +3,7 @@ package org.example.terrain.features;
 import com.badlogic.gdx.math.MathUtils;
 import org.example.terrain.Terrain;
 import org.example.terrain.TerrainUtils;
+
 import java.util.Random;
 
 public class VineyardsGenerator {
@@ -53,12 +54,12 @@ public class VineyardsGenerator {
                 float targetH;
 
                 if (posInCycle < rowWidth) {
-                    int stepStartZ = MathUtils.clamp((int)(z - posInCycle), 0, SZ - 1);
+                    int stepStartZ = MathUtils.clamp((int) (z - posInCycle), 0, SZ - 1);
                     targetH = heights[x][stepStartZ];
                 } else {
                     float riserProgress = (posInCycle - rowWidth) / riserWidth;
-                    int currentStepZ = MathUtils.clamp((int)(z - (posInCycle - rowWidth)), 0, SZ - 1);
-                    int nextStepZ = MathUtils.clamp((int)(z + (totalCycle - posInCycle)), 0, SZ - 1);
+                    int currentStepZ = MathUtils.clamp((int) (z - (posInCycle - rowWidth)), 0, SZ - 1);
+                    int nextStepZ = MathUtils.clamp((int) (z + (totalCycle - posInCycle)), 0, SZ - 1);
 
                     float hStart = heights[x][currentStepZ];
                     float hEnd = heights[x][nextStepZ];

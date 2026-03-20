@@ -2,8 +2,11 @@ package org.example.input;
 
 public interface GameInputProcessor {
     void update(float delta);
+
     boolean isActionPressed(Action action);
+
     boolean isActionJustPressed(Action action);
+
     float getActionValue(Action action);
 
     enum Action {

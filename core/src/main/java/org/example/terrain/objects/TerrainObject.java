@@ -14,7 +14,9 @@ public abstract class TerrainObject {
     }
 
     public abstract void update(float delta);
+
     public abstract void render(ModelBatch b, Environment e);
+
     public abstract void dispose();
 
     public void setTargetAlpha(float alpha) {

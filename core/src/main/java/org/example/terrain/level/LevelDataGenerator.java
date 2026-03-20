@@ -312,7 +312,7 @@ public class LevelDataGenerator {
             case WHISTLING_ISLES:
                 baseDifficultyIndex = 1f;
                 teeH = 0.2f;
-                greenH = 1.0f ;
+                greenH = 1.0f;
                 windMin = 11f;
                 windMax = 18f;
                 treeH = 8.0f + r.nextFloat() * 2.0f;
@@ -333,7 +333,7 @@ public class LevelDataGenerator {
             case BIG_GRAPE_VINEYARDS:
                 baseDifficultyIndex = 7f;
                 teeH = 22f;
-                greenH = 1.0f ;
+                greenH = 1.0f;
                 windMin = 2f;
                 windMax = 8f;
                 treeH = 1.5f + r.nextFloat() * 0.2f;

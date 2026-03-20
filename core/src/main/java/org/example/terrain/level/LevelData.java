@@ -62,58 +62,203 @@ public class LevelData {
     private float fairwayRoughIslands;
     private float fairwayCohesion;
 
-    public long getSeed() { return seed; }
-    public void setSeed(long seed) { this.seed = seed; }
-    public Archetype getArchetype() { return archetype; }
-    public void setArchetype(Archetype archetype) { this.archetype = archetype; }
-    public TerrainAlgorithm getTerrainAlgorithm() { return terrainAlgorithm; }
-    public void setTerrainAlgorithm(TerrainAlgorithm terrainAlgorithm) { this.terrainAlgorithm = terrainAlgorithm; }
-    public Tree.TreeScheme getTreeScheme() { return treeScheme; }
-    public void setTreeScheme(Tree.TreeScheme treeScheme) { this.treeScheme = treeScheme; }
-    public float getTeeHeight() { return teeHeight; }
-    public void setTeeHeight(float teeHeight) { this.teeHeight = teeHeight; }
-    public float getGreenHeight() { return greenHeight; }
-    public void setGreenHeight(float greenHeight) { this.greenHeight = greenHeight; }
-    public float getTreeHeight() { return treeHeight; }
-    public void setTreeHeight(float treeHeight) { this.treeHeight = treeHeight; }
-    public float getFoliageRadius() { return foliageRadius; }
-    public void setFoliageRadius(float foliageRadius) { this.foliageRadius = foliageRadius; }
-    public float getTrunkRadius() { return trunkRadius; }
-    public void setTrunkRadius(float trunkRadius) { this.trunkRadius = trunkRadius; }
-    public float getHillFrequency() { return hillFrequency; }
-    public void setHillFrequency(float hillFrequency) { this.hillFrequency = hillFrequency; }
-    public float getMaxHeight() { return maxHeight; }
-    public void setMaxHeight(float maxHeight) { this.maxHeight = maxHeight; }
-    public float getTreeDensity() { return treeDensity; }
-    public void setTreeDensity(float treeDensity) { this.treeDensity = treeDensity; }
-    public float getMaxFairwayWidth() { return maxFairwayWidth; }
-    public void setMaxFairwayWidth(float fairwayWidth) { this.maxFairwayWidth = fairwayWidth; }
+    public long getSeed() {
+        return seed;
+    }
 
-    public float getMinFairwayWidth() { return minFairwayWidth; }
-    public void setMinFairwayWidth(float fairwayWidth) { this.minFairwayWidth = fairwayWidth; }
-    public float getUndulation() { return undulation; }
-    public void setUndulation(float undulation) { this.undulation = undulation; }
-    public float getWaterLevel() { return waterLevel; }
-    public void setWaterLevel(float waterLevel) { this.waterLevel = waterLevel; }
-    public float getHoleSize() { return holeSize; }
-    public void setHoleSize(float holeSize) { this.holeSize = holeSize; }
-    public int getnBunkers() { return nBunkers; }
-    public void setnBunkers(int nBunkers) { this.nBunkers = nBunkers; }
-    public Vector3 getWind() { return wind; }
-    public void setWind(Vector3 wind) { this.wind = wind; }
-    public int getDistance() { return distance; }
-    public void setDistance(int distance) { this.distance = distance; }
-    public int getPar() { return par; }
-    public void setPar(int par) { this.par = par; }
+    public void setSeed(long seed) {
+        this.seed = seed;
+    }
 
-    public float getFairwayWiggle() { return fairwayWiggle; }
-    public void setFairwayWiggle(float fairwayWiggle) { this.fairwayWiggle = fairwayWiggle; }
-    public float getFairwayRoughIslands() { return fairwayRoughIslands; }
-    public void setFairwayRoughIslands(float fairwayRoughIslands) { this.fairwayRoughIslands = fairwayRoughIslands; }
+    public Archetype getArchetype() {
+        return archetype;
+    }
 
-    public float getFairwayCohesion() { return fairwayCohesion; }
-    public void setFairwayCohesion(float fairwayCohesion) { this.fairwayCohesion = fairwayCohesion; }
+    public void setArchetype(Archetype archetype) {
+        this.archetype = archetype;
+    }
 
-    public float getShotIndex() { return shotIndex; }
-    public void setShotIndex(float shotIndex) { this.shotIndex = shotIndex; }
+    public TerrainAlgorithm getTerrainAlgorithm() {
+        return terrainAlgorithm;
+    }
+
+    public void setTerrainAlgorithm(TerrainAlgorithm terrainAlgorithm) {
+        this.terrainAlgorithm = terrainAlgorithm;
+    }
+
+    public Tree.TreeScheme getTreeScheme() {
+        return treeScheme;
+    }
+
+    public void setTreeScheme(Tree.TreeScheme treeScheme) {
+        this.treeScheme = treeScheme;
+    }
+
+    public float getTeeHeight() {
+        return teeHeight;
+    }
+
+    public void setTeeHeight(float teeHeight) {
+        this.teeHeight = teeHeight;
+    }
+
+    public float getGreenHeight() {
+        return greenHeight;
+    }
+
+    public void setGreenHeight(float greenHeight) {
+        this.greenHeight = greenHeight;
+    }
+
+    public float getTreeHeight() {
+        return treeHeight;
+    }
+
+    public void setTreeHeight(float treeHeight) {
+        this.treeHeight = treeHeight;
+    }
+
+    public float getFoliageRadius() {
+        return foliageRadius;
+    }
+
+    public void setFoliageRadius(float foliageRadius) {
+        this.foliageRadius = foliageRadius;
+    }
+
+    public float getTrunkRadius() {
+        return trunkRadius;
+    }
+
+    public void setTrunkRadius(float trunkRadius) {
+        this.trunkRadius = trunkRadius;
+    }
+
+    public float getHillFrequency() {
+        return hillFrequency;
+    }
+
+    public void setHillFrequency(float hillFrequency) {
+        this.hillFrequency = hillFrequency;
+    }
+
+    public float getMaxHeight() {
+        return maxHeight;
+    }
+
+    public void setMaxHeight(float maxHeight) {
+        this.maxHeight = maxHeight;
+    }
+
+    public float getTreeDensity() {
+        return treeDensity;
+    }
+
+    public void setTreeDensity(float treeDensity) {
+        this.treeDensity = treeDensity;
+    }
+
+    public float getMaxFairwayWidth() {
+        return maxFairwayWidth;
+    }
+
+    public void setMaxFairwayWidth(float fairwayWidth) {
+        this.maxFairwayWidth = fairwayWidth;
+    }
+
+    public float getMinFairwayWidth() {
+        return minFairwayWidth;
+    }
+
+    public void setMinFairwayWidth(float fairwayWidth) {
+        this.minFairwayWidth = fairwayWidth;
+    }
+
+    public float getUndulation() {
+        return undulation;
+    }
+
+    public void setUndulation(float undulation) {
+        this.undulation = undulation;
+    }
+
+    public float getWaterLevel() {
+        return waterLevel;
+    }
+
+    public void setWaterLevel(float waterLevel) {
+        this.waterLevel = waterLevel;
+    }
+
+    public float getHoleSize() {
+        return holeSize;
+    }
+
+    public void setHoleSize(float holeSize) {
+        this.holeSize = holeSize;
+    }
+
+    public int getnBunkers() {
+        return nBunkers;
+    }
+
+    public void setnBunkers(int nBunkers) {
+        this.nBunkers = nBunkers;
+    }
+
+    public Vector3 getWind() {
+        return wind;
+    }
+
+    public void setWind(Vector3 wind) {
+        this.wind = wind;
+    }
+
+    public int getDistance() {
+        return distance;
+    }
+
+    public void setDistance(int distance) {
+        this.distance = distance;
+    }
+
+    public int getPar() {
+        return par;
+    }
+
+    public void setPar(int par) {
+        this.par = par;
+    }
+
+    public float getFairwayWiggle() {
+        return fairwayWiggle;
+    }
+
+    public void setFairwayWiggle(float fairwayWiggle) {
+        this.fairwayWiggle = fairwayWiggle;
+    }
+
+    public float getFairwayRoughIslands() {
+        return fairwayRoughIslands;
+    }
+
+    public void setFairwayRoughIslands(float fairwayRoughIslands) {
+        this.fairwayRoughIslands = fairwayRoughIslands;
+    }
+
+    public float getFairwayCohesion() {
+        return fairwayCohesion;
+    }
+
+    public void setFairwayCohesion(float fairwayCohesion) {
+        this.fairwayCohesion = fairwayCohesion;
+    }
+
+    public float getShotIndex() {
+        return shotIndex;
+    }
+
+    public void setShotIndex(float shotIndex) {
+        this.shotIndex = shotIndex;
+    }
 }

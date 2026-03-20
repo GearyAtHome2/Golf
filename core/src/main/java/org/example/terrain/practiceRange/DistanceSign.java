@@ -13,9 +13,9 @@ public class DistanceSign {
 
     public DistanceSign(Vector3 pos, int distance) {
         ModelBuilder mb = new ModelBuilder();
-        
+
         // Color coding by distance
-        Color color = switch(distance) {
+        Color color = switch (distance) {
             case 50 -> Color.WHITE;
             case 100 -> Color.RED;
             case 150 -> Color.BLUE;
@@ -31,15 +31,20 @@ public class DistanceSign {
         post.box(0.1f, 1.5f, 0.1f);
         // The Sign Board
         MeshPartBuilder board = mb.part("board", 1, 3, new Material(ColorAttribute.createDiffuse(color)));
-        board.box(1.5f, 1.0f, 0.1f); 
-        
+        board.box(1.5f, 1.0f, 0.1f);
+
         model = mb.end();
         instance = new ModelInstance(model);
-        
+
         // Offset the board so it sits on top of the post
         instance.transform.setToTranslation(pos.x, 0.75f, pos.z);
     }
 
-    public void render(ModelBatch batch, Environment env) { batch.render(instance, env); }
-    public void dispose() { model.dispose(); }
+    public void render(ModelBatch batch, Environment env) {
+        batch.render(instance, env);
+    }
+
+    public void dispose() {
+        model.dispose();
+    }
 }
