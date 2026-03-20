@@ -87,6 +87,7 @@ public class MobileUIFactory {
 
     private static void setupLeftStack(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style) {
         Table leftStack = new Table();
+        leftStack.setBackground((Drawable)null);
         ui.gameplayTable.add(leftStack).expandY().fillY().left().padLeft(PAD_SCREEN_EDGE).padTop(LEFT_STACK_TOP_PAD);
 
         Table leftButtons = new Table();
@@ -102,6 +103,7 @@ public class MobileUIFactory {
 
     private static void setupRightStack(MobileUIPackage ui, MobileInputProcessor input, Texture whitePixel, TextButton.TextButtonStyle style) {
         Table rightStack = new Table();
+        rightStack.setBackground((Drawable)null);
         ui.gameplayTable.add(rightStack).expand().top().right().padRight(PAD_SCREEN_EDGE).padTop(RIGHT_STACK_TOP_PAD);
         rightStack.add().height(RIGHT_STACK_SPACER).row();
 

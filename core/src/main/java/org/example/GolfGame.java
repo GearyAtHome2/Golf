@@ -13,6 +13,7 @@ import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
@@ -707,11 +708,11 @@ public class GolfGame extends ApplicationAdapter {
     private void setupCamera() {
         camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
-        camera.near = 1.1f;
+        camera.near = 0.8f;
 
         camera.far = 950f;
 
-        gameViewport = new FitViewport(1280, 720, camera);
+        gameViewport = new ExtendViewport(1280, 720, camera);
     }
 
     private boolean isGameplayState() {
@@ -726,7 +727,7 @@ public class GolfGame extends ApplicationAdapter {
     @Override
     public void resize(int width, int height) {
         if (gameViewport != null) {
-            gameViewport.update(width, height);
+            gameViewport.update(width, height, true);
         }
         if (hud != null) {
             hud.resize(width, height);

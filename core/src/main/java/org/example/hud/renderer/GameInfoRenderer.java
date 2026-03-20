@@ -26,7 +26,6 @@ public class GameInfoRenderer {
         float oldScaleY = font.getScaleY();
 
         if (isAndroid) {
-            // --- ANDROID LAYOUT ---
             float uiScale = Math.max(1.0f, viewport.getWorldHeight() / 720f);
             float topY = viewport.getWorldHeight() - (30 * uiScale);
             float marginX = 30 * uiScale;
@@ -39,16 +38,19 @@ public class GameInfoRenderer {
                 String header = String.format("%s: PAR %d", levelData.getArchetype().name().replace("_", " "), levelData.getPar());
                 drawShadowedText(batch, font, header, marginX, topY, Color.GOLD);
 
+                float secondLineY = topY - (50 * uiScale);
+
+                // 1. Draw the Shots counter first
+                font.getData().setScale(1.6f * uiScale);
+                drawShadowedText(batch, font, "Shots: " + shotCount, marginX, secondLineY, Color.WHITE);
+
                 if (compScore != null) {
                     font.getData().setScale(1.5f * uiScale);
+                    float compOffsetX = marginX + (200 * uiScale);
                     String holeInfo = "HOLE " + compScore.getCurrentHoleNumber() + " | " + compScore.getToParString();
-                    drawShadowedText(batch, font, holeInfo, marginX, topY - (50 * uiScale), Color.YELLOW);
+                    drawShadowedText(batch, font, holeInfo, compOffsetX, secondLineY, Color.YELLOW);
                 }
             }
-
-            font.getData().setScale(1.6f * uiScale);
-            float shotsY = topY - (50 * uiScale);
-            drawShadowedText(batch, font, "Shots: " + shotCount, marginX, shotsY, Color.WHITE);
         } else {
 
             float headerX = 40;
