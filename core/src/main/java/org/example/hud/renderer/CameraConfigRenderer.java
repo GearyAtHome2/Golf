@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
@@ -18,7 +19,8 @@ public class CameraConfigRenderer {
     private final float MAX_SCROLL = 200f;
     private int selectedIndex = 0;
     private final int TOTAL_SETTINGS = 5;
-    private Rectangle boxBounds = new Rectangle();
+    private final Rectangle boxBounds = new Rectangle();
+    private final GlyphLayout layout = new GlyphLayout();
 
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameConfig config, GameInputProcessor input) {
         handleNavigation(input);
@@ -26,6 +28,7 @@ public class CameraConfigRenderer {
 
         float delta = Gdx.graphics.getDeltaTime();
         float scrollSpeed = 450f * delta;
+        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             scrollY = Math.max(0, scrollY - scrollSpeed);
@@ -34,14 +37,14 @@ public class CameraConfigRenderer {
             scrollY = Math.min(MAX_SCROLL, scrollY + scrollSpeed);
         }
 
-        float centerX = viewport.getWorldWidth() / 2f;
-        float boxW = 800;
-        float boxH = viewport.getWorldHeight() - 180;
-        float boxX = centerX - boxW / 2f;
-        float boxY = 120;
+        // --- LAYOUT CALCULATIONS (RATIO BASED) ---
+        float boxW = viewport.getWorldWidth() * (isAndroid ? 0.85f : 0.60f);
+        float boxH = viewport.getWorldHeight() * (isAndroid ? 0.70f : 0.60f);
+        float boxX = (viewport.getWorldWidth() - boxW) / 2f;
+        float boxY = (viewport.getWorldHeight() - boxH) / 2f;
         boxBounds.set(boxX, boxY, boxW, boxH);
 
-        // Draw Background
+        // Background
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -49,47 +52,48 @@ public class CameraConfigRenderer {
         shapeRenderer.rect(boxX, boxY, boxW, boxH);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
-        batch.end();
+
+        if (batch.isDrawing()) batch.end();
         Rectangle scissor = new Rectangle();
-        Rectangle area = new Rectangle(boxX, boxY, boxW, boxH);
-        ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), area, scissor);
+        ScissorStack.calculateScissors(viewport.getCamera(), batch.getTransformMatrix(), boxBounds, scissor);
 
         if (ScissorStack.pushScissors(scissor)) {
             batch.begin();
-            float currentY = boxY + boxH - 50 + scrollY;
+
+            float currentY = boxY + boxH - (boxH * 0.1f) + scrollY;
+            float lineSpace = boxH * (isAndroid ? 0.12f : 0.08f);
+            float margin = boxX + (boxW * 0.1f);
 
             // --- TITLE ---
-            font.getData().setScale(2.2f);
+            font.getData().setScale(isAndroid ? 2.2f : 0.8f);
             font.setColor(Color.GOLD);
-            font.draw(batch, "CAMERA CONFIGURATION", centerX - 220, currentY);
-            currentY -= 80;
+            layout.setText(font, "CAMERA CONFIGURATION");
+            font.draw(batch, "CAMERA CONFIGURATION", (viewport.getWorldWidth() - layout.width) / 2f, currentY);
+            currentY -= (lineSpace * 1.5f);
 
-            font.getData().setScale(1.1f);
+            font.getData().setScale(isAndroid ? 1.1f : 0.45f);
 
-            // 0: Control Style
-            drawSettingRow(batch, font, "Control Style", config.cameraSettings.controlStyle.name(), centerX, currentY, selectedIndex == 0);
-            currentY -= 45;
+            // Settings Rows
+            drawSettingRow(batch, font, "Control Style", config.cameraSettings.controlStyle.name(), boxX, boxW, currentY, selectedIndex == 0);
+            currentY -= lineSpace;
 
-            // 1: Invert X
-            drawSettingRow(batch, font, "Invert X-Axis", config.cameraSettings.invertX ? "ON" : "OFF", centerX, currentY, selectedIndex == 1);
-            currentY -= 45;
+            drawSettingRow(batch, font, "Invert X-Axis", config.cameraSettings.invertX ? "ON" : "OFF", boxX, boxW, currentY, selectedIndex == 1);
+            currentY -= lineSpace;
 
-            // 2: Invert Y
-            drawSettingRow(batch, font, "Invert Y-Axis", config.cameraSettings.invertY ? "ON" : "OFF", centerX, currentY, selectedIndex == 2);
-            currentY -= 45;
+            drawSettingRow(batch, font, "Invert Y-Axis", config.cameraSettings.invertY ? "ON" : "OFF", boxX, boxW, currentY, selectedIndex == 2);
+            currentY -= lineSpace;
 
-            // 3: Sensitivity
-            drawSettingRow(batch, font, "Mouse Sensitivity", String.format("%.2f", config.cameraSettings.mouseSensitivity), centerX, currentY, selectedIndex == 3);
-            currentY -= 45;
+            drawSettingRow(batch, font, "Mouse Sensitivity", String.format("%.2f", config.cameraSettings.mouseSensitivity), boxX, boxW, currentY, selectedIndex == 3);
+            currentY -= lineSpace;
 
-            // 4: Smoothing
-            drawSettingRow(batch, font, "Ball tracking speed", String.format("%.1f", config.cameraSettings.lerpSpeed), centerX, currentY, selectedIndex == 4);
-            currentY -= 60;
+            drawSettingRow(batch, font, "Ball tracking speed", String.format("%.1f", config.cameraSettings.lerpSpeed), boxX, boxW, currentY, selectedIndex == 4);
+            currentY -= (lineSpace * 1.2f);
 
+            // Helper text
             font.setColor(Color.CYAN);
-            font.draw(batch, "Use [UP/DOWN] or [W/S] to select", centerX - 330, currentY);
-            currentY -= 25;
-            font.draw(batch, "Use [LEFT/RIGHT] or [A/D] to change values", centerX - 330, currentY);
+            font.draw(batch, "Use [UP/DOWN] or [W/S] to select", margin, currentY);
+            currentY -= (lineSpace * 0.5f);
+            font.draw(batch, "Use [LEFT/RIGHT] or [A/D] to change values", margin, currentY);
 
             batch.flush();
             batch.end();
@@ -97,15 +101,35 @@ public class CameraConfigRenderer {
             batch.begin();
         }
 
-        font.getData().setScale(1.1f);
+        // Footer
+        font.getData().setScale(isAndroid ? 1.1f : 0.45f);
         font.setColor(Color.YELLOW);
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            font.draw(batch, "Tap outside to Return to Pause Menu", centerX - 180, boxY - 30);
-        } else {
-            font.draw(batch, "[ESC] to Return to Pause Menu", centerX - 140, boxY - 30);
-        }
+        String footer = isAndroid ? "Tap outside to Return to Pause Menu" : "[ESC] to Return to Pause Menu";
+        layout.setText(font, footer);
+        font.draw(batch, footer, (viewport.getWorldWidth() - layout.width) / 2f, boxY - (viewport.getWorldHeight() * 0.05f));
     }
 
+    private void drawSettingRow(SpriteBatch batch, BitmapFont font, String label, String value, float boxX, float boxW, float y, boolean selected) {
+        float labelX = boxX + (boxW * 0.1f);
+        float valueX = boxX + (boxW * 0.65f);
+
+        if (selected) {
+            font.setColor(Color.WHITE);
+            font.draw(batch, ">", labelX - (boxW * 0.04f), y);
+            font.setColor(Color.CYAN);
+        } else {
+            font.setColor(Color.LIGHT_GRAY);
+        }
+
+        font.draw(batch, label, labelX, y);
+
+        if (selected) font.setColor(Color.YELLOW);
+        else font.setColor(Color.GOLD);
+
+        font.draw(batch, value, valueX, y);
+    }
+
+    // handleNavigation and handleInteraction remain unchanged as they logic-only
     private void handleNavigation(GameInputProcessor input) {
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_UP)) {
             selectedIndex = (selectedIndex - 1 + TOTAL_SETTINGS) % TOTAL_SETTINGS;
@@ -143,23 +167,6 @@ public class CameraConfigRenderer {
                 if (right) config.cameraSettings.lerpSpeed = Math.min(20f, config.cameraSettings.lerpSpeed + 0.5f);
                 break;
         }
-    }
-
-    private void drawSettingRow(SpriteBatch batch, BitmapFont font, String label, String value, float centerX, float y, boolean selected) {
-        if (selected) {
-            font.setColor(Color.WHITE);
-            font.draw(batch, ">", centerX - 360, y);
-            font.setColor(Color.CYAN);
-        } else {
-            font.setColor(Color.LIGHT_GRAY);
-        }
-
-        font.draw(batch, label, centerX - 330, y);
-
-        if (selected) font.setColor(Color.YELLOW);
-        else font.setColor(Color.GOLD);
-
-        font.draw(batch, value, centerX + 120, y);
     }
 
     public boolean isClickInside(float x, float y) {

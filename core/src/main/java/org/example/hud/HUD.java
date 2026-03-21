@@ -52,7 +52,6 @@ public class HUD {
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
     private int shotCount = 0;
     private final Vector2 spinDot = new Vector2(0, 0);
-    private final float SPIN_UI_RADIUS = 50f;
     private float distanceDisplayTimer = 0;
     private String distanceText = "";
     private float seedFeedbackTimer = 0;
@@ -77,10 +76,10 @@ public class HUD {
         this.config = config;
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
-        font = new BitmapFont();
+        font = new BitmapFont(Gdx.files.internal("font/golf.fnt"));
         font.getRegion().getTexture().setFilter(
-                com.badlogic.gdx.graphics.Texture.TextureFilter.Linear,
-                com.badlogic.gdx.graphics.Texture.TextureFilter.Linear
+                Texture.TextureFilter.Linear,
+                Texture.TextureFilter.Linear
         );
 
         viewport = new ScreenViewport();
@@ -123,12 +122,10 @@ public class HUD {
     public void setupMobileUI(MobileInputProcessor input) {
         if (mobileUIInitialized) return;
 
-        // Delegate creation to Factory
         MobileUIFactory.MobileUIPackage ui = MobileUIFactory.create(
                 viewport, batch, font, config, input, whitePixel, spinIndicator, preShotDebugActor
         );
 
-        // Link HUD members to Factory-created objects
         this.stage = ui.stage;
         this.startMenuStage = ui.startMenuStage;
         this.pauseMenuStage = ui.pauseMenuStage;
@@ -137,7 +134,6 @@ public class HUD {
         this.infoToggleBtn = ui.infoToggleBtn;
         this.skin = ui.skin;
 
-        // Hook up the specific toggle listener that needs HUD state
         this.infoToggleBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
@@ -165,18 +161,13 @@ public class HUD {
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input) {
         if (batch.isDrawing()) batch.end();
 
-        // 1. Input/State Handling
         handlePauseInput(levelData, input);
 
-        // 2. Rendering
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-
         pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer);
-
         batch.end();
 
-        // 3. Android UI Layer
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && pauseMenuStage != null) {
             pauseMenuStage.act();
             pauseMenuStage.draw();
@@ -206,11 +197,9 @@ public class HUD {
     public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
         if (batch.isDrawing()) batch.end();
 
-        // 1. Contextual Flags
         boolean isAndroid = com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
         float delta = com.badlogic.gdx.Gdx.graphics.getDeltaTime();
 
-        // 2. Mobile Initialization & Logic
         if (isAndroid) {
             if (!mobileUIInitialized) {
                 setupMobileUI((MobileInputProcessor) input);
@@ -222,7 +211,6 @@ public class HUD {
             mobileClubLabel.setText(currentClub.name.toUpperCase());
         }
 
-        // 3. Update States
         notificationManager.update(delta);
         updateSpinInput(delta, input);
 
@@ -235,11 +223,14 @@ public class HUD {
             updatePracticeDistanceLogic(ball);
         }
 
-        // 4. Debug & Transformation Setup
+        // 1. Logic Update
         preShotDebugActor.update(terrain, ball, gameCamera);
         boolean shouldShowDebug = (ball.getState() == Ball.State.STATIONARY);
 
+        // 2. Hide debug Actor on mobile entirely to fulfill "get rid of pre-shot debug"
         if (isAndroid) {
+            preShotDebugActor.setVisible(false);
+        } else {
             preShotDebugActor.setVisible(shouldShowDebug);
         }
 
@@ -247,20 +238,17 @@ public class HUD {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
-        // 5. Background / Shape Rendering
         if (!isAndroid) {
             drawSpinUI();
         }
 
-        // 6. Main Text/HUD Batch
         batch.begin();
 
-        // Wind Indicator
         if (levelData != null) {
             windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         }
 
-        // Desktop Debug Overlay
+        // Only draw for Desktop
         if (!isAndroid && shouldShowDebug) {
             preShotDebugActor.setBounds(40, 150, 400, 140);
             preShotDebugActor.draw(batch, 1.0f);
@@ -279,7 +267,6 @@ public class HUD {
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, compScore, terrain);
         batch.end();
 
-        // 7. Overlay Layer (Stage, Minigames, etc.)
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
 
@@ -385,19 +372,18 @@ public class HUD {
         if (isMoving || distanceTracker.shouldShow()) {
             float distanceToShow = isMoving ? ball.getShotDistance() : distanceTracker.getDisplayDistance();
 
-            // Apply the scale passed in
             font.getData().setScale(baseScale);
 
             if (!isMoving) {
                 float alpha = MathUtils.clamp(distanceTracker.getTimer(), 0, 1);
-                font.setColor(1f, 0.85f, 0f, alpha); // Golden yellow fade
+                font.setColor(1f, 0.85f, 0f, alpha);
             } else {
                 font.setColor(Color.WHITE);
             }
 
-            // We also scale the X/Y offsets so the text doesn't overlap or fall off on small screens
-            float xOffset = 300 * (baseScale / 1.4f);
-            float yOffset = 200 * (baseScale / 1.4f);
+            // Adjusted offsets to clear the new mobile button positions
+            float xOffset = 350 * (baseScale / 1.4f);
+            float yOffset = 250 * (baseScale / 1.4f);
 
             drawShadowedText(
                     String.format("SHOT DISTANCE: %.1f yds", distanceToShow),
@@ -407,7 +393,7 @@ public class HUD {
             );
 
             font.setColor(Color.WHITE);
-            font.getData().setScale(1.0f); // IMPORTANT: Reset scale for the rest of the HUD
+            font.getData().setScale(1.0f);
         }
     }
 
@@ -415,7 +401,8 @@ public class HUD {
         if (distanceDisplayTimer > 0) {
             distanceDisplayTimer -= delta;
 
-            font.getData().setScale(baseScale);
+            float fontSize = baseScale * 0.6f;
+            font.getData().setScale(fontSize);
 
             layout.setText(font, distanceText);
             float actualWidth = layout.width;
@@ -423,7 +410,7 @@ public class HUD {
             Color fadeYellow = new Color(1, 1, 0, Math.min(1, distanceDisplayTimer));
 
             float x = (viewport.getWorldWidth() / 2f) - (actualWidth / 2f);
-            float y = viewport.getWorldHeight() - (50 * (baseScale / 1.8f));
+            float y = viewport.getWorldHeight() - (40 * (fontSize / 0.6f));
 
             drawShadowedText(distanceText, x, y, fadeYellow);
 
@@ -432,24 +419,43 @@ public class HUD {
     }
 
     private void drawSpinUI() {
-        float spinX = 80, spinY = 80;
+        float screenW = viewport.getWorldWidth();
+        float screenH = viewport.getWorldHeight();
 
-        Vector2 displaySpin = spinDot;
+        float marginX = screenW * 0.06f;
+        float marginY = screenH * 0.12f;
+        float radius = screenH * 0.065f;
+        float baseScale = screenH * 0.0013f;
+
+        float centerX = marginX;
+        float centerY = marginY;
+
         boolean isLocked = minigameController.isActive() && minigameController.isNeedleStopped();
 
-
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(isLocked ? Color.GRAY : Color.WHITE); // Visual cue
-        shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS);
-
         shapeRenderer.setColor(0.1f, 0.1f, 0.1f, 1f);
-        shapeRenderer.circle(spinX, spinY, SPIN_UI_RADIUS - 3);
+        shapeRenderer.circle(centerX, centerY, radius);
 
-        // Draw the red dot. If locked, maybe make it darker red.
+        shapeRenderer.setColor(isLocked ? Color.LIGHT_GRAY : Color.WHITE);
+        shapeRenderer.circle(centerX, centerY, radius - (4f * baseScale));
+
         shapeRenderer.setColor(isLocked ? Color.MAROON : Color.RED);
-        shapeRenderer.circle(spinX + (displaySpin.x * (SPIN_UI_RADIUS - 10)),
-                spinY + (displaySpin.y * (SPIN_UI_RADIUS - 10)), 5);
+        float dotRadius = 4.5f * baseScale;
+        float dotOffsetLimit = radius - (10f * baseScale);
+
+        shapeRenderer.circle(
+                centerX + (spinDot.x * dotOffsetLimit),
+                centerY + (spinDot.y * dotOffsetLimit),
+                dotRadius
+        );
         shapeRenderer.end();
+
+        batch.begin();
+        font.getData().setScale(baseScale * 0.65f);
+        font.setColor(Color.WHITE);
+        layout.setText(font, "SPIN");
+        font.draw(batch, "SPIN", centerX - (layout.width / 2f), centerY - radius - (radius * 0.3f));
+        batch.end();
     }
 
     public void logShotInitiated(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod) {

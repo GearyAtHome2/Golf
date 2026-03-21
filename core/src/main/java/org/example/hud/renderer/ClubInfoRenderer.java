@@ -14,13 +14,30 @@ public class ClubInfoRenderer {
     private final GlyphLayout layout = new GlyphLayout();
 
     public void render(SpriteBatch batch, ShapeRenderer shape, BitmapFont font, Viewport viewport,
-                       String name, String desc, String dist, String power, String loft, float y) {
+                       String name, String desc, String dist, String power, String loft) {
 
         boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
-        float width = 320f;
-        float height = 200f;
+        // --- COMPACT SIZING RATIOS ---
+        float widthRatio = isAndroid ? 0.22f : 0.25f;
+        float heightRatio = isAndroid ? 0.18f : 0.25f;
+
+        // Increased from 0.12f to 0.15f to move it up slightly and clear the "DRIVER" text
+        float yRatio = isAndroid ? 0.165f : 0.175f;
+
+        float width = viewport.getWorldWidth() * widthRatio;
+        float height = viewport.getWorldHeight() * heightRatio;
+
+        if (isAndroid) {
+            width = Math.max(width, 220f);
+            height = Math.max(height, 120f);
+        } else {
+            width = Math.max(width, 280f);
+            height = Math.max(height, 180f);
+        }
+
         float x = viewport.getWorldWidth() - width - 20;
+        float y = viewport.getWorldHeight() * yRatio;
 
         font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
         float oldScaleX = font.getScaleX();
@@ -32,7 +49,7 @@ public class ClubInfoRenderer {
 
         shape.setProjectionMatrix(viewport.getCamera().combined);
         shape.begin(ShapeRenderer.ShapeType.Filled);
-        shape.setColor(0, 0, 0, 0.7f);
+        shape.setColor(0, 0, 0, 0.6f);
         shape.rect(x, y, width, height);
         shape.end();
 
@@ -47,47 +64,45 @@ public class ClubInfoRenderer {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
 
-        float padding = 15f;
+        float padding = width * 0.06f;
 
         if (isAndroid) {
-            // --- ANDROID: LARGE VERTICAL STACK ---
-            // Doubled the previous scale (was 1.1f/1.4f on desktop, now ~2.2f)
-            font.getData().setScale(2.2f);
-            float lineSpacing = 60f;
-            float startY = y + height - 35f;
+            font.getData().setScale(1.4f);
+            float lineSpacing = height * 0.28f;
+            float startY = y + height - (height * 0.18f);
 
-            // Distance line
+            // Distance: Strip " yds" or "yds" if present
+            String distClean = dist.replace(" yds", "");
             font.setColor(Color.CYAN);
-            font.draw(batch, "Dist: " + dist, x + padding, startY);
+            font.draw(batch, "Dist: " + distClean, x + padding, startY);
 
-            // Power line
             font.setColor(new Color(0.2f, 0.8f, 1.0f, 1f));
-            font.draw(batch, "Power: " + power.replace("Power: ", ""), x + padding, startY - lineSpacing);
+            String pVal = power.toLowerCase().contains("power") ? power.substring(power.indexOf(":") + 1).trim() : power;
+            font.draw(batch, "Power: " + pVal, x + padding, startY - lineSpacing);
 
-            // Loft line
             font.setColor(Color.WHITE);
-            font.draw(batch, "Loft: " + loft.replace("Loft: ", ""), x + padding, startY - (lineSpacing * 2));
+            String lVal = loft.toLowerCase().contains("loft") ? loft.substring(loft.indexOf(":") + 1).trim() : loft;
+            font.draw(batch, "Loft: " + lVal, x + padding, startY - (lineSpacing * 2));
 
         } else {
-            // --- DESKTOP: FULL INFO (Original) ---
             float currentY = y + height - padding;
 
-            font.getData().setScale(1.4f);
+            font.getData().setScale(0.5f);
             font.setColor(Color.GOLD);
             font.draw(batch, name.replace("_", " ").toUpperCase(), x + padding, currentY);
-            currentY -= 35f;
+            currentY -= (height * 0.15f);
 
-            font.getData().setScale(1.1f);
+            font.getData().setScale(0.4f);
             font.setColor(Color.CYAN);
             font.draw(batch, dist, x + padding, currentY);
-            font.draw(batch, power, x + width / 2f + padding, currentY);
-            currentY -= 22f;
+            font.draw(batch, power, x + width / 2f, currentY);
+            currentY -= (height * 0.12f);
 
             font.setColor(Color.WHITE);
             font.draw(batch, loft, x + padding, currentY);
-            currentY -= 30f;
+            currentY -= (height * 0.15f);
 
-            font.getData().setScale(1.0f);
+            font.getData().setScale(0.35f);
             font.setColor(Color.LIGHT_GRAY);
             layout.setText(font, desc, Color.LIGHT_GRAY, width - (padding * 2), 0, true);
             font.draw(batch, layout, x + padding, currentY);

@@ -382,8 +382,8 @@ public class LevelDataGenerator {
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
                 bunkerCount = 1 + r.nextInt(4);
-                distance = Math.round(500 + r.nextFloat() * 300);
-                par = distance < 550 ? 3 : distance < 750 ? 4 : 5;
+                distance = Math.round(300 + r.nextFloat() * 500);
+                par = distance < 410 ? 3 : distance < 675 ? 4 : 5;
                 break;
         }
 
@@ -441,7 +441,7 @@ public class LevelDataGenerator {
         }
 
         // 2. Fill remaining slots with random levels until we have 18
-        while (pool.size() < 18) {
+        while (pool.size() < 1) {
             pool.add(createRandomLevelData());
         }
 

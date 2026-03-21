@@ -55,8 +55,7 @@ public class OverlayRenderer {
                 ClubInfoManager.getClubDescription(club),
                 ClubInfoManager.getCarryDistanceInfo(club),
                 ClubInfoManager.getPowerInfo(club),
-                ClubInfoManager.getLoftInfo(club),
-                220f
+                ClubInfoManager.getLoftInfo(club)
         );
     }
 

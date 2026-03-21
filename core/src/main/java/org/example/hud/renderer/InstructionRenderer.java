@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
@@ -21,6 +22,7 @@ public class InstructionRenderer {
     private final Rectangle boxBounds = new Rectangle();
     private final InstructionContent desktopContent = new DesktopInstructionContent();
     private final InstructionContent mobileContent = new MobileInstructionContent();
+    private final GlyphLayout layout = new GlyphLayout();
 
     public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameInputProcessor input) {
         float delta = Gdx.graphics.getDeltaTime();
@@ -37,22 +39,28 @@ public class InstructionRenderer {
         } else if (Gdx.input.isTouched()) {
             float dragY = Gdx.input.getDeltaY();
             if (Math.abs(dragY) > 0.1f)
-                instructionScrollY = MathUtils.clamp(instructionScrollY - dragY * 3.5f, 0, content.getMaxScroll());
+                // Smoother drag for mobile
+                instructionScrollY = MathUtils.clamp(instructionScrollY + dragY * 2.0f, 0, content.getMaxScroll());
         }
 
-        // Layout Calculations
-        float centerX = viewport.getWorldWidth() / 2f;
-        float boxW = isAndroid ? viewport.getWorldWidth() * 0.85f : 800f;
-        float boxH = viewport.getWorldHeight() - (isAndroid ? 120f : 180f);
-        float boxX = centerX - boxW / 2f;
-        float boxY = isAndroid ? 80f : 120f;
+        // --- LAYOUT CALCULATIONS ---
+        float boxW = viewport.getWorldWidth() * (isAndroid ? 0.85f : 0.65f);
+        float boxH = viewport.getWorldHeight() * (isAndroid ? 0.70f : 0.70f);
+        float boxX = (viewport.getWorldWidth() - boxW) / 2f;
+        float boxY = (viewport.getWorldHeight() - boxH) / 2f;
         boxBounds.set(boxX, boxY, boxW, boxH);
 
         // Background
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0.08f, 0.08f, 0.08f, 0.95f);
+        shapeRenderer.setColor(0.05f, 0.05f, 0.05f, 0.92f);
+        shapeRenderer.rect(boxX, boxY, boxW, boxH);
+        shapeRenderer.end();
+
+        // Border
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(Color.GOLD);
         shapeRenderer.rect(boxX, boxY, boxW, boxH);
         shapeRenderer.end();
 
@@ -62,56 +70,68 @@ public class InstructionRenderer {
 
         if (ScissorStack.pushScissors(scissor)) {
             batch.begin();
-            float currentY = boxY + boxH - (isAndroid ? 100 : 50) + instructionScrollY;
-            float margin = boxX + (isAndroid ? 40 : 50);
+
+            // Adjusting mobile text scales down significantly from the original 7.2f
+            float titleScale = isAndroid ? 2.5f : 0.8f;
+            float headerScale = isAndroid ? 1.8f : 0.55f;
+            float bodyScale = isAndroid ? 1.4f : 0.45f;
+
+            float currentY = boxY + boxH - (boxH * 0.05f) + instructionScrollY;
+            float margin = boxX + (boxW * 0.05f);
+            float lineSpace = isAndroid ? (viewport.getWorldHeight() * 0.06f) : (boxH * 0.05f);
 
             // Title
-            font.getData().setScale(isAndroid ? 7.2f : 2.5f);
+            font.getData().setScale(titleScale);
             font.setColor(Color.GOLD);
-            font.draw(batch, content.getTitle(), centerX - (isAndroid ? 400 : 140), currentY);
-            currentY -= (isAndroid ? 200 : 80);
+            layout.setText(font, content.getTitle());
+            font.draw(batch, content.getTitle(), (viewport.getWorldWidth() - layout.width) / 2f, currentY);
+            currentY -= (lineSpace * 1.5f);
 
-            // Controls
-            font.getData().setScale(isAndroid ? 4.0f : 1.5f);
+            // Controls Header
+            font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
             font.draw(batch, content.getControlsHeader(), margin, currentY);
-            currentY -= (isAndroid ? 100 : 40);
+            currentY -= lineSpace;
 
-            font.getData().setScale(isAndroid ? 3.2f : 1.1f);
+            // Control Lines
+            font.getData().setScale(bodyScale);
             font.setColor(Color.WHITE);
             for (String line : content.getControlLines()) {
-                font.draw(batch, line, margin + 20, currentY);
-                currentY -= (isAndroid ? 90 : 35);
+                font.draw(batch, line, margin + (boxW * 0.02f), currentY);
+                currentY -= lineSpace;
             }
-            currentY -= (isAndroid ? 120 : 50);
+            currentY -= (lineSpace * 1.2f);
 
-            // Clubs
-            font.getData().setScale(isAndroid ? 4.0f : 1.5f);
+            // Clubs Header
+            font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
             font.draw(batch, content.getClubsHeader(), margin, currentY);
-            currentY -= (isAndroid ? 100 : 40);
+            currentY -= lineSpace;
 
-            font.getData().setScale(isAndroid ? 3.2f : 1.1f);
+            // Club Info
+            font.getData().setScale(bodyScale);
             for (String[] club : content.getClubInfo()) {
                 font.setColor(Color.GOLD);
-                font.draw(batch, club[0] + ": ", margin + 20, currentY);
+                font.draw(batch, club[0] + ": ", margin + (boxW * 0.02f), currentY);
                 font.setColor(Color.WHITE);
-                font.draw(batch, club[1], margin + (isAndroid ? 500 : 180), currentY);
-                currentY -= (isAndroid ? 90 : 35);
+                // Offset the value string based on a set percentage of box width
+                font.draw(batch, club[1], margin + (boxW * (isAndroid ? 0.35f : 0.25f)), currentY);
+                currentY -= lineSpace;
             }
-            currentY -= (isAndroid ? 120 : 50);
+            currentY -= (lineSpace * 1.2f);
 
-            // Gameplay
-            font.getData().setScale(isAndroid ? 4.0f : 1.5f);
+            // Gameplay Header
+            font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
             font.draw(batch, content.getGameplayHeader(), margin, currentY);
-            currentY -= (isAndroid ? 100 : 40);
+            currentY -= lineSpace;
 
-            font.getData().setScale(isAndroid ? 3.2f : 1.1f);
+            // Gameplay Lines
+            font.getData().setScale(bodyScale);
             font.setColor(Color.WHITE);
             for (String line : content.getGameplayLines()) {
-                font.draw(batch, line, margin + 20, currentY);
-                currentY -= (isAndroid ? 90 : 35);
+                font.draw(batch, line, margin + (boxW * 0.02f), currentY);
+                currentY -= lineSpace;
             }
 
             batch.flush();
@@ -120,9 +140,12 @@ public class InstructionRenderer {
             batch.begin();
         }
 
-        font.getData().setScale(isAndroid ? 3.2f : 1.1f);
+        // Footer - Positioned slightly below the box, moved for Android visibility
+        font.getData().setScale(isAndroid ? 1.4f : 0.45f);
         font.setColor(Color.YELLOW);
-        font.draw(batch, content.getFooter(), centerX - (isAndroid ? 550 : 200), boxY - 40);
+        float footerY = isAndroid ? (boxY - 30f) : (boxY - (viewport.getWorldHeight() * 0.05f));
+        layout.setText(font, content.getFooter());
+        font.draw(batch, content.getFooter(), (viewport.getWorldWidth() - layout.width) / 2f, footerY);
     }
 
     public boolean isClickInside(float x, float y) {
