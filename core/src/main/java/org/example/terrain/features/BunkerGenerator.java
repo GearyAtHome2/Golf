@@ -46,8 +46,6 @@ public class BunkerGenerator {
             boolean greensideTarget = (i == 0) || (i < greensideCount);
 
             BunkerType type = types[rng.nextInt(types.length)];
-//            type = BunkerType.ASYMMETRIC;
-
 
             float radius = MIN_RAD + rng.nextFloat() * (MAX_RAD - MIN_RAD);
             float currentBuffer = MIN_BUF + rng.nextFloat() * (MAX_BUF - MIN_BUF);

@@ -5,7 +5,7 @@ import org.example.terrain.objects.Tree.TreeScheme;
 
 import java.util.*;
 
-import static org.example.terrain.level.LevelData.Archetype.*;
+import static org.example.terrain.level.LevelData.Archetype.CLIPPERTON_ROCK;
 
 public class LevelDataGenerator {
 
@@ -20,7 +20,8 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = WETLANDS;
+        // Forced for testing, can be commented out for true randomness
+        selectedType = CLIPPERTON_ROCK;
         data.setArchetype(selectedType);
 
         LevelData.TerrainAlgorithm algo;
@@ -79,6 +80,10 @@ public class LevelDataGenerator {
                 algo = LevelData.TerrainAlgorithm.DUNES;
                 scheme = TreeScheme.GRAPEVINE;
                 break;
+            case CLIPPERTON_ROCK:
+                algo = LevelData.TerrainAlgorithm.DUNES;
+                scheme = TreeScheme.PALM;
+                break;
             default:
                 algo = LevelData.TerrainAlgorithm.MULTI_WAVE;
                 scheme = r.nextBoolean() ? TreeScheme.OAK : TreeScheme.AUTUMN_MAPLE;
@@ -91,8 +96,8 @@ public class LevelDataGenerator {
         float teeH = 10.0f, greenH = 10.0f, treeH = 7.0f, foliageR = 2.5f, trunkR = 0.4f;
         float hillFreq = 0.035f, maxH = 7.0f, treeDensity = 0.15f, undulation = r.nextFloat() * 0.4f + 0.2f;
         float fairwayWiggle = 0.3f, islands = 0.1f, cohesion = 0.5f, maxFairwayWidth = 45.0f, minFairwayWidth = 0f;
-        int bunkerCount = 0, distance = 500, par = 1;
-        float bunkerDepth = 2.0f; // Default depth
+        int bunkerCount = 0, distance = 500, par = 1, mapWidth = 160;
+        float bunkerDepth = 2.0f;
 
         // Wind Bounds
         float windMin = 0f, windMax = 15f;
@@ -385,6 +390,28 @@ public class LevelDataGenerator {
                 distance = Math.round(400 + r.nextFloat() * 100);
                 par = 4;
                 break;
+            case CLIPPERTON_ROCK:
+                baseDifficultyIndex = 4f;
+                teeH = 18 + r.nextFloat() * 5f;
+                greenH = 4.0f + r.nextFloat() * 2f;
+                windMin = 12f;
+                windMax = 20f;
+                treeH = 11.5f + r.nextFloat() * 2f;
+                treeDensity = 0.4f;
+                foliageR = 4.2f;
+                trunkR = 0.5f;
+                hillFreq = 0.06f;
+                maxH = 4.0f;
+                maxFairwayWidth = 50f;
+                minFairwayWidth = 0;
+                undulation = 0.2f;
+                fairwayWiggle = 0.5f + r.nextFloat() * 0.1f;
+                islands = 0.0f;
+                cohesion = 1.0f;
+                distance = Math.round(450 + r.nextFloat() * 50);
+                par = 4;
+                mapWidth = distance; // Scaling map width for atoll
+                break;
             case STANDARD_LINKS:
             default:
                 baseDifficultyIndex = 8f;
@@ -429,6 +456,7 @@ public class LevelDataGenerator {
         data.setnBunkers(bunkerCount);
         data.setBunkerDepth(bunkerDepth);
         data.setDistance(distance);
+        data.setMapWidth(mapWidth);
         data.setPar(par);
         data.setFairwayWiggle(fairwayWiggle);
         data.setFairwayRoughIslands(islands);
@@ -440,8 +468,8 @@ public class LevelDataGenerator {
         Vector3 windDir = new Vector3(r.nextFloat() - 0.5f, 0, r.nextFloat() - 0.5f).nor();
         data.setWind(windDir.scl(actualWindSpeed));
 
-        System.out.printf("[GEN] %s | Index: %.2f | Wind: %.1f MPH | Dist: %d | Bunkers: %d (Depth: %.1f) | Seed: %d%n",
-                selectedType, finalShotIndex, actualWindSpeed, distance, bunkerCount, bunkerDepth, seed);
+        System.out.printf("[GEN] %s | Index: %.2f | Wind: %.1f MPH | Dist: %d | MapWidth: %d | Seed: %d%n",
+                selectedType, finalShotIndex, actualWindSpeed, distance, mapWidth, seed);
 
         return data;
     }
@@ -450,27 +478,22 @@ public class LevelDataGenerator {
         List<LevelData> pool = new ArrayList<>();
         LevelData.Archetype[] archetypes = LevelData.Archetype.values();
 
-        // 1. Ensure 100% representation: Add one of every archetype first
         for (LevelData.Archetype arch : archetypes) {
             pool.add(createLevelDataForArchetype(arch));
         }
 
-        // 2. Fill remaining slots with random levels until we have 18
         while (pool.size() < 18) {
             pool.add(createRandomLevelData());
         }
 
-        // 3. Sort the pool by ShotIndex (Descending: Easiest to Hardest)
         pool.sort(Comparator.comparingDouble(LevelData::getShotIndex).reversed());
 
-        // 4. Build the final course with "Next Best Fit" logic
         List<LevelData> finalCourse = new ArrayList<>();
 
         while (!pool.isEmpty()) {
             boolean foundFit = false;
             LevelData.Archetype lastArch = finalCourse.isEmpty() ? null : finalCourse.get(finalCourse.size() - 1).getArchetype();
 
-            // Find the easiest level in the pool that isn't the same type as the last one
             for (int i = 0; i < pool.size(); i++) {
                 if (pool.get(i).getArchetype() != lastArch) {
                     finalCourse.add(pool.remove(i));
@@ -479,8 +502,6 @@ public class LevelDataGenerator {
                 }
             }
 
-            // Emergency Fallback: If no fit is found (only duplicates left),
-            // we force the last one in and perform a "Ripple Swap"
             if (!foundFit) {
                 LevelData misfit = pool.remove(0);
                 finalCourse.add(misfit);
@@ -488,12 +509,11 @@ public class LevelDataGenerator {
             }
         }
 
-        // 5. Final Logging
         System.out.println("\n--- [DIVERSE & ORDERED COURSE GENERATED] ---");
         for (int i = 0; i < finalCourse.size(); i++) {
             LevelData ld = finalCourse.get(i);
-            System.out.printf("Hole %02d | Index: %5.2f | Type: %-15s | Seed: %d%n",
-                    (i + 1), ld.getShotIndex(), ld.getArchetype(), ld.getSeed());
+            System.out.printf("Hole %02d | Index: %5.2f | Type: %-15s | MapWidth: %d | Seed: %d%n",
+                    (i + 1), ld.getShotIndex(), ld.getArchetype(), ld.getMapWidth(), ld.getSeed());
         }
 
         return finalCourse;

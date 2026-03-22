@@ -33,7 +33,8 @@ public class Tree extends TerrainObject {
         AUTUMN_MAPLE(new Color(0.25f, 0.2f, 0.15f, 1f), new Color(0.35f, 0.3f, 0.25f, 1f), new Color(0.8f, 0.2f, 0.1f, 1f), new Color(1f, 0.6f, 0.0f, 1f)),
         CHERRY_BLOSSOM(new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f), new Color(1f, 0.7f, 0.75f, 1f), new Color(1f, 0.85f, 0.9f, 1f)),
         DEAD_GRAY(new Color(0.2f, 0.2f, 0.2f, 1f), new Color(0.4f, 0.4f, 0.4f, 1f), new Color(0.1f, 0.1f, 0.1f, 1f), new Color(0.3f, 0.3f, 0.3f, 1f)),
-        GRAPEVINE(new Color(0.30f, 0.22f, 0.18f, 1f), new Color(0.40f, 0.30f, 0.25f, 1f), new Color(0.15f, 0.45f, 0.05f, 1f), new Color(0.25f, 0.55f, 0.15f, 1f));
+        GRAPEVINE(new Color(0.30f, 0.22f, 0.18f, 1f), new Color(0.40f, 0.30f, 0.25f, 1f), new Color(0.15f, 0.45f, 0.05f, 1f), new Color(0.25f, 0.55f, 0.15f, 1f)),
+        PALM(new Color(0.55f, 0.45f, 0.35f, 1f), new Color(0.65f, 0.55f, 0.45f, 1f), new Color(0.2f, 0.5f, 0.05f, 1f), new Color(0.4f, 0.7f, 0.15f, 1f));
 
         private final Color barkMin, barkMax, leafMin, leafMax;
 

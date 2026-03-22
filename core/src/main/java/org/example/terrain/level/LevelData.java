@@ -19,7 +19,8 @@ public class LevelData {
         ROUGH_HOUGH_BLUFFS,
         WETLANDS,
         WHISTLING_ISLES,
-        BIG_GRAPE_VINEYARDS
+        BIG_GRAPE_VINEYARDS,
+        CLIPPERTON_ROCK
     }
 
     public enum TerrainAlgorithm {
@@ -56,6 +57,7 @@ public class LevelData {
     private float bunkerDepth;
     private Vector3 wind;
     private int distance;
+    private int mapWidth; // The horizontal size of the terrain grid
     private int par;
     private float shotIndex; // Tracks which hole/shot sequence we are on
 
@@ -229,6 +231,14 @@ public class LevelData {
 
     public void setDistance(int distance) {
         this.distance = distance;
+    }
+
+    public int getMapWidth() {
+        return mapWidth;
+    }
+
+    public void setMapWidth(int mapWidth) {
+        this.mapWidth = mapWidth;
     }
 
     public int getPar() {

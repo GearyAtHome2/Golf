@@ -26,6 +26,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final CraterGenerator craterGenerator;
     private final VineyardsGenerator vineyardsGenerator;
     private final BunkerGenerator bunkerGenerator;
+    private final ClippertonRockGenerator clippertonRockGenerator; // Placeholder for new generator
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
@@ -55,9 +56,8 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         for (int i = 0; i < 10; i++) {
             if (isVineyard) {
-                // Clamp angles to roughly Left-Right (90 or 270 degrees)
                 float baseAngle = rng.nextBoolean() ? MathUtils.PI * 0.5f : MathUtils.PI * 1.5f;
-                float variation = (rng.nextFloat() - 0.5f) * (MathUtils.PI / 6f); // +/- 15 degrees
+                float variation = (rng.nextFloat() - 0.5f) * (MathUtils.PI / 6f);
                 waveAngles[i] = baseAngle + variation;
             } else {
                 waveAngles[i] = rng.nextFloat() * MathUtils.PI * 2;
@@ -81,6 +81,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.whistlingIslesGenerator = new WhistlingIslesGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
         this.vineyardsGenerator = new VineyardsGenerator();
         this.bunkerGenerator = new BunkerGenerator(rng);
+        this.clippertonRockGenerator = new ClippertonRockGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
     }
 
     public LevelData getData() {
@@ -192,6 +193,10 @@ public class ClassicGenerator implements ITerrainGenerator {
             cenoteGenerator.generateRoughCenotes(map, h, -8f);
         } else if (flags.isVineyards) {
             vineyardsGenerator.generateVineyards(h, map, rng, data.getTeeHeight() + 2.0f, 4.0f, 0.12f);
+        } else if (flags.isClippertonRock) {
+            // Placeholder call for Clipperton Rock
+            data.setWaterLevel(0.0f);
+            clippertonRockGenerator.generateClippertonRock(map, h, gX, gZ, 0.0f);
         }
 
         float water = data.getWaterLevel();
@@ -265,7 +270,6 @@ public class ClassicGenerator implements ITerrainGenerator {
                 float slopeMag = (float) Math.sqrt(dx * dx + dz * dz);
 
                 if (slopeMag < maxSlopeForFlatness) {
-                    // Reduced the jitter on X to keep the "line" of the trellis straighter
                     float offsetX = (rng.nextFloat() - 0.5f) * 0.5f;
                     float offsetZ = (rng.nextFloat() - 0.5f) * 1.0f;
 
@@ -316,7 +320,6 @@ public class ClassicGenerator implements ITerrainGenerator {
                     treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
             }
 
-            // Also skip if inside a bunker footprint
             for (BunkerGenerator.BunkerRecord br : bunkerRecords) {
                 if (Vector2.dst(tx, tz, br.x(), br.z()) < br.radius()) {
                     treeChance = 0;
@@ -567,7 +570,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
@@ -579,6 +582,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             isMonolithPlains = data.getArchetype() == LevelData.Archetype.MONOLITH_PLAINS;
             isPlungeCenotes = data.getArchetype() == LevelData.Archetype.PLUNGE_CENOTES;
             isVineyards = data.getArchetype() == LevelData.Archetype.BIG_GRAPE_VINEYARDS;
+            isClippertonRock = data.getArchetype() == LevelData.Archetype.CLIPPERTON_ROCK;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }
