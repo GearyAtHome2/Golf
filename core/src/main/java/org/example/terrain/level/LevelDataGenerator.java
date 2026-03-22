@@ -190,8 +190,8 @@ public class LevelDataGenerator {
                 fairwayWiggle = 0.4f + r.nextFloat() * 0.3f;
                 islands = 0.7f;
                 cohesion = 0.42f;
-                distance = Math.round(430 + r.nextFloat() * 80);
-                par = distance < 470 ? 4 : 5;
+                distance = Math.round(430 + r.nextFloat() * 160);
+                par = distance < 515 ? 4 : 5;
                 break;
             case ISLAND_COAST:
                 baseDifficultyIndex = 3f;
@@ -441,7 +441,7 @@ public class LevelDataGenerator {
         }
 
         // 2. Fill remaining slots with random levels until we have 18
-        while (pool.size() < 1) {
+        while (pool.size() < 18) {
             pool.add(createRandomLevelData());
         }
 

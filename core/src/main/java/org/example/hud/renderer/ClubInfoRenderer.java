@@ -23,7 +23,7 @@ public class ClubInfoRenderer {
         float heightRatio = isAndroid ? 0.18f : 0.25f;
 
         // Increased from 0.12f to 0.15f to move it up slightly and clear the "DRIVER" text
-        float yRatio = isAndroid ? 0.165f : 0.175f;
+        float yRatio = isAndroid ? 0.22f : 0.175f;
 
         float width = viewport.getWorldWidth() * widthRatio;
         float height = viewport.getWorldHeight() * heightRatio;

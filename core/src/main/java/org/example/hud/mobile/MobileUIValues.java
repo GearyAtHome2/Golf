@@ -1,38 +1,13 @@
 package org.example.hud.mobile;
 
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class MobileUIValues {
 
-    // --- DESIGN TOKENS: DIMENSIONS ---
-    protected static final float BTN_WIDTH_STD = 230f;
-    protected static final float BTN_HEIGHT_STD = 110f;
-    protected static final float BTN_HEIGHT_LARGE = 130f;
-
-    protected static final float HIT_BTN_WIDTH = 240f;
-    protected static final float HIT_BTN_HEIGHT = 150f;
-
-    protected static final float MAX_BTN_WIDTH = 200f;
-    protected static final float MAX_BTN_HEIGHT = 110f;
-
-    protected static final float INFO_BTN_WIDTH = 120f;
-    protected static final float INFO_BTN_HEIGHT = 80f;
-
-    protected static final float SPIN_INDICATOR_SIZE = 160f;
-    protected static final float DEBUG_ACTOR_WIDTH = 400f;
-    protected static final float DEBUG_ACTOR_HEIGHT = 140f;
-
-    // --- DESIGN TOKENS: PADDING & SPACING ---
-    protected static final float PAD_SCREEN_EDGE = 20f;
-    protected static final float LEFT_STACK_TOP_PAD = 180f;
-    protected static final float RIGHT_STACK_TOP_PAD = -60f;
-    protected static final float RIGHT_STACK_SPACER = 180f;
-    protected static final float BTN_SPACING_V = 15f;
-    protected static final float MENU_TOP_OFFSET_PCT = 0.22f;
-
-    // --- DESIGN TOKENS: CORNER RADII ---
-    protected static final int RADIUS_STD = 12;
-    protected static final int RADIUS_HIT = 15;
+    // --- ANCHOR POINTS (Normalized 0.0 to 1.0) ---
+    protected static final float MAX_BTN_Y = 0.84f;
+    protected static final float CLUB_ARROW_Y = 0.01f;
 
     // --- DESIGN TOKENS: COLORS ---
     protected static final Color COLOR_BTN_UP = new Color(0.2f, 0.2f, 0.2f, 0.5f);
@@ -44,11 +19,26 @@ public class MobileUIValues {
     protected static final Color COLOR_MENU_UP = new Color(0.15f, 0.15f, 0.15f, 0.6f);
     protected static final Color COLOR_MENU_DOWN = new Color(0.4f, 0.4f, 0.1f, 0.8f);
 
-    // --- DESIGN TOKENS: SCALING ---
-    protected static final float FONT_SCALE_GAMEPLAY = 2.5f; // Adjust this until it looks right
+    // --- DESIGN TOKENS: DIMENSIONS ---
+    protected static final int RADIUS_STD = 12;
+    protected static final int RADIUS_HIT = 15;
+    protected static final float FONT_SCALE_GAMEPLAY = 2.2f;
     protected static final float FONT_SCALE_START_MENU = 3.85f;
     protected static final float FONT_SCALE_PAUSE_MENU = 3.6f;
-    protected static final float MENU_BTN_WIDTH_PCT = 0.65f;
-    protected static final float MENU_BTN_HEIGHT_PCT = 0.11f;
 
+    // --- RELATIVE GETTERS ---
+    protected static float getBtnWidth(Viewport v) { return v.getWorldWidth() * 0.16f; }
+    protected static float getBtnHeight(Viewport v) { return v.getWorldHeight() * 0.11f; }
+    protected static float getHitBtnWidth(Viewport v) { return v.getWorldWidth() * 0.16f; }
+    protected static float getHitBtnHeight(Viewport v) { return v.getWorldHeight() * 0.14f; }
+
+    protected static float getArrowWidth(Viewport v) { return v.getWorldWidth() * 0.08f; }
+    protected static float getArrowHeight(Viewport v) { return v.getWorldHeight() * 0.09f; }
+    protected static float getSpinSize(Viewport v) { return v.getWorldHeight() * 0.20f; }
+    protected static float getDebugWidth(Viewport v) { return v.getWorldWidth() * 0.30f; }
+
+    // --- PADDING & SPACING ---
+    protected static float getEdgePad(Viewport v) { return v.getWorldWidth() * 0.02f; }
+    protected static float getStackSpacing(Viewport v) { return v.getWorldHeight() * 0.015f; }
+    protected static float getLeftStackTopPad(Viewport v) { return v.getWorldHeight() * 0.31f; }
 }

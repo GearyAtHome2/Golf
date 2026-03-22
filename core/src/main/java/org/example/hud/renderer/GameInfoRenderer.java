@@ -38,29 +38,23 @@ public class GameInfoRenderer {
             font.getData().setScale(baseScale * 0.8f);
             drawShadowedText(batch, font, "PRACTICE RANGE", marginX, currentY, Color.CYAN);
         } else if (levelData != null) {
-            // 1. Map Name & Par
             font.getData().setScale(baseScale * 0.85f);
             String header = (levelData.getArchetype() != null ? levelData.getArchetype().name().replace("_", " ") : "COURSE") + " | PAR " + levelData.getPar();
             drawShadowedText(batch, font, header, marginX, currentY, Color.GOLD);
 
             currentY -= lineSpacing;
-
-            // 2. Score Info & Shots
             font.getData().setScale(baseScale * 0.75f);
 
             if (isAndroid) {
-                // MOBILE ONLY: Draw Hole Info and Shots on the same line
                 float currentX = marginX;
                 if (compScore != null) {
                     String scoreStr = "HOLE " + compScore.getCurrentHoleNumber() + " | " + compScore.getToParString();
                     layout.setText(font, scoreStr);
                     drawShadowedText(batch, font, scoreStr, currentX, currentY, Color.YELLOW);
-                    // Add padding to the right of the score before drawing shots
                     currentX += layout.width + (screenW * 0.04f);
                 }
                 drawShadowedText(batch, font, "SHOTS: " + shotCount, currentX, currentY, Color.WHITE);
             } else {
-                // DESKTOP ONLY: Keep original vertical stacking
                 if (compScore != null) {
                     String scoreStr = "HOLE " + compScore.getCurrentHoleNumber() + " | " + compScore.getToParString();
                     drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
@@ -82,7 +76,7 @@ public class GameInfoRenderer {
         String clubName = club.name().replace("_", " ");
         layout.setText(font, clubName);
 
-        float clubYOffset = isAndroid ? (lineSpacing * 1.4f) : (lineSpacing * 1.8f);
+        float clubYOffset = isAndroid ? (lineSpacing * 2.05f) : (lineSpacing * 1.8f);
         drawShadowedText(batch, font, clubName, rightMarginX - layout.width, bottomY + clubYOffset, Color.WHITE);
 
         font.getData().setScale(1.0f);

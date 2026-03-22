@@ -204,6 +204,7 @@ public class HUD {
             if (!mobileUIInitialized) {
                 setupMobileUI((MobileInputProcessor) input);
             }
+            // Sync HUD's local spinDot with the Actor's internal state
             this.spinDot.set(spinIndicator.getSpinDot());
         }
 
@@ -223,11 +224,9 @@ public class HUD {
             updatePracticeDistanceLogic(ball);
         }
 
-        // 1. Logic Update
         preShotDebugActor.update(terrain, ball, gameCamera);
         boolean shouldShowDebug = (ball.getState() == Ball.State.STATIONARY);
 
-        // 2. Hide debug Actor on mobile entirely to fulfill "get rid of pre-shot debug"
         if (isAndroid) {
             preShotDebugActor.setVisible(false);
         } else {
@@ -238,9 +237,8 @@ public class HUD {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
-        if (!isAndroid) {
-            drawSpinUI();
-        }
+        // Update the Actor's hitbox and internal layout logic
+        spinIndicator.updateScaling(viewport);
 
         batch.begin();
 
@@ -248,10 +246,14 @@ public class HUD {
             windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         }
 
-        // Only draw for Desktop
-        if (!isAndroid && shouldShowDebug) {
-            preShotDebugActor.setBounds(40, 150, 400, 140);
-            preShotDebugActor.draw(batch, 1.0f);
+        // On Desktop, we manually draw the Actor because there is no Stage active.
+        // On Android, stage.draw() (called in renderOverlays) handles this automatically.
+        if (!isAndroid) {
+            if (!isAndroid && shouldShowDebug) {
+                preShotDebugActor.setBounds(40, 150, 400, 140);
+                preShotDebugActor.draw(batch, 1.0f);
+            }
+            spinIndicator.draw(batch, 1.0f);
         }
 
         notificationManager.render(batch, font, viewport);
@@ -268,6 +270,35 @@ public class HUD {
         batch.end();
 
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
+    }
+
+    /**
+     * Removed the old drawSpinUI() logic that was causing coordinate mismatches.
+     * All logic is now handled internally by the SpinIndicator actor.
+     */
+    private void updateSpinInput(float delta, GameInputProcessor input) {
+        float SPIN_SPEED = 2.0f;
+
+        // We update the HUD's master spinDot
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
+            spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
+        }
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) {
+            spinDot.y = MathUtils.clamp(spinDot.y - SPIN_SPEED * delta, -1f, 1f);
+        }
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT)) {
+            spinDot.x = MathUtils.clamp(spinDot.x - SPIN_SPEED * delta, -1f, 1f);
+        }
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT)) {
+            spinDot.x = MathUtils.clamp(spinDot.x + SPIN_SPEED * delta, -1f, 1f);
+        }
+
+        if (spinDot.len() > 1f) {
+            spinDot.nor();
+        }
+
+        // Sync the master dot back to the indicator so the visual matches the keyboard input
+        spinIndicator.getSpinDot().set(this.spinDot);
     }
 
     private void updatePracticeDistanceLogic(Ball ball) {
@@ -322,9 +353,8 @@ public class HUD {
             tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             viewport.unproject(tempV3);
 
-            if (tempV3.x > viewport.getWorldWidth() - 340 && tempV3.x < viewport.getWorldWidth() - 20 &&
-                    tempV3.y > 220 && tempV3.y < 420) {
-
+            // FIXED: Using isTouchInsideClubInfo logic here to ensure consistency
+            if (isTouchInsideClubInfo(tempV3.x, tempV3.y)) {
                 showInfoDisplay = false;
                 if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
 
@@ -332,27 +362,6 @@ public class HUD {
                     mobileInput.consumeCurrentTouch();
                 }
             }
-        }
-    }
-
-    private void updateSpinInput(float delta, GameInputProcessor input) {
-        float SPIN_SPEED = 2.0f;
-
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
-            spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
-        }
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) {
-            spinDot.y = MathUtils.clamp(spinDot.y - SPIN_SPEED * delta, -1f, 1f);
-        }
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT)) {
-            spinDot.x = MathUtils.clamp(spinDot.x - SPIN_SPEED * delta, -1f, 1f);
-        }
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT)) {
-            spinDot.x = MathUtils.clamp(spinDot.x + SPIN_SPEED * delta, -1f, 1f);
-        }
-
-        if (spinDot.len() > 1f) {
-            spinDot.nor();
         }
     }
 
@@ -381,7 +390,6 @@ public class HUD {
                 font.setColor(Color.WHITE);
             }
 
-            // Adjusted offsets to clear the new mobile button positions
             float xOffset = 350 * (baseScale / 1.4f);
             float yOffset = 250 * (baseScale / 1.4f);
 
@@ -540,10 +548,29 @@ public class HUD {
         return overlayRenderer.getInstructionRenderer().isClickInside(x, y);
     }
 
+    // FIXED: Synchronized these coordinates with the ClubInfoRenderer visual box
     public boolean isTouchInsideClubInfo(float x, float y) {
-        float width = 320f, height = 200f;
+        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+
+        // Match ratios from ClubInfoRenderer
+        float widthRatio = isAndroid ? 0.22f : 0.25f;
+        float heightRatio = isAndroid ? 0.18f : 0.25f;
+        float yRatio = isAndroid ? 0.22f : 0.175f; // Using the fixed yRatio of 0.32f
+
+        float width = viewport.getWorldWidth() * widthRatio;
+        float height = viewport.getWorldHeight() * heightRatio;
+
+        if (isAndroid) {
+            width = Math.max(width, 220f);
+            height = Math.max(height, 120f);
+        } else {
+            width = Math.max(width, 280f);
+            height = Math.max(height, 180f);
+        }
+
         float boxX = viewport.getWorldWidth() - width - 20;
-        float boxY = 220f;
+        float boxY = viewport.getWorldHeight() * yRatio;
+
         return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
     }
 
@@ -571,6 +598,13 @@ public class HUD {
 
     public Vector2 getSpinOffset() {
         return spinDot;
+    }
+
+    public void resetSpin() {
+        this.spinDot.set(0, 0);
+        if (spinIndicator != null) {
+            spinIndicator.reset();
+        }
     }
 
     public Stage getStage() {

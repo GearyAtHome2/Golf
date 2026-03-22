@@ -260,6 +260,7 @@ public class GolfGame extends ApplicationAdapter {
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
                     hud.incrementShots();
+                    hud.resetSpin();
                     hasCurrentBallBeenHit = true;
                     shotController.update(0, ball, camera.direction, currentClub, hud, terrain, inputProcessor);
                 }

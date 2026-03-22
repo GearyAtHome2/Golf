@@ -80,7 +80,7 @@ public class VictoryRenderer {
             font.setColor(Color.GOLD);
             String hCapText = "YOUR HANDICAP: " + handicapStr;
             layout.setText(font, hCapText);
-            font.draw(batch, hCapText, centerX - (layout.width / 2f), promptY + 40);
+            font.draw(batch, hCapText, centerX - (layout.width / 2f), promptY - 32);
         }
 
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
