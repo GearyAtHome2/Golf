@@ -5,6 +5,8 @@ import org.example.terrain.objects.Tree.TreeScheme;
 
 import java.util.*;
 
+import static org.example.terrain.level.LevelData.Archetype.*;
+
 public class LevelDataGenerator {
 
     public static LevelData createRandomLevelData() {
@@ -18,7 +20,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-//        selectedType = LevelData.Archetype.WHISTLING_ISLES;
+//        selectedType = WETLANDS;
         data.setArchetype(selectedType);
 
         LevelData.TerrainAlgorithm algo;
@@ -90,6 +92,7 @@ public class LevelDataGenerator {
         float hillFreq = 0.035f, maxH = 7.0f, treeDensity = 0.15f, undulation = r.nextFloat() * 0.4f + 0.2f;
         float fairwayWiggle = 0.3f, islands = 0.1f, cohesion = 0.5f, maxFairwayWidth = 45.0f, minFairwayWidth = 0f;
         int bunkerCount = 0, distance = 500, par = 1;
+        float bunkerDepth = 2.0f; // Default depth
 
         // Wind Bounds
         float windMin = 0f, windMax = 15f;
@@ -111,7 +114,6 @@ public class LevelDataGenerator {
                 maxH = 5.0f;
                 maxFairwayWidth = 48.0f;
                 undulation = 1.2f;
-                bunkerCount = 12 + r.nextInt(10);
                 fairwayWiggle = 0.15f + r.nextFloat() * 0.1f;
                 islands = 0.1f;
                 cohesion = 0.63f;
@@ -176,6 +178,8 @@ public class LevelDataGenerator {
                 cohesion = 0.9f;
                 distance = Math.round(450 + r.nextFloat() * 80);
                 par = 4;
+                bunkerCount = 1 + r.nextInt(2);
+                bunkerDepth = 0.8f;
                 break;
             case BUSH_WORLD:
                 baseDifficultyIndex = 3f;
@@ -192,6 +196,8 @@ public class LevelDataGenerator {
                 cohesion = 0.42f;
                 distance = Math.round(430 + r.nextFloat() * 160);
                 par = distance < 515 ? 4 : 5;
+                bunkerCount = 1;
+                bunkerDepth = 2.2f;
                 break;
             case ISLAND_COAST:
                 baseDifficultyIndex = 3f;
@@ -223,6 +229,7 @@ public class LevelDataGenerator {
                 cohesion = 1.3f;
                 undulation = 0.9f;
                 bunkerCount = 1 + r.nextInt(4);
+                bunkerDepth = 2.5f + r.nextFloat();
                 hillFreq = 0.008f;
                 maxH = 15f;
                 distance = Math.round(600 + r.nextFloat() * 200);
@@ -245,6 +252,8 @@ public class LevelDataGenerator {
                 cohesion = 0.6f;
                 distance = Math.round(650 + r.nextFloat() * 100);
                 par = distance < 700 ? 4 : 5;
+                bunkerCount = 1;
+                bunkerDepth = 3.5f;
                 break;
             case SHADOW_CANYON:
                 baseDifficultyIndex = 7f;
@@ -307,6 +316,8 @@ public class LevelDataGenerator {
                 islands = 0.0f;
                 cohesion = 1f;
                 distance = Math.round(250 + r.nextFloat() * 80);
+                bunkerCount = 1;
+                bunkerDepth = 3.4f;
                 par = 3;
                 break;
             case WHISTLING_ISLES:
@@ -350,6 +361,8 @@ public class LevelDataGenerator {
                 cohesion = 1.0f;
                 distance = Math.round(550 + r.nextFloat() * 60);
                 par = 4;
+                bunkerCount = 2 + r.nextInt(2);
+                bunkerDepth = 1.1f;
                 break;
             case ROUGH_HOUGH_BLUFFS:
                 baseDifficultyIndex = 2f;
@@ -381,7 +394,8 @@ public class LevelDataGenerator {
                 islands = 0.25f;
                 maxFairwayWidth = 49f;
                 cohesion = 1.3f;
-                bunkerCount = 1 + r.nextInt(4);
+                bunkerCount = 2 + r.nextInt(4);
+                bunkerDepth = 2.3f;
                 distance = Math.round(300 + r.nextFloat() * 500);
                 par = distance < 410 ? 3 : distance < 675 ? 4 : 5;
                 break;
@@ -413,6 +427,7 @@ public class LevelDataGenerator {
         data.setUndulation(undulation);
         data.setHoleSize(0.6f);
         data.setnBunkers(bunkerCount);
+        data.setBunkerDepth(bunkerDepth);
         data.setDistance(distance);
         data.setPar(par);
         data.setFairwayWiggle(fairwayWiggle);
@@ -425,8 +440,8 @@ public class LevelDataGenerator {
         Vector3 windDir = new Vector3(r.nextFloat() - 0.5f, 0, r.nextFloat() - 0.5f).nor();
         data.setWind(windDir.scl(actualWindSpeed));
 
-        System.out.printf("[GEN] %s | Index: %.2f | Wind: %.1f MPH | Dist: %d | Seed: %d%n",
-                selectedType, finalShotIndex, actualWindSpeed, distance, seed);
+        System.out.printf("[GEN] %s | Index: %.2f | Wind: %.1f MPH | Dist: %d | Bunkers: %d (Depth: %.1f) | Seed: %d%n",
+                selectedType, finalShotIndex, actualWindSpeed, distance, bunkerCount, bunkerDepth, seed);
 
         return data;
     }
@@ -484,20 +499,14 @@ public class LevelDataGenerator {
         return finalCourse;
     }
 
-    /**
-     * If we get to the end and only have (e.g.) two Redwood Valleys left,
-     * we swap the last hole with one earlier in the course that creates a safe gap.
-     */
     private static void resolveEndConflict(List<LevelData> course) {
         if (course.size() < 2) return;
         int last = course.size() - 1;
 
         if (course.get(last).getArchetype() == course.get(last - 1).getArchetype()) {
             for (int i = 1; i < last - 1; i++) {
-                // Check if swapping 'last' into 'i' is safe for neighbors i-1 and i+1
                 LevelData.Archetype lastType = course.get(last).getArchetype();
                 if (course.get(i - 1).getArchetype() != lastType && course.get(i + 1).getArchetype() != lastType) {
-                    // Also check if moving 'i' to the end is safe for the new neighbor at last-1
                     if (course.get(last - 1).getArchetype() != course.get(i).getArchetype()) {
                         Collections.swap(course, i, last);
                         break;

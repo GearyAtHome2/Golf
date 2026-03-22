@@ -53,6 +53,7 @@ public class LevelData {
     private float waterLevel;
     private float holeSize;
     private int nBunkers;
+    private float bunkerDepth;
     private Vector3 wind;
     private int distance;
     private int par;
@@ -204,6 +205,14 @@ public class LevelData {
 
     public void setnBunkers(int nBunkers) {
         this.nBunkers = nBunkers;
+    }
+
+    public float getBunkerDepth() {
+        return bunkerDepth;
+    }
+
+    public void setBunkerDepth(float bunkerDepth) {
+        this.bunkerDepth = bunkerDepth;
     }
 
     public Vector3 getWind() {

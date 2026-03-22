@@ -2,6 +2,7 @@ package org.example.terrain;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.features.*;
 import org.example.terrain.level.LevelData;
@@ -24,6 +25,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final WhistlingIslesGenerator whistlingIslesGenerator;
     private final CraterGenerator craterGenerator;
     private final VineyardsGenerator vineyardsGenerator;
+    private final BunkerGenerator bunkerGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
@@ -38,6 +40,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final float[] greenWaveOffsets = new float[4];
 
     private List<CraterRecord> craters = new ArrayList<>();
+    private List<BunkerGenerator.BunkerRecord> bunkerRecords = new ArrayList<>();
 
     public static record CraterRecord(float x, float z, float radius) {
     }
@@ -77,6 +80,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.craterGenerator = new CraterGenerator(rng);
         this.whistlingIslesGenerator = new WhistlingIslesGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
         this.vineyardsGenerator = new VineyardsGenerator();
+        this.bunkerGenerator = new BunkerGenerator(rng);
     }
 
     public LevelData getData() {
@@ -88,6 +92,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
         craters.clear();
+        bunkerRecords.clear();
         monoliths.clear();
 
         ArchetypeFlags flags = new ArchetypeFlags(data);
@@ -190,6 +195,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
 
         float water = data.getWaterLevel();
+        bunkerGenerator.generateBunkers(map, h, data.getnBunkers(), data.getBunkerDepth(), gX, gZ, teeP, bunkerRecords, water);
 
         if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY) {
             applyPathOffset(map, h, 25.0f, gBuf);
@@ -308,6 +314,14 @@ public class ClassicGenerator implements ITerrainGenerator {
                     break;
                 } else if (dist < crater.radius * 2.0f)
                     treeChance = Math.min(treeChance, (dist - crater.radius) / crater.radius);
+            }
+
+            // Also skip if inside a bunker footprint
+            for (BunkerGenerator.BunkerRecord br : bunkerRecords) {
+                if (Vector2.dst(tx, tz, br.x(), br.z()) < br.radius()) {
+                    treeChance = 0;
+                    break;
+                }
             }
 
             if (rng.nextFloat() > treeChance) continue;

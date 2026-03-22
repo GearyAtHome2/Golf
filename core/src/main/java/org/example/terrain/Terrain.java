@@ -467,8 +467,8 @@ public class Terrain {
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
         FAIRWAY(0.4f, 0.2f, 1.05f, 1.0f, 0.2f, new Color(0.1f, 0.4f, 0.1f, 1f)),
-        ROUGH(1.2f, 4.5f, 1.5f, 1.4f, 0.7f, new Color(0.02f, 0.15f, 0.02f, 1f)),
-        SAND(2.5f, 12.0f, 2.5f, 1.8f, 0.9f, new Color(0.85f, 0.8f, 0.5f, 1f)),
+        ROUGH(1.2f, 4.5f, 1.5f, 1.5f, 0.7f, new Color(0.02f, 0.15f, 0.02f, 1f)),
+        SAND(2.5f, 12.0f, 2.5f, 4.6f, 0.9f, new Color(0.85f, 0.8f, 0.5f, 1f)),
         GREEN(0.2f, 0.1f, 1.05f, 0.9f, 0.6f, new Color(0.1f, 0.6f, 0.1f, 1f)),
         STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.02f, new Color(0.18f, 0.18f, 0.2f, 1f));
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
