@@ -24,8 +24,8 @@ public class Ball {
     public static final float BALL_RADIUS = 0.2f;
     private static final float GRAVITY = -9.81f;
     private static final float AIR_DRAG_COEFF = 0.0048f;
-    private static final float LIFT_COEFF = 4.2f;
-    private static final float SIDE_COEFF = 4.2f;
+    private static final float LIFT_COEFF = 5.0f;
+    private static final float SIDE_COEFF = 5.0f;
     private static final float STOP_SPEED = 0.15f;
     private static final float MIN_BOUNCE_VY = 0.5f;
     private static final float BOUNCE_RESTITUTION = 0.35f;
@@ -435,7 +435,8 @@ public class Ball {
     public void hit(Vector3 shootDir, float power, float loft, float powerMult, MinigameResult.Rating rating) {
         if (state != State.STATIONARY) return;
         capturePosition();
-        spin.setZero();
+
+        // Spin is now set in ShotController.applySpin before this is called
         this.shotRating = rating;
         this.isGoodShot = (rating == MinigameResult.Rating.PERFECTION || rating == MinigameResult.Rating.SUPER || rating == MinigameResult.Rating.GREAT);
         this.isInitialFlight = true;
@@ -449,18 +450,14 @@ public class Ball {
         };
         particleManager.spawnRatingBurst(position, renderer.getActiveTrailColor(), burstCount, (power / 50f) * 2.0f);
 
-        float finalSpeed = power * powerMult;
-        float angleRad = loft * MathUtils.degreesToRadians;
-        velocity.set(shootDir).nor();
-        velocity.y = MathUtils.sin(angleRad);
-        float hLen = MathUtils.cos(angleRad);
-        velocity.x *= hLen;
-        velocity.z *= hLen;
-        velocity.scl(finalSpeed);
-        state = (loft < 1f) ? State.ROLLING : State.AIR;
+        // Using the vector from ShotController directly, but forcing AIR state for safety
+        velocity.set(shootDir).scl(power * powerMult);
 
-        hitCooldown = (state == State.ROLLING) ? 0.005f : 0.01f;
+        // Start in AIR to prevent ground-collision math from exploding at high speeds
+        state = State.AIR;
+        position.y += 0.05f;
 
+        hitCooldown = 0.1f;
         renderer.resetTrail(renderer.getActiveTrailColor());
         lastTrailPos.set(position);
     }

@@ -53,14 +53,26 @@ public class BallPhysics {
     public static Vector3 getMagnusForce(Vector3 velocity, Vector3 wind, Vector3 spin, float liftCoeff, float sideCoeff) {
         relativeVelocity.set(velocity).sub(wind);
         float airspeed = relativeVelocity.len();
-        if (airspeed < 1f || spin.len() < 0.1f) return outMagnus.setZero();
+
+        // Increase threshold: Magnus effect is negligible at very low speeds
+        if (airspeed < 2.5f || spin.len() < 0.1f) return outMagnus.setZero();
+
         float surfaceSpeed = spin.len() * 0.02f;
         float spinRatio = surfaceSpeed / airspeed;
-        float CL = 1.0f - (float) Math.exp(-0.9f * spinRatio);
+
+        float cappedSpinRatio = Math.min(spinRatio, 3.0f);
+        float CL = 1.0f - (float) Math.exp(-0.9f * cappedSpinRatio);
+
+        float airFoilEfficiency = MathUtils.clamp(airspeed / 15.0f, 0.0f, 1.0f);
+
         float speedRef = airspeed / 20.0f;
-        float dynamicLift = (speedRef * speedRef) * CL;
+        float dynamicLift = (speedRef * speedRef) * CL * (airFoilEfficiency * airFoilEfficiency);
+
         temp.set(relativeVelocity).crs(spin).nor();
+
+        // liftCoeff and sideCoeff tune the overall strength
         float totalForce = -dynamicLift * (liftCoeff + sideCoeff);
+
         return outMagnus.set(temp).scl(totalForce);
     }
 

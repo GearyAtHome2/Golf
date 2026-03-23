@@ -20,8 +20,8 @@ public class ShotController {
     private static final float MAX_RENDER_SCALE = 2.2f;
     private static final float DISTANCE_SCALE_FACTOR = 0.04f;
 
-    private static final float BASE_VERTICAL_GAP = 0.2f; // The physical distance from ball center to bar base
-    private static final float GAP_SCALE_MODIFIER = 0.4f; // How much the gap grows with UI scaling (Lower = stays closer)
+    private static final float BASE_VERTICAL_GAP = 0.2f;
+    private static final float GAP_SCALE_MODIFIER = 0.4f;
 
     private Model powerBarModel;
     private ModelInstance powerBarInstance;
@@ -291,8 +291,6 @@ public class ShotController {
         float dist = camPos.dst(ballPos);
         float currentUnitScale = MathUtils.clamp(dist * DISTANCE_SCALE_FACTOR * HUD.UI_SCALE, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
 
-        // --- NEW ATTACHMENT LOGIC ---
-        // Instead of scaling the offset linearly with the bar scale, we dampen it.
         float vOffset = BASE_VERTICAL_GAP + (currentUnitScale * GAP_SCALE_MODIFIER);
 
         float bulge = 1.0f;

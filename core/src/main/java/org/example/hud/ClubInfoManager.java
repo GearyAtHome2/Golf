@@ -32,19 +32,20 @@ public class ClubInfoManager {
 
     public static String getCarryDistanceInfo(Club club) {
         return switch (club) {
-            case DRIVER -> "275-350 yds";
-            case IRON_2, WOOD_3 -> "260-330 yds";
-            case WOOD_5 -> "240-270 yds";
-            case HYBRID_3 -> "230-260 yds";
-            case IRON_5 -> "210-240 yds";
-            case IRON_6 -> "180-220 yds";
-            case IRON_7 -> "160-180 yds";
-            case IRON_8 -> "150-160 yds";
-            case IRON_9 -> "130-140 yds";
-            case PWEDGE -> "100 yds";
-            case GWEDGE -> "70 yds";
-            case SWEDGE -> "50 yds";
-            case LWEDGE -> "30 yds";
+            case DRIVER -> "350 yds";
+            case IRON_2 -> "340 yds";
+            case WOOD_3 -> "330 yds";
+            case WOOD_5 -> "285 yds";
+            case HYBRID_3 -> "280 yds";
+            case IRON_5 -> "255 yds";
+            case IRON_6 -> "240 yds";
+            case IRON_7 -> "200 yds";
+            case IRON_8 -> "180 yds";
+            case IRON_9 -> "165 yds";
+            case PWEDGE -> "130 yds";
+            case GWEDGE -> "109 yds";
+            case SWEDGE -> "88 yds";
+            case LWEDGE -> "71 yds";
             case PUTTER -> "20 yds";
             default -> "Typical Distance: --";
         };
