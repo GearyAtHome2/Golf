@@ -22,6 +22,18 @@ public class BallPhysics {
     private static final Vector3 outSlope = new Vector3();
     private static final Vector3 outBounce = new Vector3();
 
+    // --- TWEAKABLE CONSTANTS ---
+    private static final float VERTICAL_STOP_THRESHOLD = 0.20f;
+    private static final float SOFTNESS_ABSORPTION_FACTOR = 0.2f;
+    private static final float MIN_RESTITUTION = 0.15f;
+    private static final float SPIN_TRANSFER_RATIO = 0.35f;
+    private static final float FRICTION_SOFTNESS_BOOST = 0.5f;
+    private static final float NORMAL_GRIP_SCALER = 0.012f;
+    private static final float NORMAL_GRIP_MIN = 0.5f;
+    private static final float NORMAL_GRIP_MAX = 2.5f;
+    private static final float MAX_ENERGY_RETAINED = 0.99f;
+    private static final float MIN_ENERGY_RETAINED = 0.85f;
+
     public static Vector3 getGravityForce(float gravity) {
         return outGravity.set(0, gravity, 0);
     }
@@ -123,75 +135,90 @@ public class BallPhysics {
     }
 
     public static Vector3 calculateBounceWithSpin(Vector3 velocity, Vector3 normal, Vector3 spin, float restitution, float friction, float softness) {
-        // --- TWEAKABLE PARAMETERS ---
-        float VERTICAL_STOP_THRESHOLD = 0.20f;
-        float SOFTNESS_ABSORPTION_FACTOR = 0.2f;
-        float MIN_RESTITUTION = 0.15f;
-
-        float SPIN_TRANSFER_RATIO = 0.35f;
-        float FRICTION_SOFTNESS_BOOST = 0.5f;
-
-        // Impact speed influence - reduced for hard surfaces
-        float NORMAL_GRIP_SCALER = 0.012f;
-        float NORMAL_GRIP_MIN = 0.5f;
-        float NORMAL_GRIP_MAX = 2.5f;
-
-        // Energy retention logic
-        float MAX_ENERGY_RETAINED = 0.99f;      // Retention for Stone/Hard surfaces
-        float MIN_ENERGY_RETAINED = 0.85f;      // Retention for Rough/Sand
-        // ----------------------------
-
         float vDotN = velocity.dot(normal);
+        float absVDotN = Math.abs(vDotN);
+
+        // Split velocity into Normal and Tangent
         temp.set(normal).scl(vDotN);
         vTangent.set(velocity).sub(temp);
 
-        float absVDotN = Math.abs(vDotN);
+        // 1. Resolve Vertical Bounce
+        resolveVerticalBounce(vNormalBounce, temp, absVDotN, restitution, softness);
 
-        // 1. VERTICAL BOUNCE (RESTITUTION)
+        // 2. Resolve Tangential Spin and Friction
+        float energyLoss = 1.0f;
+        if (vTangent.len() > 0.05f || spin.len() > 0.05f) {
+            energyLoss = resolveTangentialBounce(vTangent, spin, normal, absVDotN, friction, softness);
+        }
+
+        Vector3 result = outBounce.set(vTangent).add(vNormalBounce);
+
+        // Detailed Debug Logging
+        System.out.printf("[PHYSICS] InSpd: %.2f (V:%.2f) -> OutSpd: %.2f (V:%.2f) | Energy: %.0f%% | Soft: %.4f%n",
+                velocity.len(), absVDotN, result.len(), vNormalBounce.len(), energyLoss * 100f, softness);
+
+        return result;
+    }
+
+    private static void resolveVerticalBounce(Vector3 outNormal, Vector3 normalVector, float absVDotN, float restitution, float softness) {
         float absorption = Math.max(MIN_RESTITUTION, 1.0f - (softness * SOFTNESS_ABSORPTION_FACTOR));
         float finalRestitution = restitution * absorption;
 
         if (absVDotN * finalRestitution < VERTICAL_STOP_THRESHOLD) {
-            vNormalBounce.setZero();
+            outNormal.setZero();
         } else {
-            vNormalBounce.set(temp).scl(-finalRestitution);
+            outNormal.set(normalVector).scl(-finalRestitution);
+        }
+    }
+
+    private static float resolveTangentialBounce(Vector3 tangent, Vector3 spin, Vector3 normal, float absVDotN, float friction, float softness) {
+        Vector3 tanDir = temp.set(tangent).nor();
+
+        // If we have NO forward speed, we must derive the 'tangent direction' from the spin
+        // to allow a vertical drop to kick backwards/forwards.
+        if (tangent.len() < 0.01f && spin.len() > 0.1f) {
+            // Find the direction the bottom of the ball is moving due to spin
+            tanDir.set(normal).crs(spin).nor().scl(-1);
         }
 
-        // 2. TANGENTIAL PHYSICS (ENERGY CONSERVATION & SPIN)
-        if (vTangent.len() > 0.05f || spin.len() > 0.05f) {
-            Vector3 tanDir = temp.set(vTangent).nor();
-            Vector3 sideDir = temp2.set(normal).crs(tanDir).nor();
+        Vector3 sideDir = temp2.set(normal).crs(tanDir).nor();
 
-            float oldSpeed = vTangent.len();
-            float oldSpinMag = spin.dot(sideDir);
+        float oldSpeed = tangent.len();
+        float oldSpinMag = spin.dot(sideDir);
 
-            float surfaceVel = oldSpeed - (oldSpinMag * BALL_RADIUS);
+        // This is the key: How fast is the contact point moving?
+        // If oldSpeed is 0 but spin is 100, surfaceVel is -2.0.
+        float surfaceVel = oldSpeed - (oldSpinMag * BALL_RADIUS);
 
-            // Reduce the 'grip' effect for hard surfaces (Stone)
-            float gripHardnessFactor = MathUtils.lerp(0.35f, 1.0f, softness);
-            float effectiveFriction = friction + (softness * FRICTION_SOFTNESS_BOOST);
-            float normalGrip = MathUtils.clamp(absVDotN * NORMAL_GRIP_SCALER * gripHardnessFactor, NORMAL_GRIP_MIN, NORMAL_GRIP_MAX);
-
-            float gripImpulse = surfaceVel * effectiveFriction * normalGrip;
-
-            // Apply spin kick
-            float vChange = gripImpulse * SPIN_TRANSFER_RATIO;
-            vTangent.mulAdd(tanDir, -vChange);
-
-            float sChange = gripImpulse / BALL_RADIUS;
-            spin.mulAdd(sideDir, sChange);
-
-            // Calculate dynamic energy retention based on softness
-            // Stone (0.00001 softness) will now retain ~99% of its speed
-            float energyLoss = MathUtils.lerp(MAX_ENERGY_RETAINED, MIN_ENERGY_RETAINED, softness);
-            vTangent.scl(energyLoss);
-            spin.scl(energyLoss);
-
-            System.out.printf("[BOUNCE] Spd: %.2f->%.2f | Spin: %.1f->%.1f | Kick: %.2f | Energy: %.0f%%%n",
-                    oldSpeed, vTangent.len(), oldSpinMag, spin.dot(sideDir), -vChange, energyLoss * 100f);
+        // --- PITCH MARK LOGIC ---
+        float impactSteepness = MathUtils.clamp(absVDotN / 18f, 0f, 1f);
+        float pitchMarkGrip = 0f;
+        if (softness > 0.05f && softness < 0.5f) {
+            // Bite is now driven by how hard we hit AND how much 'surface sliding' there is
+            float slidingFactor = MathUtils.clamp(Math.abs(surfaceVel) / 10f, 0.2f, 1.0f);
+            pitchMarkGrip = impactSteepness * 0.85f * slidingFactor;
         }
 
-        return outBounce.set(vTangent).add(vNormalBounce);
+        float effectiveFriction = friction + (softness * FRICTION_SOFTNESS_BOOST) + pitchMarkGrip;
+        float gripHardnessFactor = MathUtils.lerp(0.35f, 1.0f, softness);
+        float normalGrip = MathUtils.clamp(absVDotN * NORMAL_GRIP_SCALER * gripHardnessFactor, NORMAL_GRIP_MIN, NORMAL_GRIP_MAX);
+
+        // The impulse is a product of the surface velocity (speed + spin)
+        float gripImpulse = surfaceVel * effectiveFriction * normalGrip;
+
+        // Apply the change
+        float vChange = gripImpulse * SPIN_TRANSFER_RATIO;
+        tangent.mulAdd(tanDir, -vChange);
+
+        float sChange = gripImpulse / BALL_RADIUS;
+        spin.mulAdd(sideDir, sChange);
+
+        // Energy retention
+        float energyLoss = MathUtils.lerp(MAX_ENERGY_RETAINED, MIN_ENERGY_RETAINED, softness);
+        tangent.scl(energyLoss);
+        spin.scl(energyLoss);
+
+        return energyLoss;
     }
 
     public static void resolveRollingSpin(Vector3 velocity, Vector3 spin, Vector3 normal, Terrain.TerrainType type, float delta) {

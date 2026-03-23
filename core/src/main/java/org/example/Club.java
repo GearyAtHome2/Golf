@@ -15,7 +15,7 @@ public enum Club {
     PWEDGE("Pitching Wedge", 44.0f, 16.0f, 0.9f, 0.0f),
     GWEDGE("Gap Wedge", 48.0f, 14.3f, 0.85f, 0.0f),
     SWEDGE("Sand Wedge", 52.0f, 12.8f, 0.8f, 0.0f),
-    LWEDGE("Lob Wedge", 56.0f, 11.0f, 0.9f, 0.0f), // Slightly harder than SW due to precision needed
+    LWEDGE("Lob Wedge", 54f, 11.2f, 0.9f, 0.0f), // Slightly harder than SW due to precision needed
     PUTTER("Putter", 0f, 8.0f, 0.4f, 0.0f);
 
     public final String name;

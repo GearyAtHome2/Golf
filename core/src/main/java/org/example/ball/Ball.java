@@ -352,10 +352,15 @@ public class Ball {
         }
 
         isInitialFlight = false;
-        float friction = type.kineticFriction;
-        float localRestitution = MathUtils.clamp(BOUNCE_RESTITUTION - ((friction - 0.2f) * 0.08f), 0.05f, BOUNCE_RESTITUTION);
 
-        velocity.set(BallPhysics.calculateBounceWithSpin(velocity, normal, spin, localRestitution, friction, type.softness));
+        velocity.set(BallPhysics.calculateBounceWithSpin(
+                velocity,
+                normal,
+                spin,
+                type.restitution,
+                type.kineticFriction,
+                type.softness
+        ));
 
         state = State.CONTACT;
         lastInteraction = Interaction.TERRAIN;

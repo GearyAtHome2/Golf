@@ -465,21 +465,23 @@ public class Terrain {
     }
 
     public enum TerrainType {
-        TEE(0.4f, 2.0f, 1.1f, 0.8f, 0.2f, new Color(0.2f, 0.5f, 0.2f, 1f)),
-        FAIRWAY(0.4f, 0.2f, 1.05f, 1.0f, 0.2f, new Color(0.1f, 0.4f, 0.1f, 1f)),
-        ROUGH(1.2f, 4.5f, 1.5f, 1.5f, 0.7f, new Color(0.02f, 0.15f, 0.02f, 1f)),
-        SAND(2.5f, 12.0f, 2.5f, 4.6f, 0.9f, new Color(0.85f, 0.8f, 0.5f, 1f)),
-        GREEN(0.2f, 0.1f, 1.05f, 0.9f, 0.4f, new Color(0.1f, 0.6f, 0.1f, 1f)),
-        STONE(0.1f, 0.1f, 1.05f, 1.5f, 0.00001f, new Color(0.18f, 0.18f, 0.2f, 1f));
-        public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness;
+        TEE(0.4f, 2.0f, 1.1f, 0.75f, 0.2f, 0.45f, new Color(0.2f, 0.5f, 0.2f, 1f)),
+        FAIRWAY(0.32f, 0.16f, 1.05f, 1.0f, 0.2f, 0.43f, new Color(0.1f, 0.4f, 0.1f, 1f)),
+        ROUGH(1.2f, 4.5f, 1.5f, 2.1f, 0.7f, 0.32f, new Color(0.02f, 0.15f, 0.02f, 1f)),
+        SAND(1.4f, 12.0f, 2.5f, 4.6f, 0.9f, 0.11f, new Color(0.85f, 0.8f, 0.5f, 1f)),
+        GREEN(0.2f, 0.03f, 1.05f, 0.9f, 0.15f, 0.35f, new Color(0.1f, 0.6f, 0.1f, 1f)),
+        STONE(0.1f, 0.02f, 1.05f, 1.5f, 0.01f, 0.7f, new Color(0.18f, 0.18f, 0.2f, 1f));
+
+        public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness, restitution;
         public final Color color;
 
-        TerrainType(float kf, float rr, float sm, float diff, float softness, Color col) {
+        TerrainType(float kf, float rr, float sm, float diff, float softness, float rest, Color col) {
             this.kineticFriction = kf;
             this.rollingResistance = rr;
             this.staticMultiplier = sm;
             this.difficulty = diff;
             this.softness = softness;
+            this.restitution = rest; // New field
             this.color = col;
         }
     }

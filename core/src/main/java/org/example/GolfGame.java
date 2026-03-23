@@ -260,7 +260,9 @@ public class GolfGame extends ApplicationAdapter {
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
                     hud.incrementShots();
-                    hud.resetSpin();
+                    if (GameState.PRACTICE_RANGE != currentState) {
+                        hud.resetSpin();//DON'T RESET SPIN IN PRACTICE MODE - BETTER FOR USER.
+                    }
                     hasCurrentBallBeenHit = true;
                     shotController.update(0, ball, camera.direction, currentClub, hud, terrain, inputProcessor);
                 }
@@ -367,9 +369,6 @@ public class GolfGame extends ApplicationAdapter {
 
     private void resetBallToLastShot() {
         if (ball != null) {
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL) && hasCurrentBallBeenHit) {
-                hud.incrementShots();
-            }
             ball.resetToLastPosition();
             ball.setState(Ball.State.STATIONARY);
             shotController.reset();

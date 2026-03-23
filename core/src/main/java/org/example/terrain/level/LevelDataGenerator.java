@@ -424,7 +424,7 @@ public class LevelDataGenerator {
                 bunkerCount = 2 + r.nextInt(4);
                 bunkerDepth = 2.3f;
                 distance = Math.round(300 + r.nextFloat() * 500);
-                par = distance < 410 ? 3 : distance < 710 ? 4 : 5;
+                par = distance < 435 ? 3 : distance < 710 ? 4 : 5;
                 break;
         }
 
