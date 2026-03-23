@@ -307,7 +307,10 @@ public class GolfGame extends ApplicationAdapter {
             if (checkInstantHazards(terrain)) return;
         }
 
-        updateResetTimer(delta, terrain);
+        if (ball.getState() == Ball.State.STATIONARY) {
+            updateResetTimer(delta, terrain);
+        }
+
     }
 
     private boolean checkInstantHazards(Terrain terrain) {

@@ -381,7 +381,8 @@ public class HUD {
         if (isMoving || distanceTracker.shouldShow()) {
             float distanceToShow = isMoving ? ball.getShotDistance() : distanceTracker.getDisplayDistance();
 
-            font.getData().setScale(baseScale);
+            float responsiveScale = (viewport.getWorldHeight() * 0.035f) / font.getLineHeight();
+            font.getData().setScale(responsiveScale * baseScale);
 
             if (!isMoving) {
                 float alpha = MathUtils.clamp(distanceTracker.getTimer(), 0, 1);
@@ -390,16 +391,23 @@ public class HUD {
                 font.setColor(Color.WHITE);
             }
 
-            float xOffset = 350 * (baseScale / 1.4f);
-            float yOffset = 250 * (baseScale / 1.4f);
+            float marginX = viewport.getWorldWidth() * 0.02f; // 5% margin from right
+            float marginY = viewport.getWorldHeight() * 0.2f; // 10% margin from bottom
+
+            String text = String.format("DISTANCE: %.1f yds", distanceToShow);
+
+            layout.setText(font, text);
+            float drawX = viewport.getWorldWidth() - layout.width - marginX;
+            float drawY = marginY + layout.height;
 
             drawShadowedText(
-                    String.format("SHOT DISTANCE: %.1f yds", distanceToShow),
-                    viewport.getWorldWidth() - xOffset,
-                    yOffset,
+                    text,
+                    drawX,
+                    drawY,
                     font.getColor()
             );
 
+            // Reset state
             font.setColor(Color.WHITE);
             font.getData().setScale(1.0f);
         }

@@ -124,18 +124,21 @@ public class BallPhysics {
 
     public static Vector3 calculateBounceWithSpin(Vector3 velocity, Vector3 normal, Vector3 spin, float restitution, float friction, float softness) {
         // --- TWEAKABLE PARAMETERS ---
-        float VERTICAL_STOP_THRESHOLD = 0.20f; // Speed below which the ball stops bouncing vertically
-        float SOFTNESS_ABSORPTION_FACTOR = 0.2f; // Lower = more bounce height on soft ground (was 0.7)
-        float MIN_RESTITUTION = 0.15f;           // Guaranteed minimum bounce regardless of softness
+        float VERTICAL_STOP_THRESHOLD = 0.20f;
+        float SOFTNESS_ABSORPTION_FACTOR = 0.2f;
+        float MIN_RESTITUTION = 0.15f;
 
-        float SPIN_TRANSFER_RATIO = 0.35f;       // How much "kick" the spin provides
-        float FRICTION_SOFTNESS_BOOST = 0.5f;    // How much softness increases "grip"
-        float NORMAL_GRIP_SCALER = 0.012f;        // Influence of impact speed on grip
+        float SPIN_TRANSFER_RATIO = 0.35f;
+        float FRICTION_SOFTNESS_BOOST = 0.5f;
+
+        // Impact speed influence - reduced for hard surfaces
+        float NORMAL_GRIP_SCALER = 0.012f;
         float NORMAL_GRIP_MIN = 0.5f;
-        float NORMAL_GRIP_MAX = 2.5f;            // Cap for "rocket" effect
+        float NORMAL_GRIP_MAX = 2.5f;
 
-        float BASE_ENERGY_RETAINED = 0.92f;      // General speed retention (was 0.90)
-        float ENERGY_LOSS_SOFTNESS_MULT = 0.12f; // Side-to-side energy loss from grass
+        // Energy retention logic
+        float MAX_ENERGY_RETAINED = 0.99f;      // Retention for Stone/Hard surfaces
+        float MIN_ENERGY_RETAINED = 0.85f;      // Retention for Rough/Sand
         // ----------------------------
 
         float vDotN = velocity.dot(normal);
@@ -144,7 +147,7 @@ public class BallPhysics {
 
         float absVDotN = Math.abs(vDotN);
 
-        // Improved absorption formula: uses a floor to ensure the ball always has some "pop"
+        // 1. VERTICAL BOUNCE (RESTITUTION)
         float absorption = Math.max(MIN_RESTITUTION, 1.0f - (softness * SOFTNESS_ABSORPTION_FACTOR));
         float finalRestitution = restitution * absorption;
 
@@ -154,6 +157,7 @@ public class BallPhysics {
             vNormalBounce.set(temp).scl(-finalRestitution);
         }
 
+        // 2. TANGENTIAL PHYSICS (ENERGY CONSERVATION & SPIN)
         if (vTangent.len() > 0.05f || spin.len() > 0.05f) {
             Vector3 tanDir = temp.set(vTangent).nor();
             Vector3 sideDir = temp2.set(normal).crs(tanDir).nor();
@@ -163,22 +167,28 @@ public class BallPhysics {
 
             float surfaceVel = oldSpeed - (oldSpinMag * BALL_RADIUS);
 
+            // Reduce the 'grip' effect for hard surfaces (Stone)
+            float gripHardnessFactor = MathUtils.lerp(0.35f, 1.0f, softness);
             float effectiveFriction = friction + (softness * FRICTION_SOFTNESS_BOOST);
-            float normalGrip = MathUtils.clamp(absVDotN * NORMAL_GRIP_SCALER, NORMAL_GRIP_MIN, NORMAL_GRIP_MAX);
+            float normalGrip = MathUtils.clamp(absVDotN * NORMAL_GRIP_SCALER * gripHardnessFactor, NORMAL_GRIP_MIN, NORMAL_GRIP_MAX);
+
             float gripImpulse = surfaceVel * effectiveFriction * normalGrip;
 
+            // Apply spin kick
             float vChange = gripImpulse * SPIN_TRANSFER_RATIO;
             vTangent.mulAdd(tanDir, -vChange);
 
             float sChange = gripImpulse / BALL_RADIUS;
             spin.mulAdd(sideDir, sChange);
 
-            float energyLoss = BASE_ENERGY_RETAINED - (softness * ENERGY_LOSS_SOFTNESS_MULT);
+            // Calculate dynamic energy retention based on softness
+            // Stone (0.00001 softness) will now retain ~99% of its speed
+            float energyLoss = MathUtils.lerp(MAX_ENERGY_RETAINED, MIN_ENERGY_RETAINED, softness);
             vTangent.scl(energyLoss);
             spin.scl(energyLoss);
 
-            System.out.printf("[BOUNCE] Spd: %.2f->%.2f | Spin: %.1f->%.1f | Kick: %.2f%n",
-                    oldSpeed, vTangent.len(), oldSpinMag, spin.dot(sideDir), -vChange);
+            System.out.printf("[BOUNCE] Spd: %.2f->%.2f | Spin: %.1f->%.1f | Kick: %.2f | Energy: %.0f%%%n",
+                    oldSpeed, vTangent.len(), oldSpinMag, spin.dot(sideDir), -vChange, energyLoss * 100f);
         }
 
         return outBounce.set(vTangent).add(vNormalBounce);
