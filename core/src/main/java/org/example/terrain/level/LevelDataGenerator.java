@@ -21,7 +21,7 @@ public class LevelDataGenerator {
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
         // Forced for testing, can be commented out for true randomness
-        selectedType = CLIPPERTON_ROCK;
+//        selectedType = CLIPPERTON_ROCK;
         data.setArchetype(selectedType);
 
         LevelData.TerrainAlgorithm algo;
@@ -424,7 +424,7 @@ public class LevelDataGenerator {
                 bunkerCount = 2 + r.nextInt(4);
                 bunkerDepth = 2.3f;
                 distance = Math.round(300 + r.nextFloat() * 500);
-                par = distance < 410 ? 3 : distance < 675 ? 4 : 5;
+                par = distance < 410 ? 3 : distance < 710 ? 4 : 5;
                 break;
         }
 

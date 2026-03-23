@@ -315,7 +315,6 @@ public class GolfGame extends ApplicationAdapter {
 
         if (terrain.isPointOutOfBounds(pos.x, pos.z)) {
             hud.showOutOfBounds();
-            hud.incrementShots();
             resetBallToLastShot();
             resetTimer = 0f;
             return true;
@@ -350,7 +349,6 @@ public class GolfGame extends ApplicationAdapter {
             resetPracticeBall(terrain);
         } else if (ball.isInWater(terrain)) {
             hud.showWaterHazard();
-            hud.incrementShots();
             resetBallToLastShot();
             resetTimer = 0f;
         }

@@ -31,8 +31,7 @@ public class NotificationManager {
     private final Color tempColor = new Color();
 
     public void showHazard(String text, Color color, float duration) {
-        // Reduced relative scale from 4.0 to 1.8
-        activeNotification = new Notification(text, "+1 STROKE PENALTY", color, duration, 1.8f);
+        activeNotification = new Notification(text, "", color, duration, 1.8f);
     }
 
     public void showFeedback(MinigameResult result, float duration) {
