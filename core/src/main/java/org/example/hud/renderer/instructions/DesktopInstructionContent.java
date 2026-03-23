@@ -57,9 +57,9 @@ public class DesktopInstructionContent implements InstructionContent {
     @Override
     public String[] getGameplayLines() {
         return new String[]{
-                "SPIN: 'Bottom' = High loft / Low spin.",
-                "Physics: engine simulates lift based on",
-                "velocity and spin magnitude consistently.",
+                "SPIN: Aim at the bottom of the ball to 'scoop' it for high loft and low backspin.",
+                "Aim down on the ball from above to compress it for a lower loft and higher spin.",
+                "PHYSICS: engine simulates lift based on velocity and spin magnitude consistently.",
                 "POWER: Time SPACE in sweet spots.",
                 "TERRAIN: Slopes kick trajectory left/right.",
                 "WIND: Affects altitudes more significantly."

@@ -6,6 +6,7 @@ import org.example.terrain.objects.Tree.TreeScheme;
 import java.util.*;
 
 import static org.example.terrain.level.LevelData.Archetype.CLIPPERTON_ROCK;
+import static org.example.terrain.level.LevelData.Archetype.CRATER_FIELDS;
 
 public class LevelDataGenerator {
 
@@ -20,8 +21,7 @@ public class LevelDataGenerator {
 
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        // Forced for testing, can be commented out for true randomness
-//        selectedType = CLIPPERTON_ROCK;
+        selectedType = CRATER_FIELDS;
         data.setArchetype(selectedType);
 
         LevelData.TerrainAlgorithm algo;
@@ -131,8 +131,8 @@ public class LevelDataGenerator {
                 greenH = 12.0f;
                 windMin = 5f;
                 windMax = 18f;
-                treeH = 5.0f;
-                foliageR = 4.0f;
+                treeH = 8.0f;
+                foliageR = 3.0f;
                 trunkR = 0.6f;
                 hillFreq = 0.06f;
                 maxH = 12.0f;
