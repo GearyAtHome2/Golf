@@ -21,7 +21,7 @@ public class LevelFactory {
                 generator = new PracticeRangeGenerator();
                 defaultClub = Club.DRIVER;
                 waterLevel = -2.0f;
-                distance = 500;
+                distance = 600;
                 break;
             case PUTTING_GREEN:
                 long pgSeed = (manualSeed == -1) ? MathUtils.random(Long.MAX_VALUE) : manualSeed;
