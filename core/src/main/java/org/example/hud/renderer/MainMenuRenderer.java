@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import org.example.gameManagers.GameSession;
 
 public class MainMenuRenderer {
 
@@ -20,7 +21,7 @@ public class MainMenuRenderer {
     private float pulseTimer = 0;
     private final GlyphLayout layout = new GlyphLayout();
 
-    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, int selection, MenuState state) {
+    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, int selection, MenuState state, GameSession standard, GameSession daily) {
         pulseTimer += Gdx.graphics.getDeltaTime();
 
         float screenW = viewport.getWorldWidth();
@@ -53,7 +54,7 @@ public class MainMenuRenderer {
                     renderMainMenu(batch, font, selection, centerX, menuStartY, spacing);
                     break;
                 case EIGHTEEN_HOLES:
-                    renderEighteenMenu(batch, font, selection, centerX, menuStartY, spacing);
+                    renderEighteenMenu(batch, font, selection, centerX, menuStartY, spacing, standard, daily);
                     break;
                 case DIFFICULTY_SELECT:
                     renderDifficultyMenu(batch, font, selection, centerX, menuStartY, spacing);
@@ -85,9 +86,17 @@ public class MainMenuRenderer {
         drawCenteredOption(batch, font, selection == 4, hasValidSeed, seedText, cx, y - (s * 4));
     }
 
-    private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float cx, float y, float s) {
-        drawCenteredOption(batch, font, selection == 0, true, "PLAY 18", cx, y);
-        drawCenteredOption(batch, font, selection == 1, true, "DAILY 18", cx, y - s);
+    private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float cx, float y, float s, GameSession standard, GameSession daily) {
+        String play18Text = (standard != null && !standard.isFinished())
+                ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)"
+                : "PLAY 18";
+
+        String daily18Text = (daily != null && !daily.isFinished())
+                ? "CONTINUE DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)"
+                : "DAILY 18";
+
+        drawCenteredOption(batch, font, selection == 0, true, play18Text, cx, y);
+        drawCenteredOption(batch, font, selection == 1, true, daily18Text, cx, y - s);
         drawCenteredOption(batch, font, selection == 2, true, "< BACK TO MAIN", cx, y - (s * 2.5f));
     }
 
@@ -95,12 +104,11 @@ public class MainMenuRenderer {
         org.example.GameConfig.Difficulty[] diffs = org.example.GameConfig.Difficulty.values();
 
         for (int i = 0; i < diffs.length; i++) {
-            // Render each difficulty name (replacing underscores with spaces if any exist)
             drawCenteredOption(batch, font, selection == i, true, diffs[i].name().replace("_", " "), cx, y - (s * i));
         }
 
         int backIndex = diffs.length;
-        drawCenteredOption(batch, font, selection == backIndex, true, "< BACK", cx, y - (s * (backIndex + 1)));
+        drawCenteredOption(batch, font, selection == backIndex, true, "< BACK", cx, y - (s * (backIndex + 0.5f)));
     }
 
     private void renderPracticeMenu(SpriteBatch batch, BitmapFont font, int selection, float cx, float y, float s) {

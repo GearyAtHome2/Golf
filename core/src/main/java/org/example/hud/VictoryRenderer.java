@@ -10,13 +10,14 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ScoreShout;
 import org.example.ball.CompetitiveScore;
+import org.example.gameManagers.GameSession;
 import org.example.terrain.level.LevelData;
 
 public class VictoryRenderer {
 
     private final GlyphLayout layout = new GlyphLayout();
 
-    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, int shots, LevelData levelData, CompetitiveScore compScore) {
+    public void render(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, int shots, LevelData levelData, GameSession session) {
         float centerX = viewport.getWorldWidth() / 2f;
         float screenH = viewport.getWorldHeight();
 
@@ -26,13 +27,11 @@ public class VictoryRenderer {
 
         Color shoutColor = (shots == 1 || diff <= -2) ? Color.GOLD : (diff == -1 ? Color.CYAN : (diff == 0 ? Color.WHITE : (diff == 1 ? Color.ORANGE : Color.RED)));
 
-        // 1. TOP TITLE - High and clear
         font.getData().setScale(3.5f);
         font.setColor(shoutColor);
         layout.setText(font, shout);
         font.draw(batch, shout, centerX - (layout.width / 2f), screenH * 0.93f);
 
-        // 2. SUBTITLE - Tucked right under the title
         font.getData().setScale(1.2f);
         font.setColor(Color.WHITE);
         String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
@@ -40,9 +39,9 @@ public class VictoryRenderer {
         layout.setText(font, subText);
         font.draw(batch, subText, centerX - (layout.width / 2f), screenH * 0.82f);
 
-        if (compScore != null) {
+        if (session != null) {
             batch.end();
-            renderCompetitiveResults(batch, shapeRenderer, font, viewport, compScore, centerX, screenH * 0.45f);
+            renderCompetitiveResults(batch, shapeRenderer, font, viewport, session, centerX, screenH * 0.45f);
             batch.begin();
         } else if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             font.getData().setScale(1.0f);
@@ -53,7 +52,7 @@ public class VictoryRenderer {
         }
     }
 
-    private void renderCompetitiveResults(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, CompetitiveScore compScore, float centerX, float centerY) {
+    private void renderCompetitiveResults(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameSession session, float centerX, float centerY) {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -62,19 +61,17 @@ public class VictoryRenderer {
         float boxWidth = viewport.getWorldWidth() * 0.85f;
         float boxHeight = viewport.getWorldHeight() * 0.65f;
 
-        // Centered box
         shapeRenderer.rect(centerX - (boxWidth / 2f), centerY - (boxHeight / 2f), boxWidth, boxHeight);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         batch.begin();
-        // Render table near the top of the box
-        renderSplitScoreTable(batch, font, compScore, centerX, centerY + (boxHeight * 0.35f));
+        renderSplitScoreTable(batch, font, session, centerX, centerY + (boxHeight * 0.35f));
 
         float promptY = centerY - (boxHeight * 0.35f);
 
-        if (compScore.isCourseComplete()) {
-            int totalDiff = compScore.getTotalToPar();
+        if (session.isFinished()) {
+            int totalDiff = session.getCompetitiveScore().getTotalToPar();
             String handicapStr = (totalDiff <= 0) ? "+" + Math.abs(totalDiff) : String.valueOf(-totalDiff);
             font.getData().setScale(1.3f);
             font.setColor(Color.GOLD);
@@ -86,69 +83,90 @@ public class VictoryRenderer {
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
-            String prompt = compScore.isCourseComplete() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
+            String prompt = session.isFinished() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
             layout.setText(font, prompt);
             font.draw(batch, prompt, centerX - (layout.width / 2f), promptY);
         }
         batch.end();
     }
 
-    private void renderSplitScoreTable(SpriteBatch batch, BitmapFont font, CompetitiveScore compScore, float x, float y) {
+    private void renderSplitScoreTable(SpriteBatch batch, BitmapFont font, GameSession session, float x, float y) {
         float screenW = Gdx.graphics.getWidth();
-        float columnWidth = screenW * 0.35f;
-        float leftColX = x - columnWidth;
-        float rightColX = x + 40; // Small gutter between columns
 
-        drawColumn(batch, font, compScore, leftColX, y, 0, 9);
-        drawColumn(batch, font, compScore, rightColX, y, 9, 18);
+        float colW_Hole = screenW * 0.07f;
+        float colW_Par  = screenW * 0.07f;
+        float colW_Score = screenW * 0.088f;
+        float colW_Total = screenW * 0.088f;
+        float fullColWidth = colW_Hole + colW_Par + colW_Score + colW_Total;
+
+        float gutter = screenW * 0.06f;
+
+        float leftColX = x - fullColWidth - (gutter / 2f);
+        float rightColX = x + (gutter / 2f);
+
+        drawColumn(batch, font, session, leftColX, y, 0, 9, colW_Hole, colW_Par, colW_Score, colW_Total);
+        drawColumn(batch, font, session, rightColX, y, 9, 18, colW_Hole, colW_Par, colW_Score, colW_Total);
 
         font.getData().setScale(1.2f);
         font.setColor(Color.GOLD);
-        String totalToPar = "TOTAL TO PAR: " + compScore.getToParString();
+        String totalToPar = "TOTAL TO PAR: " + session.getCompetitiveScore().getToParString();
         layout.setText(font, totalToPar);
-        // Positioned relative to bottom of table
         font.draw(batch, totalToPar, x - (layout.width / 2f), y - (Gdx.graphics.getHeight() * 0.40f));
     }
 
-    private void drawColumn(SpriteBatch batch, BitmapFont font, CompetitiveScore compScore, float startX, float y, int startHole, int endHole) {
+    private void drawColumn(SpriteBatch batch, BitmapFont font, GameSession session, float startX, float y, int startHole, int endHole, float cwH, float cwP, float cwS, float cwT) {
         float screenH = Gdx.graphics.getHeight();
-        float rowH = screenH * 0.035f;
-        float colSpacing = screenH * 0.08f;
+
+        float xHole = startX;
+        float xPar  = xHole + cwH;
+        float xScore = xPar + cwP;
+        float xTotal = xScore + cwS;
 
         font.getData().setScale(0.8f);
+
         font.setColor(Color.LIGHT_GRAY);
-        font.draw(batch, "HOLE", startX, y);
-        font.draw(batch, "PAR", startX + colSpacing, y);
-        font.draw(batch, "SCORE", startX + colSpacing * 2, y);
-        font.draw(batch, "TOTAL", startX + colSpacing * 3, y);
+        drawCentered(batch, font, "HOLE", xHole, y, cwH);
+        drawCentered(batch, font, "PAR", xPar, y, cwP);
+        drawCentered(batch, font, "SCORE", xScore, y, cwS);
+        drawCentered(batch, font, "TOTAL", xTotal, y, cwT);
 
         int runningTotal = 0;
-        for(int j = 0; j < startHole; j++) {
-            runningTotal += Math.max(0, compScore.getScoreForHole(j));
+        for (int j = 0; j < startHole; j++) {
+            int s = session.getCompetitiveScore().getScoreForHole(j);
+            if (s > 0) runningTotal += s;
         }
 
+        float rowH = screenH * 0.035f;
         for (int i = startHole; i < endHole; i++) {
-            float rowY = y - (screenH * 0.04f) - ((i - startHole) * rowH);
-            int holeScore = compScore.getScoreForHole(i);
-            int holePar = compScore.getParForHole(i);
-            boolean isCurrent = (i == (compScore.getCurrentHoleNumber() - 1));
+            float rowY = y - (Gdx.graphics.getHeight() * 0.05f) - ((i - startHole) * rowH);
+            boolean isCurrent = (session != null && i == session.getCurrentHoleIndex());
+
+            int holeScore = session.getCompetitiveScore().getScoreForHole(i);
+            int holePar = session.getCompetitiveScore().getParForHole(i);
 
             font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
-            font.draw(batch, String.format("%02d", (i + 1)), startX, rowY);
-            font.draw(batch, "" + holePar, startX + colSpacing, rowY);
+
+            drawCentered(batch, font, String.format("%02d", i + 1), xHole, rowY, cwH);
+            drawCentered(batch, font, String.valueOf(holePar), xPar, rowY, cwP);
 
             if (holeScore > 0) {
                 runningTotal += holeScore;
-                int holeDiff = holeScore - holePar;
-                font.setColor(holeDiff < 0 ? Color.CYAN : (holeDiff > 0 ? Color.RED : Color.WHITE));
-                font.draw(batch, "" + holeScore, startX + colSpacing * 2, rowY);
+                int diff = holeScore - holePar;
+                font.setColor(diff < 0 ? Color.CYAN : (diff > 0 ? Color.RED : Color.WHITE));
+                drawCentered(batch, font, String.valueOf(holeScore), xScore, rowY, cwS);
+
                 font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
-                font.draw(batch, "" + runningTotal, startX + colSpacing * 3, rowY);
+                drawCentered(batch, font, String.valueOf(runningTotal), xTotal, rowY, cwT);
             } else {
                 font.setColor(Color.DARK_GRAY);
-                font.draw(batch, "-", startX + colSpacing * 2, rowY);
-                font.draw(batch, "-", startX + colSpacing * 3, rowY);
+                drawCentered(batch, font, "-", xScore, rowY, cwS);
+                drawCentered(batch, font, "-", xTotal, rowY, cwT);
             }
         }
+    }
+
+    private void drawCentered(SpriteBatch batch, BitmapFont font, String text, float x, float y, float width) {
+        layout.setText(font, text);
+        font.draw(batch, text, x + (width / 2f) - (layout.width / 2f), y);
     }
 }

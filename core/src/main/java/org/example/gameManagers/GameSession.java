@@ -1,6 +1,7 @@
 package org.example.gameManagers;
 
 import org.example.GameConfig;
+import org.example.ball.CompetitiveScore;
 import org.example.terrain.level.LevelData;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,8 +18,11 @@ public class GameSession {
 
     private int currentHoleIndex = 0;
     private List<LevelData> courseLayout;
-    private int[] scores; // Index matches courseLayout
+    private int[] scores;
     private boolean isFinished = false;
+    private boolean isStarted = false;
+
+    private CompetitiveScore competitiveScore;
 
     public GameSession(long masterSeed, GameConfig.Difficulty difficulty, GameMode mode) {
         this.masterSeed = masterSeed;
@@ -28,43 +32,59 @@ public class GameSession {
         this.courseLayout = new ArrayList<>();
     }
 
-    // --- State Logic ---
+    public void setCourseLayout(List<LevelData> layout) {
+        this.courseLayout = layout;
+        this.competitiveScore = new CompetitiveScore(layout);
+    }
 
     public void advanceHole(int strokes) {
-        if (currentHoleIndex < 18) {
+        isStarted = true;
+        if (currentHoleIndex < courseLayout.size()) {
             scores[currentHoleIndex] = strokes;
+
+            // Sync with the CompetitiveScore object
+            if (competitiveScore != null) {
+                competitiveScore.recordStroke(currentHoleIndex, strokes);
+            }
+
             currentHoleIndex++;
+            if (competitiveScore != null) {
+                competitiveScore.setCurrentHoleIndex(currentHoleIndex);
+            }
         }
-        if (currentHoleIndex >= 18) {
+
+        if (currentHoleIndex >= courseLayout.size() && !courseLayout.isEmpty()) {
             isFinished = true;
         }
     }
 
+    public CompetitiveScore getCompetitiveScore() {
+        return competitiveScore;
+    }
+
+    public List<LevelData> getCourseLayout() { return courseLayout; }
+    public int getCurrentHoleIndex() { return currentHoleIndex; }
+    public boolean isFinished() { return isFinished; }
+    public int[] getScores() { return scores; }
+    public long getMasterSeed() { return masterSeed; }
+    public GameConfig.Difficulty getDifficulty() { return difficulty; }
+    public GameMode getMode() { return mode; }
+    public boolean isStarted() { return isStarted; }
+    public void setStarted(boolean started) { this.isStarted = started; }
+
     public LevelData getCurrentLevel() {
-        if (courseLayout == null || courseLayout.isEmpty()) return null;
+        if (courseLayout == null || currentHoleIndex >= courseLayout.size()) return null;
         return courseLayout.get(currentHoleIndex);
     }
 
     public int getTotalScore() {
+        if (competitiveScore != null) {
+            return competitiveScore.getTotalStrokes();
+        }
         int total = 0;
         for (int i = 0; i < currentHoleIndex; i++) {
             total += scores[i];
         }
         return total;
-    }
-
-
-    public long getMasterSeed() { return masterSeed; }
-    public GameConfig.Difficulty getDifficulty() { return difficulty; }
-    public GameMode getMode() { return mode; }
-    public int getCurrentHoleIndex() { return currentHoleIndex; }
-    public boolean isFinished() { return isFinished; }
-
-    public void setCourseLayout(List<LevelData> layout) {
-        this.courseLayout = layout;
-    }
-
-    public List<LevelData> getCourseLayout() {
-        return courseLayout;
     }
 }

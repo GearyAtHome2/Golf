@@ -147,18 +147,14 @@ public class HUD {
         mobileUIInitialized = true;
     }
 
-    public void renderStartMenu(int selection, MainMenuRenderer.MenuState state) {
+    public void renderStartMenu(int selection, MainMenuRenderer.MenuState state, GameSession standard, GameSession daily) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-
-        // Passing the state through to the refactored renderer
-        mainMenuRenderer.render(batch, font, viewport, selection, state);
-
+        mainMenuRenderer.render(batch, font, viewport, selection, state, standard, daily);
         batch.end();
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && startMenuStage != null) {
-            // Android Stage still handles the button overlay if applicable
             startMenuStage.act();
             startMenuStage.draw();
         }
@@ -207,7 +203,8 @@ public class HUD {
         }
     }
 
-    public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, CompetitiveScore compScore, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
+    // Removed compScore from the parameters as it is redundant
+    public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, GameSession session, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
         if (batch.isDrawing()) batch.end();
 
         boolean isAndroid = com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
@@ -275,16 +272,20 @@ public class HUD {
             renderShotDistance(ball, shotScale);
         }
 
-        renderClubAndBallInfo(isPractice, levelData, currentClub, ball, compScore, terrain);
+        // UPDATED: Removed compScore from this call as well
+        renderClubAndBallInfo(isPractice, levelData, currentClub, ball, session, terrain);
         batch.end();
 
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
 
+    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, GameSession session, Terrain terrain) {
+        gameInfoRenderer.render(batch, font, viewport, config, isPractice, levelData, club, ball, session, terrain, shotCount);
+    }
+
     private void updateSpinInput(float delta, GameInputProcessor input) {
         float SPIN_SPEED = 2.0f;
 
-        // We update the HUD's master spinDot
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
         }
@@ -302,7 +303,6 @@ public class HUD {
             spinDot.nor();
         }
 
-        // Sync the master dot back to the indicator so the visual matches the keyboard input
         spinIndicator.getSpinDot().set(this.spinDot);
     }
 
@@ -358,7 +358,6 @@ public class HUD {
             tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             viewport.unproject(tempV3);
 
-            // FIXED: Using isTouchInsideClubInfo logic here to ensure consistency
             if (isTouchInsideClubInfo(tempV3.x, tempV3.y)) {
                 showInfoDisplay = false;
                 if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
@@ -372,10 +371,6 @@ public class HUD {
 
     public void renderClubInfo(Club club) {
         overlayRenderer.renderClubInfo(batch, shapeRenderer, font, viewport, club);
-    }
-
-    private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, CompetitiveScore compScore, Terrain terrain) {
-        gameInfoRenderer.render(batch, font, viewport, config, isPractice, levelData, club, ball, compScore, terrain, shotCount);
     }
 
     private void renderShotDistance(Ball ball, float baseScale) {
@@ -396,8 +391,8 @@ public class HUD {
                 font.setColor(Color.WHITE);
             }
 
-            float marginX = viewport.getWorldWidth() * 0.02f; // 5% margin from right
-            float marginY = viewport.getWorldHeight() * 0.2f; // 10% margin from bottom
+            float marginX = viewport.getWorldWidth() * 0.02f;
+            float marginY = viewport.getWorldHeight() * 0.2f;
 
             String text = String.format("DISTANCE: %.1f yds", distanceToShow);
 
@@ -405,14 +400,8 @@ public class HUD {
             float drawX = viewport.getWorldWidth() - layout.width - marginX;
             float drawY = marginY + layout.height;
 
-            drawShadowedText(
-                    text,
-                    drawX,
-                    drawY,
-                    font.getColor()
-            );
+            drawShadowedText(text, drawX, drawY, font.getColor());
 
-            // Reset state
             font.setColor(Color.WHITE);
             font.getData().setScale(1.0f);
         }
@@ -439,46 +428,6 @@ public class HUD {
         }
     }
 
-    private void drawSpinUI() {
-        float screenW = viewport.getWorldWidth();
-        float screenH = viewport.getWorldHeight();
-
-        float marginX = screenW * 0.06f;
-        float marginY = screenH * 0.12f;
-        float radius = screenH * 0.065f;
-        float baseScale = screenH * 0.0013f;
-
-        float centerX = marginX;
-        float centerY = marginY;
-
-        boolean isLocked = minigameController.isActive() && minigameController.isNeedleStopped();
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0.1f, 0.1f, 0.1f, 1f);
-        shapeRenderer.circle(centerX, centerY, radius);
-
-        shapeRenderer.setColor(isLocked ? Color.LIGHT_GRAY : Color.WHITE);
-        shapeRenderer.circle(centerX, centerY, radius - (4f * baseScale));
-
-        shapeRenderer.setColor(isLocked ? Color.MAROON : Color.RED);
-        float dotRadius = 4.5f * baseScale;
-        float dotOffsetLimit = radius - (10f * baseScale);
-
-        shapeRenderer.circle(
-                centerX + (spinDot.x * dotOffsetLimit),
-                centerY + (spinDot.y * dotOffsetLimit),
-                dotRadius
-        );
-        shapeRenderer.end();
-
-        batch.begin();
-        font.getData().setScale(baseScale * 0.65f);
-        font.setColor(Color.WHITE);
-        layout.setText(font, "SPIN");
-        font.draw(batch, "SPIN", centerX - (layout.width / 2f), centerY - radius - (radius * 0.3f));
-        batch.end();
-    }
-
     public void logShotInitiated(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod) {
         minigameController.start(ballPos, club, diff, powerMod, config.animSpeed, config.difficulty);
     }
@@ -495,11 +444,11 @@ public class HUD {
         notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f);
     }
 
-    public void renderVictory(int shots, LevelData levelData, CompetitiveScore compScore) {
+    public void renderVictory(int shots, LevelData levelData, GameSession session) {
         if (gameplayTable != null) gameplayTable.setVisible(false);
         if (victoryTable != null) victoryTable.setVisible(true);
         batch.begin();
-        victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, compScore);
+        victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session);
         batch.end();
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && stage != null) {
@@ -561,14 +510,12 @@ public class HUD {
         return overlayRenderer.getInstructionRenderer().isClickInside(x, y);
     }
 
-    // FIXED: Synchronized these coordinates with the ClubInfoRenderer visual box
     public boolean isTouchInsideClubInfo(float x, float y) {
         boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
 
-        // Match ratios from ClubInfoRenderer
         float widthRatio = isAndroid ? 0.22f : 0.25f;
         float heightRatio = isAndroid ? 0.18f : 0.25f;
-        float yRatio = isAndroid ? 0.22f : 0.175f; // Using the fixed yRatio of 0.32f
+        float yRatio = isAndroid ? 0.22f : 0.175f;
 
         float width = viewport.getWorldWidth() * widthRatio;
         float height = viewport.getWorldHeight() * heightRatio;

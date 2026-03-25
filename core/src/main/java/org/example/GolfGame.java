@@ -79,9 +79,12 @@ public class GolfGame extends ApplicationAdapter {
     private ModelInstance highlightInstance;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
 
+    // Track sessions separately
     private GameSession activeSession;
+    private GameSession standardSession;
+    private GameSession dailySession;
+
     private int pendingMatchMode = 0;
-    private CompetitiveScore competitiveScore;
     private final Vector3 tempV3 = new Vector3();
 
     @Override
@@ -216,7 +219,7 @@ public class GolfGame extends ApplicationAdapter {
         Gdx.input.setCursorCatched(!showMouse);
 
         if (currentState == GameState.START) {
-            hud.renderStartMenu(menuSelection, currentMenuState);
+            hud.renderStartMenu(menuSelection, currentMenuState, standardSession, dailySession);
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
@@ -369,8 +372,11 @@ public class GolfGame extends ApplicationAdapter {
         ball.getPosition().set(terrain.getHolePosition());
         particleManager.spawn(terrain.getHolePosition(), Color.GOLD, 40, vel + 5, 50.0f, 4.0f);
 
-        if (currentState == GameState.COMPETITIVE && activeSession != null && competitiveScore != null) {
-            competitiveScore.recordStroke(activeSession.getCurrentHoleIndex(), hud.getShotCount());
+        if (currentState == GameState.COMPETITIVE && activeSession != null) {
+            activeSession.getCompetitiveScore().recordStroke(
+                    activeSession.getCurrentHoleIndex(),
+                    hud.getShotCount()
+            );
         }
     }
 
@@ -400,18 +406,27 @@ public class GolfGame extends ApplicationAdapter {
 
     private void renderUI() {
         boolean isPractice = (currentState == GameState.PRACTICE_RANGE || currentState == GameState.PUTTING_GREEN);
-        boolean isComp = (currentState == GameState.COMPETITIVE);
-
         if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
             hud.renderCameraConfig(inputProcessor);
         } else if (isVictory) {
-            hud.renderVictory(hud.getShotCount(), currentLevelData, isComp ? competitiveScore : null);
+            hud.renderVictory(hud.getShotCount(), currentLevelData, activeSession);
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(currentLevelData, inputProcessor, activeSession);
         } else {
-            hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), isComp ? competitiveScore : null, inputProcessor, showClubInfo, shotController);
+            hud.renderPlayingHUD(
+                    currentClub,
+                    ball,
+                    isPractice,
+                    currentLevelData,
+                    camera,
+                    levelManager.getTerrain(),
+                    activeSession, // This now contains the int[] scores array
+                    inputProcessor,
+                    showClubInfo,
+                    shotController
+            );
         }
     }
 
@@ -461,7 +476,7 @@ public class GolfGame extends ApplicationAdapter {
     private void exitToMainMenu() {
         shotController.reset();
         hud.resetShots();
-        activeSession = null;
+        // activeSession is handled by the start menu logic now
         currentState = GameState.START;
         currentMenuState = MenuState.MAIN;
         menuSelection = 0;
@@ -561,23 +576,32 @@ public class GolfGame extends ApplicationAdapter {
 
     private void handleEighteenMenuSelection() {
         switch (menuSelection) {
-            case 0 -> {
-                pendingMatchMode = 0;
-                currentMenuState = MenuState.DIFFICULTY_SELECT;
-                menuSelection = 1;
+            case 0 -> { // Standard 18
+                if (standardSession != null && !standardSession.isFinished()) {
+                    activateSession(standardSession);
+                    currentState = GameState.COMPETITIVE;
+                    initLevel();
+                } else {
+                    pendingMatchMode = 0;
+                    currentMenuState = MenuState.DIFFICULTY_SELECT;
+                }
             }
-            case 1 -> {
-                pendingMatchMode = 1;
-                currentMenuState = MenuState.DIFFICULTY_SELECT;
-                menuSelection = 1;
-            }
-            case 2 -> {
-                currentMenuState = MenuState.MAIN;
-                menuSelection = 1;
+            case 1 -> { // Daily
+                if (dailySession != null && !dailySession.isFinished()) {
+                    activateSession(dailySession);
+                    currentState = GameState.COMPETITIVE;
+                    initLevel();
+                } else {
+                    pendingMatchMode = 1;
+                    currentMenuState = MenuState.DIFFICULTY_SELECT;
+                }
             }
         }
     }
 
+    private void activateSession(GameSession session) {
+        this.activeSession = session;
+    }
     private void handleDifficultySelection() {
         int backButtonIndex = GameConfig.Difficulty.values().length;
 
@@ -592,11 +616,11 @@ public class GolfGame extends ApplicationAdapter {
             config.setDifficulty(selectedDifficulty);
 
             if (pendingMatchMode == 0) {
-                startCompetitiveMatch(-1);
+                startCompetitiveMatch(-1, GameSession.GameMode.STANDARD_18);
             } else {
                 Calendar cal = Calendar.getInstance();
                 long dailySeed = cal.get(Calendar.YEAR) * 10000L + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
-                startCompetitiveMatch(applySecretSauce(dailySeed));
+                startCompetitiveMatch(applySecretSauce(dailySeed), GameSession.GameMode.DAILY_CHALLENGE);
             }
         }
     }
@@ -611,11 +635,16 @@ public class GolfGame extends ApplicationAdapter {
         return seed;
     }
 
-    private void startCompetitiveMatch(long seed) {
+    private void startCompetitiveMatch(long seed, GameSession.GameMode mode) {
         currentState = GameState.COMPETITIVE;
-        activeSession = new GameSession(seed, config.difficulty, GameSession.GameMode.STANDARD_18);
+
+        // Create the session
+        activeSession = new GameSession(seed, config.difficulty, mode);
         activeSession.setCourseLayout(LevelDataGenerator.generate18Holes(seed));
-        competitiveScore = new CompetitiveScore(activeSession.getCourseLayout());
+
+        if (mode == GameSession.GameMode.STANDARD_18) standardSession = activeSession;
+        else dailySession = activeSession;
+
         shotController.setGuidelineEnabled(false);
         initLevel();
     }
@@ -694,7 +723,6 @@ public class GolfGame extends ApplicationAdapter {
         if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
             if (isVictory && activeSession != null && activeSession.getCurrentHoleIndex() + 1 < activeSession.getCourseLayout().size()) {
                 activeSession.advanceHole(hud.getShotCount());
-                competitiveScore.setCurrentHoleIndex(activeSession.getCurrentHoleIndex());
                 currentState = GameState.COMPETITIVE;
                 initLevel();
             }

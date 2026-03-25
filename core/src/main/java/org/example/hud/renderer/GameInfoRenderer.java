@@ -10,18 +10,21 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.Ball;
-import org.example.ball.CompetitiveScore;
+import org.example.gameManagers.GameSession;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
+
+import java.util.List;
 
 public class GameInfoRenderer {
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
     private final GlyphLayout layout = new GlyphLayout();
 
+    // Removed compScore parameter; now using session exclusively
     public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, GameConfig config,
                        boolean isPractice, LevelData levelData, Club club, Ball ball,
-                       CompetitiveScore compScore, Terrain terrain, int shotCount) {
+                       GameSession session, Terrain terrain, int shotCount) {
 
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
@@ -29,7 +32,6 @@ public class GameInfoRenderer {
 
         float baseScale = (screenH * 0.0015f) * (isAndroid ? 1.5f : 1.0f);
 
-        // --- TOP LEFT: MISSION / SCORE INFO ---
         float marginX = screenW * 0.02f;
         float currentY = isAndroid ? screenH * 0.97f : screenH * 0.96f;
         float lineSpacing = isAndroid ? screenH * 0.06f : screenH * 0.045f;
@@ -45,26 +47,52 @@ public class GameInfoRenderer {
             currentY -= lineSpacing;
             font.getData().setScale(baseScale * 0.75f);
 
-            if (isAndroid) {
-                float currentX = marginX;
-                if (compScore != null) {
-                    String scoreStr = "HOLE " + compScore.getCurrentHoleNumber() + " | " + compScore.getToParString();
+            if (session != null) {
+                // Calculate "To Par" directly from the session data
+                String toParStr = calculateToParString(session);
+                String scoreStr = "HOLE " + (session.getCurrentHoleIndex() + 1) + " | " + toParStr;
+
+                if (isAndroid) {
                     layout.setText(font, scoreStr);
-                    drawShadowedText(batch, font, scoreStr, currentX, currentY, Color.YELLOW);
-                    currentX += layout.width + (screenW * 0.04f);
-                }
-                drawShadowedText(batch, font, "SHOTS: " + shotCount, currentX, currentY, Color.WHITE);
-            } else {
-                if (compScore != null) {
-                    String scoreStr = "HOLE " + compScore.getCurrentHoleNumber() + " | " + compScore.getToParString();
+                    drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
+                    float shotsX = marginX + layout.width + (screenW * 0.04f);
+                    drawShadowedText(batch, font, "SHOTS: " + shotCount, shotsX, currentY, Color.WHITE);
+                } else {
                     drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
                     currentY -= lineSpacing;
+                    drawShadowedText(batch, font, "SHOTS: " + shotCount, marginX, currentY, Color.WHITE);
                 }
+            } else {
                 drawShadowedText(batch, font, "SHOTS: " + shotCount, marginX, currentY, Color.WHITE);
             }
         }
 
-        // --- BOTTOM RIGHT: CLUB & PHYSICS INFO ---
+        // --- BOTTOM RIGHT: CLUB INFO ---
+        renderBottomRightInfo(batch, font, config, ball, club, terrain, screenW, screenH, baseScale, lineSpacing, isAndroid);
+    }
+
+    private String calculateToParString(GameSession session) {
+        int totalStrokes = 0;
+        int totalPar = 0;
+        int[] scores = session.getScores();
+        List<LevelData> layout = session.getCourseLayout();
+
+        // Calculate based on all COMPLETED holes
+        for (int i = 0; i < session.getCurrentHoleIndex(); i++) {
+            if (scores[i] > 0) {
+                totalStrokes += scores[i];
+                totalPar += layout.get(i).getPar();
+            }
+        }
+
+        int diff = totalStrokes - totalPar;
+        if (diff == 0) return "EVEN";
+        return (diff > 0 ? "+" : "") + diff;
+    }
+
+    private void renderBottomRightInfo(SpriteBatch batch, BitmapFont font, GameConfig config, Ball ball, Club club,
+                                       Terrain terrain, float screenW, float screenH, float baseScale,
+                                       float lineSpacing, boolean isAndroid) {
         float rightMarginX = screenW * 0.98f;
         float bottomY = screenH * 0.06f;
 
@@ -78,7 +106,6 @@ public class GameInfoRenderer {
 
         float clubYOffset = isAndroid ? (lineSpacing * 2.05f) : (lineSpacing * 1.8f);
         drawShadowedText(batch, font, clubName, rightMarginX - layout.width, bottomY + clubYOffset, Color.WHITE);
-
         font.getData().setScale(1.0f);
     }
 
