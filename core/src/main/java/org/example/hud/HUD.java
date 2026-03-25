@@ -67,6 +67,8 @@ public class HUD {
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
     private TextButton infoToggleBtn;
+
+    private GameSession activeSession;
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
     private boolean showInfoDisplay = false;
     private final Vector3 tempV3 = new Vector3();
@@ -87,6 +89,9 @@ public class HUD {
         this.spinIndicator = new SpinIndicator(shapeRenderer, font);
         this.preShotDebugActor = new PreShotDebugActor(font);
         this.minigameController.setNotificationManager(this.notificationManager);
+        this.minigameController.setOnShotFinalized(() -> {
+            incrementShots();
+        });
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
         pm.fill();
@@ -104,8 +109,18 @@ public class HUD {
         font.draw(batch, text, x, y);
     }
 
+    public void setActiveSession(GameSession session) {
+        this.activeSession = session;
+        if (session != null) {
+            this.shotCount = session.getCurrentHoleStrokes();
+        }
+    }
+
     public void incrementShots() {
         shotCount++;
+        if (activeSession != null) {
+            activeSession.incrementStrokes();
+        }
     }
 
     public void resetShots() {

@@ -43,6 +43,8 @@ public class MinigameController {
     private Color glowColor = new Color(0, 0, 0, 0);
     private final Vector3 activeBallPos = new Vector3();
 
+    private Runnable onShotFinalized;
+
     public void setNotificationManager(NotificationManager notificationManager) {
         this.notificationManager = notificationManager;
     }
@@ -126,6 +128,10 @@ public class MinigameController {
         minigameUI.draw(shapeRenderer, batch, font, viewport.getWorldWidth(), viewport.getWorldHeight(), engine, barSwellTimer, glowTimer, glowColor, activeAnims);
     }
 
+    public void setOnShotFinalized(Runnable callback) {
+        this.onShotFinalized = callback;
+    }
+
     private void advanceStep(GameConfig.AnimSpeed animSetting, GameConfig.Difficulty gameDiff) {
         step++;
         timer = 0;
@@ -164,6 +170,11 @@ public class MinigameController {
         glowTimer = 1.0f;
         lastResult = engine.calculateResult(engine.needlePos);
         glowColor = lastResult.rating.color;
+
+        // Trigger the callback if it exists
+        if (onShotFinalized != null) {
+            onShotFinalized.run();
+        }
 
         if (notificationManager != null) {
             notificationManager.showFeedback(lastResult, 2.0f);

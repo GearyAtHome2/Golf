@@ -139,12 +139,15 @@ public class GolfGame extends ApplicationAdapter {
         LevelFactory.LevelCreationResult result;
 
         if (currentState == GameState.COMPETITIVE && activeSession != null) {
+            hud.setActiveSession(activeSession);
+
             currentLevelData = activeSession.getCourseLayout().get(activeSession.getCurrentHoleIndex());
             ITerrainGenerator generator = new ClassicGenerator(currentLevelData);
             result = new LevelFactory.LevelCreationResult(generator, currentLevelData, Club.DRIVER, currentLevelData.getWaterLevel(), currentLevelData.getDistance());
         } else {
             result = levelFactory.createLevel(mode, manualSeed);
             currentLevelData = result.data;
+            hud.resetShots(); // Non-competitive resets to 0
         }
 
         currentClub = result.defaultClub;
@@ -153,7 +156,7 @@ public class GolfGame extends ApplicationAdapter {
         setupSpawnAndPins();
         setupInputProcessor();
 
-        hud.resetShots();
+        // hud.resetShots(); <- REMOVE THIS LINE, it was overriding the sync above
         isVictory = false;
         resetTimer = 0f;
         particleManager.clear();
@@ -250,7 +253,6 @@ public class GolfGame extends ApplicationAdapter {
             PhysicsProfiler.startSection("ShotControllerCharge");
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
-                    hud.incrementShots();
                     if (GameState.PRACTICE_RANGE != currentState) {
                         hud.resetSpin();
                     }
@@ -722,7 +724,7 @@ public class GolfGame extends ApplicationAdapter {
     private void handleNewLevelInput() {
         if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
             if (isVictory && activeSession != null && activeSession.getCurrentHoleIndex() + 1 < activeSession.getCourseLayout().size()) {
-                activeSession.advanceHole(hud.getShotCount());
+                activeSession.advanceHole();
                 currentState = GameState.COMPETITIVE;
                 initLevel();
             }

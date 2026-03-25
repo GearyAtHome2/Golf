@@ -17,6 +17,7 @@ public class GameSession {
     private final GameMode mode;
 
     private int currentHoleIndex = 0;
+    private int currentHoleStrokes = 0; // The "In-Progress" counter
     private List<LevelData> courseLayout;
     private int[] scores;
     private boolean isFinished = false;
@@ -37,17 +38,24 @@ public class GameSession {
         this.competitiveScore = new CompetitiveScore(layout);
     }
 
-    public void advanceHole(int strokes) {
-        isStarted = true;
-        if (currentHoleIndex < courseLayout.size()) {
-            scores[currentHoleIndex] = strokes;
+    public void incrementStrokes() {
+        this.currentHoleStrokes++;
+        this.isStarted = true;
+    }
 
-            // Sync with the CompetitiveScore object
+    public void advanceHole() {
+        if (currentHoleIndex < courseLayout.size()) {
+            // Use the internally tracked strokes
+            scores[currentHoleIndex] = currentHoleStrokes;
+
             if (competitiveScore != null) {
-                competitiveScore.recordStroke(currentHoleIndex, strokes);
+                competitiveScore.recordStroke(currentHoleIndex, currentHoleStrokes);
             }
 
+            // Reset for the next hole
+            currentHoleStrokes = 0;
             currentHoleIndex++;
+
             if (competitiveScore != null) {
                 competitiveScore.setCurrentHoleIndex(currentHoleIndex);
             }
@@ -56,6 +64,10 @@ public class GameSession {
         if (currentHoleIndex >= courseLayout.size() && !courseLayout.isEmpty()) {
             isFinished = true;
         }
+    }
+
+    public int getCurrentHoleStrokes() {
+        return currentHoleStrokes;
     }
 
     public CompetitiveScore getCompetitiveScore() {
