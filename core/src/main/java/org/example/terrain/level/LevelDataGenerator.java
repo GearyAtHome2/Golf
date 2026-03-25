@@ -5,23 +5,26 @@ import org.example.terrain.objects.Tree.TreeScheme;
 
 import java.util.*;
 
-import static org.example.terrain.level.LevelData.Archetype.CLIPPERTON_ROCK;
-import static org.example.terrain.level.LevelData.Archetype.CRATER_FIELDS;
-
 public class LevelDataGenerator {
 
-    public static LevelData createRandomLevelData() {
-        return createFixedLevelData(System.nanoTime());
+    public static LevelData createRandomLevelData(long seed) {
+        return createFixedLevelData(seed);
     }
 
     public static LevelData createFixedLevelData(long seed) {
+        Random r = new Random(seed);
+        LevelData.Archetype[] types = LevelData.Archetype.values();
+        LevelData.Archetype selectedType = types[r.nextInt(types.length)];
+        return createFixedLevelData(seed, selectedType);
+    }
+
+    public static LevelData createFixedLevelData(long seed, LevelData.Archetype forcedType) {
         LevelData data = new LevelData();
         data.setSeed(seed);
         Random r = new Random(seed);
 
-        LevelData.Archetype[] types = LevelData.Archetype.values();
-        LevelData.Archetype selectedType = types[r.nextInt(types.length)];
-        selectedType = CRATER_FIELDS;
+        // Core logic now uses the passed-in archetype
+        LevelData.Archetype selectedType = forcedType;
         data.setArchetype(selectedType);
 
         LevelData.TerrainAlgorithm algo;
@@ -410,7 +413,7 @@ public class LevelDataGenerator {
                 cohesion = 1.0f;
                 distance = Math.round(450 + r.nextFloat() * 50);
                 par = 4;
-                mapWidth = distance; // Scaling map width for atoll
+                mapWidth = distance;
                 break;
             case STANDARD_LINKS:
             default:
@@ -428,7 +431,6 @@ public class LevelDataGenerator {
                 break;
         }
 
-        // --- 3. Final Calculations & Shot Index Mapping ---
         float actualWindSpeed = windMin + r.nextFloat() * (windMax - windMin);
         float randomizedTreeH = treeH * (0.8f + r.nextFloat() * 0.4f);
 
@@ -468,28 +470,29 @@ public class LevelDataGenerator {
         Vector3 windDir = new Vector3(r.nextFloat() - 0.5f, 0, r.nextFloat() - 0.5f).nor();
         data.setWind(windDir.scl(actualWindSpeed));
 
-        System.out.printf("[GEN] %s | Index: %.2f | Wind: %.1f MPH | Dist: %d | MapWidth: %d | Seed: %d%n",
-                selectedType, finalShotIndex, actualWindSpeed, distance, mapWidth, seed);
-
         return data;
     }
 
-    public static List<LevelData> generate18Holes() {
+    public static List<LevelData> generate18Holes(long seed) {
+        if (seed < 0) seed = System.nanoTime();
+
+        Random masterR = new Random(seed);
         List<LevelData> pool = new ArrayList<>();
         LevelData.Archetype[] archetypes = LevelData.Archetype.values();
 
+        // 1. Force the first batch to include one of every archetype
         for (LevelData.Archetype arch : archetypes) {
-            pool.add(createLevelDataForArchetype(arch));
+            pool.add(createFixedLevelData(masterR.nextLong(), arch));
         }
 
+        // 2. Fill the rest with truly random levels
         while (pool.size() < 18) {
-            pool.add(createRandomLevelData());
+            pool.add(createFixedLevelData(masterR.nextLong()));
         }
 
         pool.sort(Comparator.comparingDouble(LevelData::getShotIndex).reversed());
 
         List<LevelData> finalCourse = new ArrayList<>();
-
         while (!pool.isEmpty()) {
             boolean foundFit = false;
             LevelData.Archetype lastArch = finalCourse.isEmpty() ? null : finalCourse.get(finalCourse.size() - 1).getArchetype();
@@ -503,17 +506,9 @@ public class LevelDataGenerator {
             }
 
             if (!foundFit) {
-                LevelData misfit = pool.remove(0);
-                finalCourse.add(misfit);
+                finalCourse.add(pool.remove(0));
                 resolveEndConflict(finalCourse);
             }
-        }
-
-        System.out.println("\n--- [DIVERSE & ORDERED COURSE GENERATED] ---");
-        for (int i = 0; i < finalCourse.size(); i++) {
-            LevelData ld = finalCourse.get(i);
-            System.out.printf("Hole %02d | Index: %5.2f | Type: %-15s | MapWidth: %d | Seed: %d%n",
-                    (i + 1), ld.getShotIndex(), ld.getArchetype(), ld.getMapWidth(), ld.getSeed());
         }
 
         return finalCourse;
@@ -522,7 +517,6 @@ public class LevelDataGenerator {
     private static void resolveEndConflict(List<LevelData> course) {
         if (course.size() < 2) return;
         int last = course.size() - 1;
-
         if (course.get(last).getArchetype() == course.get(last - 1).getArchetype()) {
             for (int i = 1; i < last - 1; i++) {
                 LevelData.Archetype lastType = course.get(last).getArchetype();
@@ -534,15 +528,5 @@ public class LevelDataGenerator {
                 }
             }
         }
-    }
-
-    public static LevelData createLevelDataForArchetype(LevelData.Archetype arch) {
-        LevelData ld = createRandomLevelData();
-        int safety = 0;
-        while (ld.getArchetype() != arch && safety < 100) {
-            ld = createRandomLevelData();
-            safety++;
-        }
-        return ld;
     }
 }

@@ -5,7 +5,7 @@ public class GameConfig {
     public CameraType cameraType = CameraType.FREE;
 
     public AnimSpeed animSpeed = AnimSpeed.NONE;
-    public Difficulty difficulty = Difficulty.EASY;
+    public Difficulty difficulty = Difficulty.NOVICE;
     public boolean particlesEnabled = true;
 
     // Game Speed cycle: 0.25, 0.5, 1, 2, 3, 5
@@ -24,7 +24,7 @@ public class GameConfig {
     }
 
     public enum Difficulty {
-        EASY(0.3f), MEDIUM(0.6f), HARD(1.0f); // Updated to 0.3, 0.6, 1.0
+        NOVICE(0.17f), INTERMEDIATE(0.3f), ADVANCED(0.52f), PRO(0.72f), TOUR_PRO(1f);
         public final float needleSpeedMult;
 
         Difficulty(float s) {

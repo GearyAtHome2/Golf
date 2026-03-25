@@ -24,14 +24,13 @@ public class LevelFactory {
                 distance = 600;
                 break;
             case PUTTING_GREEN:
-                long pgSeed = (manualSeed == -1) ? MathUtils.random(Long.MAX_VALUE) : manualSeed;
-                generator = new PuttingGreenGenerator(pgSeed);
+                generator = new PuttingGreenGenerator(manualSeed);
                 defaultClub = Club.PUTTER;
                 waterLevel = -5.0f;
                 distance = 160;
                 break;
-            default: // COMPETITIVE or PLAYING
-                data = (manualSeed != -1) ? LevelDataGenerator.createFixedLevelData(manualSeed) : LevelDataGenerator.createRandomLevelData();
+            default:
+                data = (LevelDataGenerator.createFixedLevelData(manualSeed));
                 generator = new ClassicGenerator(data);
                 defaultClub = Club.DRIVER;
                 waterLevel = data.getWaterLevel();

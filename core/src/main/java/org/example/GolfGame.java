@@ -24,6 +24,7 @@ import org.example.gameManagers.LevelManager;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
 import org.example.hud.HUD;
+import org.example.hud.renderer.MainMenuRenderer.MenuState;
 import org.example.input.DesktopInputProcessor;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
@@ -36,13 +37,14 @@ import org.example.terrain.level.LevelDataGenerator;
 import org.example.terrain.level.LevelFactory;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 public class GolfGame extends ApplicationAdapter {
 
     private enum GameState {START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
-
     private GameState currentState = GameState.START;
+    private MenuState currentMenuState = MenuState.MAIN;
     private GameState previousState = GameState.PLAYING;
     private GameState returnState = GameState.PLAYING;
 
@@ -85,7 +87,6 @@ public class GolfGame extends ApplicationAdapter {
     @Override
     public void create() {
         try {
-            // MOVE VIEWPORT INITIALIZATION TO THE VERY TOP
             setupCamera();
             setupEnvironment();
 
@@ -183,7 +184,6 @@ public class GolfGame extends ApplicationAdapter {
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
 
-            // Add stages only if they are not null OR HUD can provide a placeholder
             if (currentState == GameState.START) {
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStartMenuStage();
                 if (s != null) multiplexer.addProcessor(s);
@@ -194,8 +194,6 @@ public class GolfGame extends ApplicationAdapter {
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStage();
                 if (s != null) multiplexer.addProcessor(s);
             }
-            // For INSTRUCTIONS and CAMERA_CONFIG, we don't add a stage, 
-            // only the GestureDetector for scrolling via inputProcessor
             multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
             Gdx.input.setInputProcessor(multiplexer);
         } else {
@@ -208,10 +206,8 @@ public class GolfGame extends ApplicationAdapter {
         float delta = Gdx.graphics.getDeltaTime();
         inputProcessor.update(delta);
 
-        // 1. Process Input first
         handleInput();
 
-        // 2. Clear Screen
         gameViewport.apply();
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
@@ -220,23 +216,16 @@ public class GolfGame extends ApplicationAdapter {
         Gdx.input.setCursorCatched(!showMouse);
 
         if (currentState == GameState.START) {
-            hud.renderStartMenu(menuSelection);
+            hud.renderStartMenu(menuSelection, currentMenuState);
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
             hud.renderCameraConfig(inputProcessor);
         } else {
-            // 3. Update & Profile Physics/Logic
             updateLogic(delta);
-
-            // 4. Render the 3D Scene
             renderScene();
-
-            // 5. Render HUD on top
             renderUI();
         }
-
-//        PhysicsProfiler.updateAndLog(delta);
 
         if (inputProcessor instanceof MobileInputProcessor) {
             ((MobileInputProcessor) inputProcessor).resetDrags();
@@ -255,13 +244,12 @@ public class GolfGame extends ApplicationAdapter {
 
             if (hud.wasMinigameCanceled()) shotController.reset();
 
-            // Profile the Shot Charging logic (input handling/vector math)
             PhysicsProfiler.startSection("ShotControllerCharge");
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
                     hud.incrementShots();
                     if (GameState.PRACTICE_RANGE != currentState) {
-                        hud.resetSpin();//DON'T RESET SPIN IN PRACTICE MODE - BETTER FOR USER.
+                        hud.resetSpin();
                     }
                     hasCurrentBallBeenHit = true;
                     shotController.update(0, ball, camera.direction, currentClub, hud, terrain, inputProcessor);
@@ -269,13 +257,10 @@ public class GolfGame extends ApplicationAdapter {
             }
             PhysicsProfiler.endSection("ShotControllerCharge");
 
-            // This call now internally profiles several sub-sections
             ball.update(effDelta, terrain, currentWind);
-
             cameraController.update(ball.getPosition(), inputProcessor);
 
             if (config.particlesEnabled) {
-                // Profile the "global" particle interaction check
                 PhysicsProfiler.startSection("ParticleInteractions");
                 particleManager.handleBallInteraction(ball, terrain);
                 PhysicsProfiler.endSection("ParticleInteractions");
@@ -298,8 +283,6 @@ public class GolfGame extends ApplicationAdapter {
     private void handleBallStationaryLogic(float delta) {
         Terrain terrain = levelManager.getTerrain();
 
-        // LOGIC FIX: Don't wipe the timer if we are in the air BUT in water.
-        // This allows the timer to persist through skips/bounces.
         if (ball.getState() == Ball.State.AIR && !ball.isInWater(terrain)) {
             resetTimer = 0f;
             return;
@@ -312,7 +295,6 @@ public class GolfGame extends ApplicationAdapter {
         if (ball.getState() == Ball.State.STATIONARY) {
             updateResetTimer(delta, terrain);
         }
-
     }
 
     private boolean checkInstantHazards(Terrain terrain) {
@@ -344,9 +326,8 @@ public class GolfGame extends ApplicationAdapter {
 
         boolean inWater = ball.isInWater(terrain);
         boolean isStationary = ball.getState() == Ball.State.STATIONARY;
-        boolean isPractice = (currentState == GameState.PRACTICE_RANGE);
 
-        return inWater || isPractice || isStationary;
+        return inWater || (currentState == GameState.PRACTICE_RANGE) || isStationary;
     }
 
     private void handleTimerThresholdReached(Terrain terrain) {
@@ -444,38 +425,8 @@ public class GolfGame extends ApplicationAdapter {
             enterCameraConfig();
         } else if (currentState == GameState.START) {
             handleStartMenuInput();
-        } else if (currentState == GameState.INSTRUCTIONS) {
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
-                currentState = returnState;
-                if (cameraController != null) {
-                    cameraController.updateCursorState();
-                }
-            }
-            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
-                // Use the stage/HUD's viewport to unproject touch coordinates
-                tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-                hud.getStage().getViewport().unproject(tempV3);
-                if (!hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) {
-                    System.out.println("closing from hud");
-                    currentState = returnState;
-                    if (cameraController != null) cameraController.updateCursorState();
-                }
-            }
-        } else if (currentState == GameState.CAMERA_CONFIG) {
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
-                currentState = returnState;
-                if (cameraController != null) {
-                    cameraController.updateCursorState();
-                }
-            }
-            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
-                tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-                hud.getStage().getViewport().unproject(tempV3);
-                if (!hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) {
-                    currentState = returnState;
-                    if (cameraController != null) cameraController.updateCursorState();
-                }
-            }
+        } else if (currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG) {
+            handleOverlayInput();
         } else {
             handleGameplayInput();
         }
@@ -485,10 +436,32 @@ public class GolfGame extends ApplicationAdapter {
         }
     }
 
+    private void handleOverlayInput() {
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
+            currentState = returnState;
+            if (cameraController != null) cameraController.updateCursorState();
+        }
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+            tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            hud.getStage().getViewport().unproject(tempV3);
+
+            boolean close = false;
+            if (currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) close = true;
+            if (currentState == GameState.CAMERA_CONFIG && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) close = true;
+
+            if (close) {
+                currentState = returnState;
+                if (cameraController != null) cameraController.updateCursorState();
+            }
+        }
+    }
+
     private void exitToMainMenu() {
         shotController.reset();
         hud.resetShots();
         currentState = GameState.START;
+        currentMenuState = MenuState.MAIN;
+        menuSelection = 0;
         currentHoleIndex = 0;
         isVictory = false;
     }
@@ -508,83 +481,111 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void handleStartMenuInput() {
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_UP))
-            menuSelection = (menuSelection - 1 + 6) % 6;
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN))
-            menuSelection = (menuSelection + 1) % 6;
+        int maxSelection = switch (currentMenuState) {
+            case MAIN -> 5;
+            case EIGHTEEN_HOLES, PRACTICE -> 3;
+        };
 
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_SELECT)) {
-            switch (menuSelection) {
-                case 0 -> currentState = GameState.PLAYING;
-                case 1 -> {
-                    currentState = GameState.COMPETITIVE;
-                    currentHoleIndex = 0;
-                    competitiveCourse = LevelDataGenerator.generate18Holes();
-                    competitiveScore = new CompetitiveScore(competitiveCourse);
-                    shotController.setGuidelineEnabled(false);
-                }
-                case 2 -> {
-                    enterInstructions();
-                    return;
-                }
-                case 3 -> currentState = GameState.PRACTICE_RANGE;
-                case 4 -> currentState = GameState.PUTTING_GREEN;
-                case 5 -> {
-                    long seed = -1;
-                    String clip = Gdx.app.getClipboard().getContents();
-                    try {
-                        if (clip != null) seed = Long.parseLong(clip.trim());
-                    } catch (Exception ignored) {
-                    }
-                    currentState = GameState.PLAYING;
-                    initLevel(seed);
-                    return;
-                }
-            }
-            initLevel();
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_UP))
+            menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN))
+            menuSelection = (menuSelection + 1) % maxSelection;
+
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU) && currentMenuState != MenuState.MAIN) {
+            currentMenuState = MenuState.MAIN;
+            menuSelection = 0;
             return;
         }
 
-        for (int i = 0; i < 6; i++) {
-            GameInputProcessor.Action selectAction = GameInputProcessor.Action.valueOf("SELECT_OPTION_" + i);
-            if (inputProcessor.isActionJustPressed(selectAction)) {
-                menuSelection = i;
-                // Re-trigger MENU_SELECT logic for the new selection
-                handleStartMenuSelection();
-                return;
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_SELECT)) {
+            processMenuSelection();
+        }
+
+        for (int i = 0; i < maxSelection; i++) {
+            try {
+                GameInputProcessor.Action selectAction = GameInputProcessor.Action.valueOf("SELECT_OPTION_" + i);
+                if (inputProcessor.isActionJustPressed(selectAction)) {
+                    menuSelection = i;
+                    processMenuSelection();
+                    return;
+                }
+            } catch (IllegalArgumentException ignored) {}
+        }
+    }
+
+    private void processMenuSelection() {
+        switch (currentMenuState) {
+            case MAIN -> handleMainMenuSelection();
+            case EIGHTEEN_HOLES -> handleEighteenMenuSelection();
+            case PRACTICE -> handlePracticeMenuSelection();
+        }
+    }
+
+    private void handleMainMenuSelection() {
+        switch (menuSelection) {
+            case 0 -> { currentState = GameState.PLAYING; initLevel(); }
+            case 1 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
+            case 2 -> enterInstructions();
+            case 3 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
+            case 4 -> {
+                long seed = -1;
+                String clip = Gdx.app.getClipboard().getContents();
+                try { if (clip != null) seed = Long.parseLong(clip.trim()); } catch (Exception ignored) {}
+                currentState = GameState.PLAYING;
+                initLevel(seed);
             }
         }
     }
 
-    private void handleStartMenuSelection() {
+    private void handleEighteenMenuSelection() {
         switch (menuSelection) {
-            case 0 -> currentState = GameState.PLAYING;
-            case 1 -> {
-                currentState = GameState.COMPETITIVE;
-                currentHoleIndex = 0;
-                competitiveCourse = LevelDataGenerator.generate18Holes();
-                competitiveScore = new CompetitiveScore(competitiveCourse);
-                shotController.setGuidelineEnabled(false);
+            case 0 -> { // Standard 18 Holes
+                startCompetitiveMatch(-1); // -1 triggers random generation
             }
-            case 2 -> {
-                enterInstructions();
-                return;
+            case 1 -> { // Daily 18 Holes
+                // Generate seed based on YYYYMMDD
+                Calendar cal = Calendar.getInstance();
+                long dailySeed = cal.get(Calendar.YEAR) * 10000 +
+                        (cal.get(Calendar.MONTH) + 1) * 100 +
+                        cal.get(Calendar.DAY_OF_MONTH);
+
+                startCompetitiveMatch(applySecretSauce(dailySeed));
+                System.out.println("Daily seed: " + dailySeed);
             }
-            case 3 -> currentState = GameState.PRACTICE_RANGE;
-            case 4 -> currentState = GameState.PUTTING_GREEN;
-            case 5 -> {
-                long seed = -1;
-                String clip = Gdx.app.getClipboard().getContents();
-                try {
-                    if (clip != null) seed = Long.parseLong(clip.trim());
-                } catch (Exception ignored) {
-                }
-                currentState = GameState.PLAYING;
-                initLevel(seed);
-                return;
+            case 2 -> { // Back
+                currentMenuState = MenuState.MAIN;
+                menuSelection = 1;
             }
         }
+    }
+
+    private long applySecretSauce(long seed){
+        for (int i = 0; i < 10; i++) {
+            seed = (seed * 13) + 8;
+            if ((seed+"").length() > 9){
+                System.out.println("decreasing secret sauce seed: " + seed);
+                seed = seed/17;
+                System.out.println("decreased secret sauce seed: " + seed);
+            }
+        }
+        return seed;
+    }
+
+    private void startCompetitiveMatch(long seed) {
+        currentState = GameState.COMPETITIVE;
+        currentHoleIndex = 0;
+        competitiveCourse = LevelDataGenerator.generate18Holes(seed);
+        competitiveScore = new CompetitiveScore(competitiveCourse);
+        shotController.setGuidelineEnabled(false);
         initLevel();
+    }
+
+    private void handlePracticeMenuSelection() {
+        switch (menuSelection) {
+            case 0 -> { currentState = GameState.PRACTICE_RANGE; initLevel(); }
+            case 1 -> { currentState = GameState.PUTTING_GREEN; initLevel(); }
+            case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
+        }
     }
 
     private void handleGameplayInput() {
@@ -596,29 +597,24 @@ public class GolfGame extends ApplicationAdapter {
                 hud.setClubInfoVisible(false);
             }
         }
+
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Desktop) {
             float scroll = inputProcessor.getActionValue(GameInputProcessor.Action.SCROLL_Y);
-            if (scroll != 0) {
+            if (scroll != 0 && !shotController.isCharging()) {
                 boolean isMod = inputProcessor.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) ||
                         inputProcessor.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW);
-
-                if (!shotController.isCharging() && !isMod) {
-                    // Normal scroll: change club
+                if (!isMod) {
                     int index = MathUtils.clamp(currentClub.ordinal() + (scroll > 0 ? 1 : -1), 0, Club.values().length - 1);
                     currentClub = Club.values()[index];
                 }
             }
         }
 
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            if (!shotController.isCharging()) {
-                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) {
-                    int index = MathUtils.clamp(currentClub.ordinal() - 1, 0, Club.values().length - 1);
-                    currentClub = Club.values()[index];
-                } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) {
-                    int index = MathUtils.clamp(currentClub.ordinal() + 1, 0, Club.values().length - 1);
-                    currentClub = Club.values()[index];
-                }
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && !shotController.isCharging()) {
+            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) {
+                currentClub = Club.values()[MathUtils.clamp(currentClub.ordinal() - 1, 0, Club.values().length - 1)];
+            } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) {
+                currentClub = Club.values()[MathUtils.clamp(currentClub.ordinal() + 1, 0, Club.values().length - 1)];
             }
         }
 
@@ -626,46 +622,32 @@ public class GolfGame extends ApplicationAdapter {
             if (currentState == GameState.PAUSED) {
                 currentState = previousState;
                 cameraController.setPaused(false);
-                cameraController.update(ball.getPosition(), inputProcessor);
             } else {
                 previousState = currentState;
                 currentState = GameState.PAUSED;
                 cameraController.setPaused(true);
             }
-            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-                setupInputProcessor();
-            }
+            cameraController.update(ball.getPosition(), inputProcessor);
+            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) setupInputProcessor();
         }
 
-        // Toggles that only work while NOT in a menu
         if (currentState != GameState.PAUSED && currentState != GameState.INSTRUCTIONS && currentState != GameState.CAMERA_CONFIG) {
             if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) showClubInfo = !showClubInfo;
         }
 
-        // Global Gameplay hotkeys (work in Pause/Victory/Play)
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && currentLevelData != null) {
-            Gdx.app.getClipboard().setContents(String.valueOf(currentLevelData.getSeed()));
-        }
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL)) resetBallToLastShot();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
-
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) {
-            config.adjustGameSpeed(true);
-        }
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_DOWN)) {
-            config.adjustGameSpeed(false);
-        }
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) config.adjustGameSpeed(true);
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_DOWN)) config.adjustGameSpeed(false);
     }
 
     private void handleNewLevelInput() {
         if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
-            if (isVictory) {
-                if (currentHoleIndex + 1 < competitiveCourse.size()) {
-                    currentHoleIndex++;
-                    competitiveScore.setCurrentHoleIndex(currentHoleIndex);
-                    currentState = GameState.COMPETITIVE;
-                    initLevel();
-                }
+            if (isVictory && currentHoleIndex + 1 < competitiveCourse.size()) {
+                currentHoleIndex++;
+                competitiveScore.setCurrentHoleIndex(currentHoleIndex);
+                currentState = GameState.COMPETITIVE;
+                initLevel();
             }
         } else {
             if (currentState == GameState.PAUSED) currentState = previousState;
@@ -682,11 +664,8 @@ public class GolfGame extends ApplicationAdapter {
 
     private void setupCamera() {
         camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-
         camera.near = 0.4f;
-
         camera.far = 950f;
-
         gameViewport = new ExtendViewport(1280, 720, camera);
     }
 
@@ -701,12 +680,8 @@ public class GolfGame extends ApplicationAdapter {
 
     @Override
     public void resize(int width, int height) {
-        if (gameViewport != null) {
-            gameViewport.update(width, height, true);
-        }
-        if (hud != null) {
-            hud.resize(width, height);
-        }
+        if (gameViewport != null) gameViewport.update(width, height, true);
+        if (hud != null) hud.resize(width, height);
     }
 
     @Override

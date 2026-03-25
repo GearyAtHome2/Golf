@@ -3,6 +3,7 @@ package org.example.terrain.level;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -11,7 +12,7 @@ public class LevelGenerationTest {
     @Test
     public void testGenerateAllArchetypes() {
         for (LevelData.Archetype archetype : LevelData.Archetype.values()) {
-            LevelData data = LevelDataGenerator.createLevelDataForArchetype(archetype);
+            LevelData data = LevelDataGenerator.createRandomLevelData(50);
             assertNotNull(data, "LevelData should not be null for archetype: " + archetype);
             assertEquals(archetype, data.getArchetype(), "Archetype should match");
             assertTrue(data.getDistance() > 0, "Distance should be positive for archetype: " + archetype);
@@ -20,7 +21,7 @@ public class LevelGenerationTest {
 
     @Test
     public void test18HoleGenerationDiversity() {
-        List<LevelData> course = LevelDataGenerator.generate18Holes();
+        List<LevelData> course = LevelDataGenerator.generate18Holes(50);
         assertNotNull(course);
         assertEquals(18, course.size(), "Should generate exactly 18 holes");
 

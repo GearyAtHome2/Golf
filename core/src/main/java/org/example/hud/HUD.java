@@ -146,13 +146,18 @@ public class HUD {
         mobileUIInitialized = true;
     }
 
-    public void renderStartMenu(int selection) {
+    public void renderStartMenu(int selection, MainMenuRenderer.MenuState state) {
+        viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        mainMenuRenderer.render(batch, font, viewport, selection);
+
+        // Passing the state through to the refactored renderer
+        mainMenuRenderer.render(batch, font, viewport, selection, state);
+
         batch.end();
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && startMenuStage != null) {
+            // Android Stage still handles the button overlay if applicable
             startMenuStage.act();
             startMenuStage.draw();
         }
@@ -204,7 +209,6 @@ public class HUD {
             if (!mobileUIInitialized) {
                 setupMobileUI((MobileInputProcessor) input);
             }
-            // Sync HUD's local spinDot with the Actor's internal state
             this.spinDot.set(spinIndicator.getSpinDot());
         }
 
@@ -237,7 +241,6 @@ public class HUD {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
 
-        // Update the Actor's hitbox and internal layout logic
         spinIndicator.updateScaling(viewport);
 
         batch.begin();
@@ -246,10 +249,8 @@ public class HUD {
             windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         }
 
-        // On Desktop, we manually draw the Actor because there is no Stage active.
-        // On Android, stage.draw() (called in renderOverlays) handles this automatically.
         if (!isAndroid) {
-            if (!isAndroid && shouldShowDebug) {
+            if (shouldShowDebug) {
                 preShotDebugActor.setBounds(40, 150, 400, 140);
                 preShotDebugActor.draw(batch, 1.0f);
             }
@@ -272,10 +273,6 @@ public class HUD {
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
 
-    /**
-     * Removed the old drawSpinUI() logic that was causing coordinate mismatches.
-     * All logic is now handled internally by the SpinIndicator actor.
-     */
     private void updateSpinInput(float delta, GameInputProcessor input) {
         float SPIN_SPEED = 2.0f;
 
