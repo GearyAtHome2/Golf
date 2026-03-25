@@ -40,6 +40,10 @@ public class GameConfig {
         difficulty = Difficulty.values()[(difficulty.ordinal() + 1) % Difficulty.values().length];
     }
 
+    public void setDifficulty(Difficulty diff) {
+        difficulty = diff;
+    }
+
     public void cycleCamera() {
         cameraType = CameraType.values()[(cameraType.ordinal() + 1) % CameraType.values().length];
     }

@@ -8,23 +8,21 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.GameConfig;
+import org.example.gameManagers.GameSession;
 
 public class PauseMenuRenderer {
     private final GlyphLayout layout = new GlyphLayout();
 
-    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, GameConfig config, float seedFeedbackTimer) {
+    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, GameConfig config, float seedFeedbackTimer, GameSession session) {
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
         float centerX = screenW / 2f;
 
         boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
-        // Reduced baseScale by 0.6x (0.0015f -> 0.0009f)
         float baseScale = (screenH * 0.0009f) * (isAndroid ? 1.5f : 1.0f);
         float titleScale = baseScale * 2.5f;
         float textScale = baseScale * 1.0f;
-
-        // Reduced spacing to match the smaller text
         float spacing = screenH * 0.038f;
 
         // --- Title ---
@@ -42,7 +40,14 @@ public class PauseMenuRenderer {
             drawCenteredShadowedText(batch, font, "[A] ANIMATION: " + config.animSpeed.name(), centerX, currentY, Color.WHITE);
             currentY -= spacing;
 
-            drawCenteredShadowedText(batch, font, "[D] DIFFICULTY: " + config.difficulty.name(), centerX, currentY, Color.WHITE);
+            if (session != null) {
+                String diffText = "DIFFICULTY: " + session.getDifficulty().name() + " (LOCKED)";
+                drawCenteredShadowedText(batch, font, diffText, centerX, currentY, Color.GRAY);
+            } else {
+                String diffText = "[D] DIFFICULTY: " + config.difficulty.name();
+                drawCenteredShadowedText(batch, font, diffText, centerX, currentY, Color.WHITE);
+            }
+
             currentY -= spacing;
 
             Color particleColor = config.particlesEnabled ? Color.GREEN : Color.RED;

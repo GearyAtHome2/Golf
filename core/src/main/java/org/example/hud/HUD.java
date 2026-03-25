@@ -23,6 +23,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.*;
+import org.example.gameManagers.GameSession;
 import org.example.hud.mobile.MobileUIFactory;
 import org.example.hud.renderer.*;
 import org.example.input.GameInputProcessor;
@@ -163,14 +164,14 @@ public class HUD {
         }
     }
 
-    public void renderPauseMenu(LevelData levelData, GameInputProcessor input) {
+    public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session) {
         if (batch.isDrawing()) batch.end();
 
-        handlePauseInput(levelData, input);
+        handlePauseInput(levelData, input, session);
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer);
+        pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer, session);
         batch.end();
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && pauseMenuStage != null) {
@@ -179,9 +180,16 @@ public class HUD {
         }
     }
 
-    private void handlePauseInput(LevelData levelData, GameInputProcessor input) {
+    private void handlePauseInput(LevelData levelData, GameInputProcessor input, GameSession session) {
         if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) config.cycleAnimation();
-        if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) config.cycleDifficulty();
+
+        if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) {
+            if (session == null) {
+                config.cycleDifficulty();
+            } else {
+                notificationManager.showHazard("DIFFICULTY LOCKED", Color.GRAY, 0.5f);
+            }
+        }
         if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES))
             config.particlesEnabled = !config.particlesEnabled;
 

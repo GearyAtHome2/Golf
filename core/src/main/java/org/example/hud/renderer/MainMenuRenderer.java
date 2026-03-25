@@ -10,10 +10,10 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class MainMenuRenderer {
 
-    // Define the different "Pages" of the menu
     public enum MenuState {
         MAIN,
         EIGHTEEN_HOLES,
+        DIFFICULTY_SELECT,
         PRACTICE
     }
 
@@ -29,7 +29,6 @@ public class MainMenuRenderer {
 
         boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
-        // --- TITLE ---
         float baseTitleScale = (screenH * 0.0035f) * (isAndroid ? 1.2f : 1.0f);
         float pulse = baseTitleScale + MathUtils.sin(pulseTimer * 2f) * (baseTitleScale * 0.03f);
         font.getData().setScale(pulse);
@@ -43,7 +42,6 @@ public class MainMenuRenderer {
         font.setColor(Color.WHITE);
         font.draw(batch, title, centerX - (layout.width / 2f), titleY);
 
-        // --- MENU OPTIONS ---
         float optionScale = baseTitleScale * 0.35f;
         font.getData().setScale(optionScale);
         float spacing = screenH * 0.065f;
@@ -57,12 +55,14 @@ public class MainMenuRenderer {
                 case EIGHTEEN_HOLES:
                     renderEighteenMenu(batch, font, selection, centerX, menuStartY, spacing);
                     break;
+                case DIFFICULTY_SELECT:
+                    renderDifficultyMenu(batch, font, selection, centerX, menuStartY, spacing);
+                    break;
                 case PRACTICE:
                     renderPracticeMenu(batch, font, selection, centerX, menuStartY, spacing);
                     break;
             }
 
-            // --- HINT TEXT ---
             font.getData().setScale(optionScale * 0.6f);
             font.setColor(Color.GRAY);
             String hint = state == MenuState.MAIN ? "Use UP/DOWN to select, ENTER to start" : "ESC or BACK to return";
@@ -79,7 +79,6 @@ public class MainMenuRenderer {
         drawCenteredOption(batch, font, selection == 2, true, "INSTRUCTIONS", cx, y - (s * 2));
         drawCenteredOption(batch, font, selection == 3, true, "PRACTICE >", cx, y - (s * 3));
 
-        // Seed logic (moved inside for organization)
         String cleanSeed = getClipboardSeed();
         boolean hasValidSeed = !cleanSeed.isEmpty();
         String seedText = hasValidSeed ? "PLAY SEED [" + cleanSeed + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
@@ -90,6 +89,18 @@ public class MainMenuRenderer {
         drawCenteredOption(batch, font, selection == 0, true, "PLAY 18", cx, y);
         drawCenteredOption(batch, font, selection == 1, true, "DAILY 18", cx, y - s);
         drawCenteredOption(batch, font, selection == 2, true, "< BACK TO MAIN", cx, y - (s * 2.5f));
+    }
+
+    private void renderDifficultyMenu(SpriteBatch batch, BitmapFont font, int selection, float cx, float y, float s) {
+        org.example.GameConfig.Difficulty[] diffs = org.example.GameConfig.Difficulty.values();
+
+        for (int i = 0; i < diffs.length; i++) {
+            // Render each difficulty name (replacing underscores with spaces if any exist)
+            drawCenteredOption(batch, font, selection == i, true, diffs[i].name().replace("_", " "), cx, y - (s * i));
+        }
+
+        int backIndex = diffs.length;
+        drawCenteredOption(batch, font, selection == backIndex, true, "< BACK", cx, y - (s * (backIndex + 1)));
     }
 
     private void renderPracticeMenu(SpriteBatch batch, BitmapFont font, int selection, float cx, float y, float s) {
