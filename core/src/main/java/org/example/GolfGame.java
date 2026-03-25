@@ -579,21 +579,25 @@ public class GolfGame extends ApplicationAdapter {
     }
 
     private void handleDifficultySelection() {
-        if (menuSelection == 3) {
+        int backButtonIndex = GameConfig.Difficulty.values().length;
+
+        if (menuSelection == backButtonIndex) {
             currentMenuState = MenuState.EIGHTEEN_HOLES;
             menuSelection = pendingMatchMode;
             return;
         }
 
-        GameConfig.Difficulty selectedDifficulty = GameConfig.Difficulty.values()[menuSelection];
-        config.setDifficulty(selectedDifficulty);
+        if (menuSelection >= 0 && menuSelection < backButtonIndex) {
+            GameConfig.Difficulty selectedDifficulty = GameConfig.Difficulty.values()[menuSelection];
+            config.setDifficulty(selectedDifficulty);
 
-        if (pendingMatchMode == 0) {
-            startCompetitiveMatch(-1);
-        } else {
-            Calendar cal = Calendar.getInstance();
-            long dailySeed = cal.get(Calendar.YEAR) * 10000 + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
-            startCompetitiveMatch(applySecretSauce(dailySeed));
+            if (pendingMatchMode == 0) {
+                startCompetitiveMatch(-1);
+            } else {
+                Calendar cal = Calendar.getInstance();
+                long dailySeed = cal.get(Calendar.YEAR) * 10000L + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
+                startCompetitiveMatch(applySecretSauce(dailySeed));
+            }
         }
     }
 
