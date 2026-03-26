@@ -21,19 +21,16 @@ jobs:
           cache: 'gradle'
 
       - name: Grant execute permission for gradlew
-        # Use shell: bash so this works consistently across runners if needed,
-        # though only strictly required for Unix-based systems.
-        run: chmod +x gradlew
         if: runner.os != 'Windows'
+        run: chmod +x gradlew
 
       - name: Build and Package
-        # This now calls the alias we created in the root build.gradle
+        # This triggers your :desktop:jpackage task we just fixed
         run: ./gradlew packageGame
 
       - name: Upload Finished Game
         uses: actions/upload-artifact@v4
         with:
-          name: GolfGame-${{ runner.os }}
-          # Path updated to point to the desktop subproject's build folder.
-          # The '*' catches 'desktop-1.0.jar' or whatever version you set.
-          path: desktop/build/libs/*.jar
+          name: GolfGame2026-${{ runner.os }}
+          # UPDATED PATH: This grabs the folder containing the .exe / .app and the runtime
+          path: desktop/build/distribution/
