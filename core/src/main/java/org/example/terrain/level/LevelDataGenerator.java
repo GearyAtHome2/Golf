@@ -7,11 +7,11 @@ import java.util.*;
 
 public class LevelDataGenerator {
 
-    public static LevelData createRandomLevelData(long seed) {
-        return createFixedLevelData(seed);
-    }
-
     public static LevelData createFixedLevelData(long seed) {
+        if (seed == -1) {
+            seed = System.nanoTime();
+        }
+
         Random r = new Random(seed);
         LevelData.Archetype[] types = LevelData.Archetype.values();
         LevelData.Archetype selectedType = types[r.nextInt(types.length)];
@@ -19,11 +19,10 @@ public class LevelDataGenerator {
     }
 
     public static LevelData createFixedLevelData(long seed, LevelData.Archetype forcedType) {
+
         LevelData data = new LevelData();
         data.setSeed(seed);
         Random r = new Random(seed);
-
-        // Core logic now uses the passed-in archetype
         LevelData.Archetype selectedType = forcedType;
         data.setArchetype(selectedType);
 

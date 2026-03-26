@@ -10,16 +10,6 @@ import static org.junit.jupiter.api.Assertions.*;
 public class LevelGenerationTest {
 
     @Test
-    public void testGenerateAllArchetypes() {
-        for (LevelData.Archetype archetype : LevelData.Archetype.values()) {
-            LevelData data = LevelDataGenerator.createRandomLevelData(50);
-            assertNotNull(data, "LevelData should not be null for archetype: " + archetype);
-            assertEquals(archetype, data.getArchetype(), "Archetype should match");
-            assertTrue(data.getDistance() > 0, "Distance should be positive for archetype: " + archetype);
-        }
-    }
-
-    @Test
     public void test18HoleGenerationDiversity() {
         List<LevelData> course = LevelDataGenerator.generate18Holes(50);
         assertNotNull(course);

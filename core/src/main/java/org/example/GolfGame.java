@@ -585,7 +585,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     public void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode) {
         config.setDifficulty(difficulty);
         if (mode == 0) {
-            startCompetitiveMatch(-1, GameSession.GameMode.STANDARD_18);
+            long randomSeed = MathUtils.random.nextLong();
+            if (randomSeed < 0) randomSeed *= -1; // Keep it positive for cleaner UI/Logs
+            startCompetitiveMatch(randomSeed, GameSession.GameMode.STANDARD_18);
         } else {
             Calendar cal = Calendar.getInstance();
             long dailySeed = (long) cal.get(Calendar.YEAR) * 10000 + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
