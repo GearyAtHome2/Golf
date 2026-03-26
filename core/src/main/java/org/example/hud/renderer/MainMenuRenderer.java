@@ -87,16 +87,30 @@ public class MainMenuRenderer {
     }
 
     private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float cx, float y, float s, GameSession standard, GameSession daily) {
-        String play18Text = (standard != null && !standard.isFinished())
-                ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)"
-                : "PLAY 18";
+        // Standard 18 Logic
+        boolean standardFinished = standard != null && standard.isFinished();
+        String play18Text;
+        if (standardFinished) {
+            play18Text = "18 HOLES (COMPLETED)";
+        } else if (standard != null) {
+            play18Text = "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)";
+        } else {
+            play18Text = "PLAY 18";
+        }
 
-        String daily18Text = (daily != null && !daily.isFinished())
-                ? "CONTINUE DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)"
-                : "DAILY 18";
+        // Daily Challenge Logic
+        boolean dailyFinished = daily != null && daily.isFinished();
+        String daily18Text;
+        if (dailyFinished) {
+            daily18Text = "DAILY 18 (COMPLETED)";
+        } else if (daily != null) {
+            daily18Text = "CONTINUE DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)";
+        } else {
+            daily18Text = "DAILY 18";
+        }
 
-        drawCenteredOption(batch, font, selection == 0, true, play18Text, cx, y);
-        drawCenteredOption(batch, font, selection == 1, true, daily18Text, cx, y - s);
+        drawCenteredOption(batch, font, selection == 0, !standardFinished, play18Text, cx, y);
+        drawCenteredOption(batch, font, selection == 1, !dailyFinished, daily18Text, cx, y - s);
         drawCenteredOption(batch, font, selection == 2, true, "< BACK TO MAIN", cx, y - (s * 2.5f));
     }
 
@@ -131,6 +145,7 @@ public class MainMenuRenderer {
         String fullText = (selected && enabled) ? "> " + text : text;
         layout.setText(font, fullText);
         float x = centerX - (layout.width / 2f);
+
         Color targetColor = !enabled ? Color.DARK_GRAY : (selected ? Color.YELLOW : Color.WHITE);
 
         font.setColor(0, 0, 0, 0.7f);

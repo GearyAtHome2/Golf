@@ -4,21 +4,21 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.Cell;
-import com.badlogic.gdx.scenes.scene2d.ui.Label;
-import com.badlogic.gdx.scenes.scene2d.ui.Skin;
-import com.badlogic.gdx.scenes.scene2d.ui.Table;
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.GameConfig;
+import org.example.gameManagers.GameSession;
+import org.example.gameManagers.MenuManager;
 import org.example.hud.HoldButton;
 import org.example.hud.PreShotDebugActor;
 import org.example.hud.SpinIndicator;
+import org.example.hud.renderer.MainMenuRenderer;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 
@@ -29,7 +29,7 @@ public class MobileUIFactory {
 
     public static class MobileUIPackage {
         public Stage stage, startMenuStage, pauseMenuStage;
-        public Table gameplayTable, victoryTable;
+        public Table gameplayTable, victoryTable, startMenuTable;
         public TextButton infoToggleBtn;
         public HoldButton resetBallBtn, newMapBtn;
         public Label clubLabel;
@@ -54,31 +54,83 @@ public class MobileUIFactory {
         ui.victoryTable.setVisible(false);
         ui.stage.addActor(ui.victoryTable);
 
+        ui.startMenuTable = new Table();
+        ui.startMenuTable.setFillParent(true);
+        ui.startMenuStage.addActor(ui.startMenuTable);
+
         setupLeftStack(ui, input, spinIndicator, debugActor, baseStyle, viewport);
         setupRightStack(ui, input, whitePixel, baseStyle, viewport);
         setupClubSelection(ui, input, baseStyle, viewport);
-
-        setupStartMenu(ui, font, viewport, input);
         setupPauseMenu(ui, font, viewport, config, input);
         setupVictoryMenu(ui, input, baseStyle, viewport);
 
         return ui;
     }
 
+    /**
+     * Refreshes the start menu buttons. Now handles the "IN PROGRESS" status for sessions.
+     */
+    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily, Viewport viewport, BitmapFont font) {
+        table.clearChildren();
+        TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
+
+        MainMenuRenderer.MenuState state = menuManager.getCurrentMenuState();
+        String[] options = getOptionsForState(state);
+
+        float bW = viewport.getWorldWidth() * 0.45f;
+        float bH = viewport.getWorldHeight() * 0.09f;
+        float spacing = viewport.getWorldHeight() * 0.012f;
+
+        for (int i = 0; i < options.length; i++) {
+            final int index = i;
+            String text = options[i];
+
+            // ADDED: Logic to show session progress on the buttons
+            if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
+                if (i == 0 && standard != null && !standard.isFinished()) {
+                    text = "RESUME 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)";
+                } else if (i == 1 && daily != null && !daily.isFinished()) {
+                    text = "RESUME DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)";
+                }
+            }
+
+            TextButton btn = new TextButton(text, menuStyle);
+            btn.getLabel().setFontScale(FONT_SCALE_START_MENU * 0.35f);
+
+            btn.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent event, Actor actor) {
+                    menuManager.handleExternalSelection(index, callback, standard, daily);
+                }
+            });
+
+            table.add(btn).width(bW).height(bH).padBottom(spacing).row();
+        }
+        table.top().padTop(viewport.getWorldHeight() * 0.22f);
+    }
+
+    private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
+        return switch (state) {
+            case MAIN -> new String[]{"QUICK PLAY", "18 HOLES", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
+            case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY CHALLENGE", "BACK"};
+            case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
+            case DIFFICULTY_SELECT -> new String[]{"EASY", "NORMAL", "HARD", "EXPERT", "CUSTOM", "BACK"};
+        };
+    }
+
+    // ... (Keep setupLeftStack, setupRightStack, setupClubSelection, setupPauseMenu unchanged) ...
+
     private static void setupLeftStack(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style, Viewport viewport) {
         Table leftStack = new Table();
         ui.gameplayTable.add(leftStack).expandY().fillY().left().padLeft(getEdgePad(viewport)).padTop(getLeftStackTopPad(viewport));
-
         Table leftButtons = new Table();
         float btnW = getBtnWidth(viewport);
         float btnH = getBtnHeight(viewport);
         float spacing = getStackSpacing(viewport);
-
         addActionButton(leftButtons, "MENU", style, input, GameInputProcessor.Action.PAUSE, btnW, btnH).padBottom(spacing).row();
         addActionButton(leftButtons, "PROJ", style, input, GameInputProcessor.Action.PROJECTION, btnW, btnH).padBottom(spacing).row();
         addActionButton(leftButtons, "DISTANCE", style, input, GameInputProcessor.Action.SHOW_RANGE, btnW, btnH).padBottom(spacing).row();
         addActionButton(leftButtons, "OVERVIEW", style, input, GameInputProcessor.Action.OVERHEAD_VIEW, btnW, btnH).row();
-
         leftStack.add(leftButtons).expandY().top().left().row();
         leftStack.add(debug).width(getDebugWidth(viewport)).height(viewport.getWorldHeight() * 0.18f).left().padBottom(spacing).row();
         leftStack.add(spin).size(getSpinSize(viewport)).bottom().left().padBottom(getEdgePad(viewport));
@@ -86,42 +138,27 @@ public class MobileUIFactory {
 
     private static void setupRightStack(MobileUIPackage ui, MobileInputProcessor input, Texture whitePixel, TextButton.TextButtonStyle style, Viewport viewport) {
         Table rightStack = new Table();
-        float vH = viewport.getWorldHeight();
         float edge = getEdgePad(viewport);
         float btnW = getBtnWidth(viewport);
         float btnH = getBtnHeight(viewport);
         float hitW = getHitBtnWidth(viewport);
         float hitH = getHitBtnHeight(viewport);
         float spacing = getStackSpacing(viewport);
-
-        // REVERTED: Added .expand() back to ensure the table stays on the right edge.
-        ui.gameplayTable.add(rightStack).expand().top().right().padRight(edge).padTop(vH * (1.0f - MAX_BTN_Y));
-
-        // 1. MAX Button
+        ui.gameplayTable.add(rightStack).expand().top().right().padRight(edge).padTop(viewport.getWorldHeight() * (1.0f - MAX_BTN_Y));
         TextButton.TextButtonStyle maxStyle = new TextButton.TextButtonStyle(style);
         maxStyle.up = ui.skin.getDrawable("maxHitUp");
         maxStyle.down = ui.skin.getDrawable("maxHitDown");
-        rightStack.add(createTriggerButton(maxStyle, "MAX", input, GameInputProcessor.Action.MAX_POWER_SHOT, FONT_SCALE_GAMEPLAY * 0.5f))
-                .width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
-
-        // 2. HIT Button
+        rightStack.add(createTriggerButton(maxStyle, "MAX", input, GameInputProcessor.Action.MAX_POWER_SHOT, FONT_SCALE_GAMEPLAY * 0.5f)).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
         TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
         hitStyle.up = ui.skin.getDrawable("hitUp");
         hitStyle.down = ui.skin.getDrawable("hitDown");
-        rightStack.add(createTriggerButton(hitStyle, "HIT", input, GameInputProcessor.Action.CHARGE_SHOT, FONT_SCALE_GAMEPLAY * 0.85f))
-                .width(hitW).height(hitH).right().padBottom(spacing).row();
-
-        // 3. RESET BALL
+        rightStack.add(createTriggerButton(hitStyle, "HIT", input, GameInputProcessor.Action.CHARGE_SHOT, FONT_SCALE_GAMEPLAY * 0.85f)).width(hitW).height(hitH).right().padBottom(spacing).row();
         ui.resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, whitePixel);
         ui.resetBallBtn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 0.5f);
         rightStack.add(ui.resetBallBtn).width(btnW).height(btnH).right().padBottom(spacing).row();
-
-        // 4. NEW MAP
         ui.newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, whitePixel);
         ui.newMapBtn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 0.5f);
         rightStack.add(ui.newMapBtn).width(btnW).height(btnH).right().padBottom(spacing).row();
-
-        // 5. INFO (Identical properties to NEW MAP)
         ui.infoToggleBtn = new TextButton("INFO", style);
         ui.infoToggleBtn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 0.5f);
         rightStack.add(ui.infoToggleBtn).width(btnW).height(btnH).right();
@@ -132,13 +169,9 @@ public class MobileUIFactory {
         ui.stage.addActor(arrowContainer);
         arrowContainer.setFillParent(true);
         arrowContainer.bottom().right().padBottom(viewport.getWorldHeight() * CLUB_ARROW_Y).padRight(getEdgePad(viewport));
-
         Table arrowRow = new Table();
-        float arrowW = getArrowWidth(viewport);
-        float arrowH = getArrowHeight(viewport);
-
-        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, arrowW, arrowH).padRight(10);
-        addActionButton(arrowRow, ">", style, input, GameInputProcessor.Action.CLUB_DOWN, arrowW, arrowH);
+        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, getArrowWidth(viewport), getArrowHeight(viewport)).padRight(10);
+        addActionButton(arrowRow, ">", style, input, GameInputProcessor.Action.CLUB_DOWN, getArrowWidth(viewport), getArrowHeight(viewport));
         arrowContainer.add(arrowRow);
     }
 
@@ -149,11 +182,8 @@ public class MobileUIFactory {
             btn.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                    if (action == GameInputProcessor.Action.OVERHEAD_VIEW) {
-                        input.setActionState(action, btn.isChecked());
-                    } else {
-                        input.triggerAction(action);
-                    }
+                    if (action == GameInputProcessor.Action.OVERHEAD_VIEW) input.setActionState(action, btn.isChecked());
+                    else input.triggerAction(action);
                 }
             });
         }
@@ -197,26 +227,6 @@ public class MobileUIFactory {
         style.down = skin.getDrawable("btnDown");
         style.fontColor = Color.WHITE;
         return style;
-    }
-
-    private static void setupStartMenu(MobileUIPackage ui, BitmapFont font, Viewport viewport, MobileInputProcessor input) {
-        Table startTable = new Table();
-        startTable.setFillParent(true);
-        ui.startMenuStage.addActor(startTable);
-        TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
-        String[] options = {"START GAME", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE RANGE", "PUTTING GREEN", "CLIPBOARD SEED"};
-        for (int i = 0; i < options.length; i++) {
-            final int index = i;
-            TextButton optBtn = createMenuButton(options[i], menuStyle, input, null, FONT_SCALE_START_MENU * 0.35f);
-            optBtn.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                    input.triggerAction(GameInputProcessor.Action.valueOf("SELECT_OPTION_" + index));
-                }
-            });
-            startTable.add(optBtn).width(viewport.getWorldWidth() * 0.45f).height(viewport.getWorldHeight() * 0.09f).padBottom(viewport.getWorldHeight() * 0.012f).row();
-        }
-        startTable.top().padTop(viewport.getWorldHeight() * 0.22f);
     }
 
     private static void setupPauseMenu(MobileUIPackage ui, BitmapFont font, Viewport viewport, GameConfig config, MobileInputProcessor input) {

@@ -9,13 +9,21 @@ public class MenuManager {
     private int menuSelection = 0;
     private int pendingMatchMode = 0;
 
-    public void handleInput(GameInputProcessor input, MenuHandler callback) {
+    public void handleInput(GameInputProcessor input, MenuHandler callback, GameSession standard, GameSession daily) {
         int maxSelection = getMaxSelection();
+        int oldSelection = menuSelection;
 
-        if (input.isActionJustPressed(GameInputProcessor.Action.MENU_UP))
-            menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
-        if (input.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN))
-            menuSelection = (menuSelection + 1) % maxSelection;
+        if (input.isActionJustPressed(GameInputProcessor.Action.MENU_UP)) {
+            do {
+                menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
+            } while (isSelectionLocked(standard, daily) && menuSelection != oldSelection);
+        }
+
+        if (input.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN)) {
+            do {
+                menuSelection = (menuSelection + 1) % maxSelection;
+            } while (isSelectionLocked(standard, daily) && menuSelection != oldSelection);
+        }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU) && currentMenuState != MenuState.MAIN) {
             handleBackNavigation();
@@ -23,8 +31,35 @@ public class MenuManager {
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_SELECT)) {
-            processSelection(callback);
+            processSelection(callback, standard, daily);
         }
+    }
+
+    /**
+     * Called by Android UI buttons to bypass the MENU_SELECT action check.
+     */
+    public void handleExternalSelection(int index, MenuHandler callback, GameSession standard, GameSession daily) {
+        this.menuSelection = index;
+        processSelection(callback, standard, daily);
+    }
+
+    private void processSelection(MenuHandler callback, GameSession standard, GameSession daily) {
+        if (isSelectionLocked(standard, daily)) return;
+
+        switch (currentMenuState) {
+            case MAIN -> handleMain(callback);
+            case EIGHTEEN_HOLES -> handleEighteen(callback);
+            case DIFFICULTY_SELECT -> handleDifficulty(callback);
+            case PRACTICE -> handlePractice(callback);
+        }
+    }
+
+    private boolean isSelectionLocked(GameSession standard, GameSession daily) {
+        if (currentMenuState == MenuState.EIGHTEEN_HOLES) {
+            if (menuSelection == 0) return standard != null && standard.isFinished();
+            if (menuSelection == 1) return daily != null && daily.isFinished();
+        }
+        return false;
     }
 
     private void handleBackNavigation() {
@@ -34,15 +69,6 @@ public class MenuManager {
         } else {
             currentMenuState = MenuState.MAIN;
             menuSelection = 0;
-        }
-    }
-
-    private void processSelection(MenuHandler callback) {
-        switch (currentMenuState) {
-            case MAIN -> handleMain(callback);
-            case EIGHTEEN_HOLES -> handleEighteen(callback);
-            case DIFFICULTY_SELECT -> handleDifficulty(callback);
-            case PRACTICE -> handlePractice(callback);
         }
     }
 
@@ -89,7 +115,6 @@ public class MenuManager {
         };
     }
 
-    // Getters for HUD rendering
     public MenuState getCurrentMenuState() { return currentMenuState; }
     public int getMenuSelection() { return menuSelection; }
     public void setPendingMatchMode(int mode) { this.pendingMatchMode = mode; }

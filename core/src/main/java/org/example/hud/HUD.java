@@ -22,8 +22,12 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
-import org.example.ball.*;
+import org.example.ball.Ball;
+import org.example.ball.MinigameResult;
+import org.example.ball.ShotController;
+import org.example.ball.ShotDifficulty;
 import org.example.gameManagers.GameSession;
+import org.example.gameManagers.MenuManager;
 import org.example.hud.minigame.MinigameController;
 import org.example.hud.mobile.MobileUIFactory;
 import org.example.hud.renderer.*;
@@ -52,6 +56,9 @@ public class HUD {
     private final OverlayRenderer overlayRenderer = new OverlayRenderer();
     private final NotificationManager notificationManager = new NotificationManager();
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
+    private Table startMenuTable;
+    private boolean mobileUIInitialized = false;
+    private MainMenuRenderer.MenuState lastMobileMenuState = null;
     private int shotCount = 0;
     private final Vector2 spinDot = new Vector2(0, 0);
     private float distanceDisplayTimer = 0;
@@ -64,7 +71,6 @@ public class HUD {
     private Stage pauseMenuStage;
     private Table gameplayTable;
     private Table victoryTable;
-    private boolean mobileUIInitialized = false;
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
     private TextButton infoToggleBtn;
@@ -151,6 +157,8 @@ public class HUD {
         this.infoToggleBtn = ui.infoToggleBtn;
         this.skin = ui.skin;
 
+        this.startMenuTable = ui.startMenuTable;
+
         this.infoToggleBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
@@ -163,17 +171,31 @@ public class HUD {
         mobileUIInitialized = true;
     }
 
-    public void renderStartMenu(int selection, MainMenuRenderer.MenuState state, GameSession standard, GameSession daily) {
+    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        mainMenuRenderer.render(batch, font, viewport, selection, state, standard, daily);
+        // Use the menuManager to get the current state for the visual renderer
+        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), standard, daily);
         batch.end();
 
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && startMenuStage != null) {
+            // Simple fix: Rebuild buttons if the menu state changed
+            if (lastMobileMenuState != menuManager.getCurrentMenuState()) {
+                setupMobileStartMenu(menuManager, callback, standard, daily);
+                lastMobileMenuState = menuManager.getCurrentMenuState();
+            }
             startMenuStage.act();
             startMenuStage.draw();
         }
+    }
+
+    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily) {
+        if (startMenuTable == null) return;
+        startMenuTable.clearChildren();
+
+        // This calls the factory to just add the buttons to the existing table
+        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, standard, daily, viewport, font);
     }
 
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session) {

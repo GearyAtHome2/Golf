@@ -319,7 +319,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Gdx.input.setCursorCatched(!showMouse);
 
         if (currentState == GameState.START) {
-            hud.renderStartMenu(menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), standardSession, dailySession);
+            hud.renderStartMenu(menuManager, this, standardSession, dailySession);
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
@@ -379,7 +379,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         } else if (hud.wasCameraConfigRequested()) {
             enterCameraConfig();
         } else if (currentState == GameState.START) {
-            menuManager.handleInput(inputProcessor, this);
+            menuManager.handleInput(inputProcessor, this, standardSession, dailySession);
         } else if (currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG) {
             handleOverlayInput();
         } else {
