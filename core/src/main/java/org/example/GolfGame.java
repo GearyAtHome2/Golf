@@ -199,10 +199,14 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (currentState == GameState.PUTTING_GREEN) {
             terrain.setTeePosition(new Vector3(tee.x, terrain.getHeightAt(tee.x, tee.z), tee.z));
             terrain.setHolePosition(new Vector3(hole.x, terrain.getHeightAt(hole.x, hole.z), hole.z));
-            ball = new Ball(new Vector3(tee.x, tee.y + 0.5f, tee.z), particleManager, config);
+            ball = new Ball(new Vector3(tee.x, tee.y + 0.5f, tee.z), particleManager, config, 100L);
             ball.setState(Ball.State.AIR);
         } else {
-            ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
+            long seed = 100l;
+            if (currentLevelData!=null){
+                seed = currentLevelData.getSeed();
+            }
+            ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config, seed);
         }
 
         hazardManager.setBallHit(false);
@@ -273,7 +277,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     public void onPracticeReset() {
         ghostManager.archiveBall(ball);
         Vector3 tee = levelManager.getTerrain().getTeePosition();
-        ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
+        ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config, 200L);
         hazardManager.setBallHit(false);
     }
 
