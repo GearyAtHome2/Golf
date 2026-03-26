@@ -65,6 +65,8 @@ public class LevelData {
     private float fairwayRoughIslands;
     private float fairwayCohesion;
 
+    public LevelData() {}
+
     public long getSeed() {
         return seed;
     }

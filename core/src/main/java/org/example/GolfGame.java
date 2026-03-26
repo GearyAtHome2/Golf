@@ -16,12 +16,9 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
-import org.example.ball.CompetitiveScore;
 import org.example.ball.ShotController;
 import org.example.camera.CameraController;
-import org.example.gameManagers.GameSession;
-import org.example.gameManagers.GhostManager;
-import org.example.gameManagers.LevelManager;
+import org.example.gameManagers.*;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
 import org.example.hud.HUD;
@@ -39,19 +36,17 @@ import org.example.terrain.level.LevelFactory;
 
 import java.util.Calendar;
 
-public class GolfGame extends ApplicationAdapter {
+public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHandler, HazardManager.HazardListener {
 
     private enum GameState {START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
 
     private GameState currentState = GameState.START;
-    private MenuState currentMenuState = MenuState.MAIN;
     private GameState previousState = GameState.PLAYING;
     private GameState returnState = GameState.PLAYING;
 
     private GhostManager ghostManager;
-    private float resetTimer = 0f;
-    private static final float RESET_DELAY = 1.0f;
-    private boolean hasCurrentBallBeenHit = false;
+    private MenuManager menuManager;
+    private HazardManager hazardManager;
 
     private PerspectiveCamera camera;
     private Viewport gameViewport;
@@ -68,7 +63,6 @@ public class GolfGame extends ApplicationAdapter {
     private ShotController shotController;
     private LevelData currentLevelData;
 
-    private int menuSelection = 0;
     private Club currentClub = Club.DRIVER;
     private ParticleManager particleManager;
     private WindManager windManager;
@@ -79,12 +73,9 @@ public class GolfGame extends ApplicationAdapter {
     private ModelInstance highlightInstance;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
 
-    // Track sessions separately
     private GameSession activeSession;
     private GameSession standardSession;
     private GameSession dailySession;
-
-    private int pendingMatchMode = 0;
     private final Vector3 tempV3 = new Vector3();
 
     @Override
@@ -92,12 +83,13 @@ public class GolfGame extends ApplicationAdapter {
         try {
             setupCamera();
             setupEnvironment();
-
             modelBatch = new ModelBatch();
             hud = new HUD(config);
             levelManager = new LevelManager();
             levelFactory = new LevelFactory();
             ghostManager = new GhostManager(8);
+            menuManager = new MenuManager();
+            hazardManager = new HazardManager();
             shotController = new ShotController();
             particleManager = new ParticleManager();
             windManager = new WindManager();
@@ -109,11 +101,53 @@ public class GolfGame extends ApplicationAdapter {
                 inputProcessor = new DesktopInputProcessor();
             }
 
+            this.standardSession = SessionPersistence.loadSession(GameSession.GameMode.STANDARD_18);
+            if (standardSession != null) {
+                standardSession.setSaveCallback(() -> SessionPersistence.saveSession(standardSession));
+            }
+
+            this.dailySession = SessionPersistence.loadSession(GameSession.GameMode.DAILY_CHALLENGE);
+            if (dailySession != null) {
+                dailySession.setSaveCallback(() -> SessionPersistence.saveSession(dailySession));
+            }
+
             setupHighlight();
             setupInputProcessor();
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        if (gameViewport != null) gameViewport.update(width, height, true);
+        if (hud != null) hud.resize(width, height);
+    }
+
+    @Override
+    public void dispose() {
+        modelBatch.dispose();
+        hud.dispose();
+        shotController.dispose();
+        levelManager.dispose();
+        ghostManager.dispose();
+        particleManager.dispose();
+        if (ball != null) ball.dispose();
+        if (highlightModel != null) highlightModel.dispose();
+    }
+
+    private void setupCamera() {
+        camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        camera.near = 0.4f;
+        camera.far = 950f;
+        gameViewport = new ExtendViewport(1280, 720, camera);
+    }
+
+    private void setupEnvironment() {
+        environment = new Environment();
+        environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.4f, 0.4f, 0.4f, 1f));
+        environment.add(new DirectionalLight().set(Color.WHITE, -1f, -0.8f, -0.2f));
+        Gdx.gl.glClearColor(0.53f, 0.81f, 0.92f, 1f);
     }
 
     private void setupHighlight() {
@@ -131,7 +165,6 @@ public class GolfGame extends ApplicationAdapter {
     private void initLevel(long manualSeed) {
         if (ball != null) ball.dispose();
         ghostManager.clear();
-
         shotController.reset();
         hud.reset();
 
@@ -140,25 +173,21 @@ public class GolfGame extends ApplicationAdapter {
 
         if (currentState == GameState.COMPETITIVE && activeSession != null) {
             hud.setActiveSession(activeSession);
-
             currentLevelData = activeSession.getCourseLayout().get(activeSession.getCurrentHoleIndex());
             ITerrainGenerator generator = new ClassicGenerator(currentLevelData);
             result = new LevelFactory.LevelCreationResult(generator, currentLevelData, Club.DRIVER, currentLevelData.getWaterLevel(), currentLevelData.getDistance());
         } else {
             result = levelFactory.createLevel(mode, manualSeed);
             currentLevelData = result.data;
-            hud.resetShots(); // Non-competitive resets to 0
+            hud.resetShots();
         }
 
         currentClub = result.defaultClub;
         levelManager.buildLevel(result.generator, result.waterLevel, result.distance);
-
         setupSpawnAndPins();
         setupInputProcessor();
-
-        // hud.resetShots(); <- REMOVE THIS LINE, it was overriding the sync above
         isVictory = false;
-        resetTimer = 0f;
+        hazardManager.resetTimer();
         particleManager.clear();
     }
 
@@ -176,7 +205,7 @@ public class GolfGame extends ApplicationAdapter {
             ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
         }
 
-        hasCurrentBallBeenHit = false;
+        hazardManager.setBallHit(false);
         refreshCameraController(hole);
     }
 
@@ -186,78 +215,22 @@ public class GolfGame extends ApplicationAdapter {
         cameraController.update(ball.getPosition(), inputProcessor);
     }
 
-    private void setupInputProcessor() {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
-
-            if (currentState == GameState.START) {
-                com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStartMenuStage();
-                if (s != null) multiplexer.addProcessor(s);
-            } else if (currentState == GameState.PAUSED) {
-                com.badlogic.gdx.scenes.scene2d.Stage s = hud.getPauseMenuStage();
-                if (s != null) multiplexer.addProcessor(s);
-            } else if (isGameplayState()) {
-                com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStage();
-                if (s != null) multiplexer.addProcessor(s);
-            }
-            multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
-            Gdx.input.setInputProcessor(multiplexer);
-        } else {
-            Gdx.input.setInputProcessor((com.badlogic.gdx.InputProcessor) inputProcessor);
-        }
-    }
-
-    @Override
-    public void render() {
-        float delta = Gdx.graphics.getDeltaTime();
-        inputProcessor.update(delta);
-
-        handleInput();
-
-        gameViewport.apply();
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
-
-        boolean showMouse = (currentState == GameState.START || currentState == GameState.PAUSED ||
-                currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG || isVictory);
-        Gdx.input.setCursorCatched(!showMouse);
-
-        if (currentState == GameState.START) {
-            hud.renderStartMenu(menuSelection, currentMenuState, standardSession, dailySession);
-        } else if (currentState == GameState.INSTRUCTIONS) {
-            hud.renderInstructions(inputProcessor);
-        } else if (currentState == GameState.CAMERA_CONFIG) {
-            hud.renderCameraConfig(inputProcessor);
-        } else {
-            updateLogic(delta);
-            renderScene();
-            renderUI();
-        }
-
-        if (inputProcessor instanceof MobileInputProcessor) {
-            ((MobileInputProcessor) inputProcessor).resetDrags();
-        }
-    }
-
     private void updateLogic(float delta) {
         Terrain terrain = levelManager.getTerrain();
         if (!isVictory && isGameplayState()) {
-            float currentMult = config.getGameSpeed();
-            float effDelta = delta * currentMult;
-
+            float effDelta = delta * config.getGameSpeed();
             Vector3 currentWind = (currentState == GameState.PUTTING_GREEN || currentLevelData == null) ? zeroWind : currentLevelData.getWind();
 
             windManager.update(effDelta, currentWind, camera.position);
-
             if (hud.wasMinigameCanceled()) shotController.reset();
 
             PhysicsProfiler.startSection("ShotControllerCharge");
             if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
                 if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
-                    if (GameState.PRACTICE_RANGE != currentState) {
-                        hud.resetSpin();
-                    }
-                    hasCurrentBallBeenHit = true;
+                    if (GameState.PRACTICE_RANGE != currentState) hud.resetSpin();
+                    hazardManager.setBallHit(true);
                     shotController.update(0, ball, camera.direction, currentClub, hud, terrain, inputProcessor);
+                    if (activeSession != null) SessionPersistence.saveSession(activeSession);
                 }
             }
             PhysicsProfiler.endSection("ShotControllerCharge");
@@ -271,12 +244,11 @@ public class GolfGame extends ApplicationAdapter {
                 PhysicsProfiler.endSection("ParticleInteractions");
             }
 
-            handleBallStationaryLogic(delta);
+            hazardManager.update(delta, ball, terrain, currentState == GameState.PRACTICE_RANGE, this);
             if (ball.checkVictory(terrain)) triggerVictory();
         }
 
         particleManager.update(delta, terrain);
-
         if (terrain != null) {
             PhysicsProfiler.startSection("CameraOcclusion");
             terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
@@ -285,72 +257,24 @@ public class GolfGame extends ApplicationAdapter {
         }
     }
 
-    private void handleBallStationaryLogic(float delta) {
-        Terrain terrain = levelManager.getTerrain();
-
-        if (ball.getState() == Ball.State.AIR && !ball.isInWater(terrain)) {
-            resetTimer = 0f;
-            return;
-        }
-
-        if (currentState != GameState.PRACTICE_RANGE) {
-            if (checkInstantHazards(terrain)) return;
-        }
-
-        if (ball.getState() == Ball.State.STATIONARY) {
-            updateResetTimer(delta, terrain);
-        }
+    @Override
+    public void onOutOfBounds() {
+        hud.showOutOfBounds();
+        resetBallToLastShot();
     }
 
-    private boolean checkInstantHazards(Terrain terrain) {
-        Vector3 pos = ball.getPosition();
-
-        if (terrain.isPointOutOfBounds(pos.x, pos.z)) {
-            hud.showOutOfBounds();
-            resetBallToLastShot();
-            resetTimer = 0f;
-            return true;
-        }
-        return false;
+    @Override
+    public void onWaterHazard() {
+        hud.showWaterHazard();
+        resetBallToLastShot();
     }
 
-    private void updateResetTimer(float delta, Terrain terrain) {
-        if (shouldActiveTimer(terrain)) {
-            resetTimer += delta;
-
-            if (resetTimer >= RESET_DELAY) {
-                handleTimerThresholdReached(terrain);
-            }
-        } else {
-            resetTimer = 0f;
-        }
-    }
-
-    private boolean shouldActiveTimer(Terrain terrain) {
-        if (!hasCurrentBallBeenHit) return false;
-
-        boolean inWater = ball.isInWater(terrain);
-        boolean isStationary = ball.getState() == Ball.State.STATIONARY;
-
-        return inWater || (currentState == GameState.PRACTICE_RANGE) || isStationary;
-    }
-
-    private void handleTimerThresholdReached(Terrain terrain) {
-        if (currentState == GameState.PRACTICE_RANGE) {
-            resetPracticeBall(terrain);
-        } else if (ball.isInWater(terrain)) {
-            hud.showWaterHazard();
-            resetBallToLastShot();
-            resetTimer = 0f;
-        }
-    }
-
-    private void resetPracticeBall(Terrain terrain) {
+    @Override
+    public void onPracticeReset() {
         ghostManager.archiveBall(ball);
-        Vector3 tee = terrain.getTeePosition();
+        Vector3 tee = levelManager.getTerrain().getTeePosition();
         ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config);
-        hasCurrentBallBeenHit = false;
-        resetTimer = 0f;
+        hazardManager.setBallHit(false);
     }
 
     private void resetBallToLastShot() {
@@ -359,9 +283,9 @@ public class GolfGame extends ApplicationAdapter {
             ball.setState(Ball.State.STATIONARY);
             shotController.reset();
             hud.cancelMinigame();
-            hasCurrentBallBeenHit = false;
+            hazardManager.setBallHit(false);
             isVictory = false;
-            resetTimer = 0f;
+            hazardManager.resetTimer();
             cameraController.update(ball.getPosition(), inputProcessor);
         }
     }
@@ -375,21 +299,46 @@ public class GolfGame extends ApplicationAdapter {
         particleManager.spawn(terrain.getHolePosition(), Color.GOLD, 40, vel + 5, 50.0f, 4.0f);
 
         if (currentState == GameState.COMPETITIVE && activeSession != null) {
-            activeSession.getCompetitiveScore().recordStroke(
-                    activeSession.getCurrentHoleIndex(),
-                    hud.getShotCount()
-            );
+            activeSession.getCompetitiveScore().recordStroke(activeSession.getCurrentHoleIndex(), hud.getShotCount());
+            activeSession.advanceHole();
+            SessionPersistence.saveSession(activeSession);
         }
+    }
+
+    @Override
+    public void render() {
+        float delta = Gdx.graphics.getDeltaTime();
+        inputProcessor.update(delta);
+        handleInput();
+
+        gameViewport.apply();
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
+
+        boolean showMouse = (currentState == GameState.START || currentState == GameState.PAUSED ||
+                currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG || isVictory);
+        Gdx.input.setCursorCatched(!showMouse);
+
+        if (currentState == GameState.START) {
+            hud.renderStartMenu(menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), standardSession, dailySession);
+        } else if (currentState == GameState.INSTRUCTIONS) {
+            hud.renderInstructions(inputProcessor);
+        } else if (currentState == GameState.CAMERA_CONFIG) {
+            hud.renderCameraConfig(inputProcessor);
+        } else {
+            updateLogic(delta);
+            renderScene();
+            renderUI();
+        }
+
+        if (inputProcessor instanceof MobileInputProcessor) ((MobileInputProcessor) inputProcessor).resetDrags();
     }
 
     private void renderScene() {
         if (levelManager.getTerrain() == null) return;
         modelBatch.begin(camera);
-
         levelManager.render(modelBatch, environment);
         ball.render(modelBatch, environment);
         ball.renderTrail(modelBatch, environment);
-
         ghostManager.render(modelBatch, environment);
 
         if (cameraController.isOverhead()) {
@@ -417,18 +366,7 @@ public class GolfGame extends ApplicationAdapter {
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(currentLevelData, inputProcessor, activeSession);
         } else {
-            hud.renderPlayingHUD(
-                    currentClub,
-                    ball,
-                    isPractice,
-                    currentLevelData,
-                    camera,
-                    levelManager.getTerrain(),
-                    activeSession, // This now contains the int[] scores array
-                    inputProcessor,
-                    showClubInfo,
-                    shotController
-            );
+            hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), activeSession, inputProcessor, showClubInfo, shotController);
         }
     }
 
@@ -441,7 +379,7 @@ public class GolfGame extends ApplicationAdapter {
         } else if (hud.wasCameraConfigRequested()) {
             enterCameraConfig();
         } else if (currentState == GameState.START) {
-            handleStartMenuInput();
+            menuManager.handleInput(inputProcessor, this);
         } else if (currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG) {
             handleOverlayInput();
         } else {
@@ -450,221 +388,6 @@ public class GolfGame extends ApplicationAdapter {
 
         if (currentState != oldState && Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             setupInputProcessor();
-        }
-    }
-
-    private void handleOverlayInput() {
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
-            currentState = returnState;
-            if (cameraController != null) cameraController.updateCursorState();
-        }
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
-            tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            hud.getStage().getViewport().unproject(tempV3);
-
-            boolean close = false;
-            if (currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y))
-                close = true;
-            if (currentState == GameState.CAMERA_CONFIG && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y))
-                close = true;
-
-            if (close) {
-                currentState = returnState;
-                if (cameraController != null) cameraController.updateCursorState();
-            }
-        }
-    }
-
-    private void exitToMainMenu() {
-        shotController.reset();
-        hud.resetShots();
-        // activeSession is handled by the start menu logic now
-        currentState = GameState.START;
-        currentMenuState = MenuState.MAIN;
-        menuSelection = 0;
-        isVictory = false;
-    }
-
-    private void enterInstructions() {
-        hud.clearInstructionsRequest();
-        hud.resetInstructionScroll();
-        returnState = currentState;
-        currentState = GameState.INSTRUCTIONS;
-    }
-
-    private void enterCameraConfig() {
-        hud.clearCameraConfigRequest();
-        hud.resetCameraConfigScroll();
-        returnState = currentState;
-        currentState = GameState.CAMERA_CONFIG;
-    }
-
-    private void handleStartMenuInput() {
-        int maxSelection = switch (currentMenuState) {
-            case MAIN -> 5;
-            case EIGHTEEN_HOLES, PRACTICE -> 3;
-            case DIFFICULTY_SELECT -> 6;
-        };
-
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_UP))
-            menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN))
-            menuSelection = (menuSelection + 1) % maxSelection;
-
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU) && currentMenuState != MenuState.MAIN) {
-            if (currentMenuState == MenuState.DIFFICULTY_SELECT) {
-                currentMenuState = MenuState.EIGHTEEN_HOLES;
-                menuSelection = pendingMatchMode;
-            } else {
-                currentMenuState = MenuState.MAIN;
-                menuSelection = 0;
-            }
-            return;
-        }
-
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MENU_SELECT)) {
-            processMenuSelection();
-        }
-
-        for (int i = 0; i < maxSelection; i++) {
-            try {
-                GameInputProcessor.Action selectAction = GameInputProcessor.Action.valueOf("SELECT_OPTION_" + i);
-                if (inputProcessor.isActionJustPressed(selectAction)) {
-                    menuSelection = i;
-                    processMenuSelection();
-                    return;
-                }
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-    }
-
-    private void processMenuSelection() {
-        switch (currentMenuState) {
-            case MAIN -> handleMainMenuSelection();
-            case EIGHTEEN_HOLES -> handleEighteenMenuSelection();
-            case DIFFICULTY_SELECT -> handleDifficultySelection();
-            case PRACTICE -> handlePracticeMenuSelection();
-        }
-    }
-
-    private void handleMainMenuSelection() {
-        switch (menuSelection) {
-            case 0 -> {
-                currentState = GameState.PLAYING;
-                initLevel();
-            }
-            case 1 -> {
-                currentMenuState = MenuState.EIGHTEEN_HOLES;
-                menuSelection = 0;
-            }
-            case 2 -> enterInstructions();
-            case 3 -> {
-                currentMenuState = MenuState.PRACTICE;
-                menuSelection = 0;
-            }
-            case 4 -> {
-                long seed = -1;
-                String clip = Gdx.app.getClipboard().getContents();
-                try {
-                    if (clip != null) seed = Long.parseLong(clip.trim());
-                } catch (Exception ignored) {
-                }
-                currentState = GameState.PLAYING;
-                initLevel(seed);
-            }
-        }
-    }
-
-    private void handleEighteenMenuSelection() {
-        switch (menuSelection) {
-            case 0 -> { // Standard 18
-                if (standardSession != null && !standardSession.isFinished()) {
-                    activateSession(standardSession);
-                    currentState = GameState.COMPETITIVE;
-                    initLevel();
-                } else {
-                    pendingMatchMode = 0;
-                    currentMenuState = MenuState.DIFFICULTY_SELECT;
-                }
-            }
-            case 1 -> { // Daily
-                if (dailySession != null && !dailySession.isFinished()) {
-                    activateSession(dailySession);
-                    currentState = GameState.COMPETITIVE;
-                    initLevel();
-                } else {
-                    pendingMatchMode = 1;
-                    currentMenuState = MenuState.DIFFICULTY_SELECT;
-                }
-            }
-        }
-    }
-
-    private void activateSession(GameSession session) {
-        this.activeSession = session;
-    }
-    private void handleDifficultySelection() {
-        int backButtonIndex = GameConfig.Difficulty.values().length;
-
-        if (menuSelection == backButtonIndex) {
-            currentMenuState = MenuState.EIGHTEEN_HOLES;
-            menuSelection = pendingMatchMode;
-            return;
-        }
-
-        if (menuSelection >= 0 && menuSelection < backButtonIndex) {
-            GameConfig.Difficulty selectedDifficulty = GameConfig.Difficulty.values()[menuSelection];
-            config.setDifficulty(selectedDifficulty);
-
-            if (pendingMatchMode == 0) {
-                startCompetitiveMatch(-1, GameSession.GameMode.STANDARD_18);
-            } else {
-                Calendar cal = Calendar.getInstance();
-                long dailySeed = cal.get(Calendar.YEAR) * 10000L + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
-                startCompetitiveMatch(applySecretSauce(dailySeed), GameSession.GameMode.DAILY_CHALLENGE);
-            }
-        }
-    }
-
-    private long applySecretSauce(long seed) {
-        for (int i = 0; i < 10; i++) {
-            seed = (seed * 13) + 8;
-            if ((seed + "").length() > 9) {
-                seed = seed / 17;
-            }
-        }
-        return seed;
-    }
-
-    private void startCompetitiveMatch(long seed, GameSession.GameMode mode) {
-        currentState = GameState.COMPETITIVE;
-
-        // Create the session
-        activeSession = new GameSession(seed, config.difficulty, mode);
-        activeSession.setCourseLayout(LevelDataGenerator.generate18Holes(seed));
-
-        if (mode == GameSession.GameMode.STANDARD_18) standardSession = activeSession;
-        else dailySession = activeSession;
-
-        shotController.setGuidelineEnabled(false);
-        initLevel();
-    }
-
-    private void handlePracticeMenuSelection() {
-        switch (menuSelection) {
-            case 0 -> {
-                currentState = GameState.PRACTICE_RANGE;
-                initLevel();
-            }
-            case 1 -> {
-                currentState = GameState.PUTTING_GREEN;
-                initLevel();
-            }
-            case 2 -> {
-                currentMenuState = MenuState.MAIN;
-                menuSelection = 3;
-            }
         }
     }
 
@@ -723,8 +446,8 @@ public class GolfGame extends ApplicationAdapter {
 
     private void handleNewLevelInput() {
         if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
-            if (isVictory && activeSession != null && activeSession.getCurrentHoleIndex() + 1 < activeSession.getCourseLayout().size()) {
-                activeSession.advanceHole();
+            if (isVictory && activeSession != null && activeSession.getCurrentHoleIndex() < activeSession.getCourseLayout().size()) {
+                SessionPersistence.saveSession(activeSession);
                 currentState = GameState.COMPETITIVE;
                 initLevel();
             }
@@ -734,18 +457,160 @@ public class GolfGame extends ApplicationAdapter {
         }
     }
 
-    private void setupEnvironment() {
-        environment = new Environment();
-        environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.4f, 0.4f, 0.4f, 1f));
-        environment.add(new DirectionalLight().set(Color.WHITE, -1f, -0.8f, -0.2f));
-        Gdx.gl.glClearColor(0.53f, 0.81f, 0.92f, 1f);
+    private void handleOverlayInput() {
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
+            currentState = returnState;
+            if (cameraController != null) cameraController.updateCursorState();
+        }
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+            tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            hud.getStage().getViewport().unproject(tempV3);
+            boolean close = false;
+            if (currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) close = true;
+            if (currentState == GameState.CAMERA_CONFIG && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) close = true;
+            if (close) {
+                currentState = returnState;
+                if (cameraController != null) cameraController.updateCursorState();
+            }
+        }
     }
 
-    private void setupCamera() {
-        camera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.near = 0.4f;
-        camera.far = 950f;
-        gameViewport = new ExtendViewport(1280, 720, camera);
+    private void setupInputProcessor() {
+        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
+            if (currentState == GameState.START) {
+                com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStartMenuStage();
+                if (s != null) multiplexer.addProcessor(s);
+            } else if (currentState == GameState.PAUSED) {
+                com.badlogic.gdx.scenes.scene2d.Stage s = hud.getPauseMenuStage();
+                if (s != null) multiplexer.addProcessor(s);
+            } else if (isGameplayState()) {
+                com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStage();
+                if (s != null) multiplexer.addProcessor(s);
+            }
+            multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
+            Gdx.input.setInputProcessor(multiplexer);
+        } else {
+            Gdx.input.setInputProcessor((com.badlogic.gdx.InputProcessor) inputProcessor);
+        }
+    }
+
+    private void exitToMainMenu() {
+        shotController.reset();
+        hud.resetShots();
+        currentState = GameState.START;
+        menuManager.setMenuState(MenuState.MAIN);
+        menuManager.setMenuSelection(0);
+        isVictory = false;
+    }
+
+    private void enterInstructions() {
+        hud.clearInstructionsRequest();
+        hud.resetInstructionScroll();
+        returnState = currentState;
+        currentState = GameState.INSTRUCTIONS;
+    }
+
+    private void enterCameraConfig() {
+        hud.clearCameraConfigRequest();
+        hud.resetCameraConfigScroll();
+        returnState = currentState;
+        currentState = GameState.CAMERA_CONFIG;
+    }
+
+    private void activateSession(GameSession session) {
+        this.activeSession = session;
+    }
+
+    private void startCompetitiveMatch(long seed, GameSession.GameMode mode) {
+        currentState = GameState.COMPETITIVE;
+        long today = SessionPersistence.getTodayTimestamp();
+        activeSession = new GameSession(seed, config.difficulty, mode, today);
+        activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession));
+        activeSession.setCourseLayout(LevelDataGenerator.generate18Holes(seed));
+        if (mode == GameSession.GameMode.STANDARD_18) standardSession = activeSession;
+        else dailySession = activeSession;
+        shotController.setGuidelineEnabled(false);
+        SessionPersistence.saveSession(activeSession);
+        initLevel();
+    }
+
+    @Override
+    public void onStartQuickPlay() {
+        currentState = GameState.PLAYING;
+        initLevel();
+    }
+
+    @Override
+    public void onShowInstructions() {
+        enterInstructions();
+    }
+
+    @Override
+    public void onStartWithClipboardSeed() {
+        long seed = -1;
+        String clip = Gdx.app.getClipboard().getContents();
+        try { if (clip != null) seed = Long.parseLong(clip.trim()); } catch (Exception ignored) {}
+        currentState = GameState.PLAYING;
+        initLevel(seed);
+    }
+
+    @Override
+    public void onSelectStandard18() {
+        if (standardSession != null && !standardSession.isFinished()) {
+            activateSession(standardSession);
+            currentState = GameState.COMPETITIVE;
+            initLevel();
+        } else {
+            menuManager.setPendingMatchMode(0);
+            menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
+            menuManager.setMenuSelection(0);
+        }
+    }
+
+    @Override
+    public void onSelectDailyChallenge() {
+        if (dailySession != null && !dailySession.isFinished()) {
+            activateSession(dailySession);
+            currentState = GameState.COMPETITIVE;
+            initLevel();
+        } else {
+            menuManager.setPendingMatchMode(1);
+            menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
+            menuManager.setMenuSelection(0);
+        }
+    }
+
+    @Override
+    public void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode) {
+        config.setDifficulty(difficulty);
+        if (mode == 0) {
+            startCompetitiveMatch(-1, GameSession.GameMode.STANDARD_18);
+        } else {
+            Calendar cal = Calendar.getInstance();
+            long dailySeed = (long) cal.get(Calendar.YEAR) * 10000 + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
+            startCompetitiveMatch(applySecretSauce(dailySeed), GameSession.GameMode.DAILY_CHALLENGE);
+        }
+    }
+
+    @Override
+    public void onStartPracticeRange() {
+        currentState = GameState.PRACTICE_RANGE;
+        initLevel();
+    }
+
+    @Override
+    public void onStartPuttingGreen() {
+        currentState = GameState.PUTTING_GREEN;
+        initLevel();
+    }
+
+    private long applySecretSauce(long seed) {
+        for (int i = 0; i < 10; i++) {
+            seed = (seed * 13) + 8;
+            if ((seed + "").length() > 9) seed = seed / 17;
+        }
+        return seed;
     }
 
     private boolean isGameplayState() {
@@ -755,23 +620,5 @@ public class GolfGame extends ApplicationAdapter {
 
     private boolean isVictoryCourseComplete() {
         return isVictory && currentState == GameState.COMPETITIVE && activeSession != null && activeSession.isFinished() && inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU);
-    }
-
-    @Override
-    public void resize(int width, int height) {
-        if (gameViewport != null) gameViewport.update(width, height, true);
-        if (hud != null) hud.resize(width, height);
-    }
-
-    @Override
-    public void dispose() {
-        modelBatch.dispose();
-        hud.dispose();
-        shotController.dispose();
-        levelManager.dispose();
-        ghostManager.dispose();
-        particleManager.dispose();
-        if (ball != null) ball.dispose();
-        if (highlightModel != null) highlightModel.dispose();
     }
 }

@@ -1,36 +1,45 @@
 package org.example.gameManagers;
 
+import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonValue;
 import org.example.GameConfig;
 import org.example.ball.CompetitiveScore;
 import org.example.terrain.level.LevelData;
+import org.example.terrain.level.LevelDataGenerator;
 import java.util.ArrayList;
 import java.util.List;
 
-public class GameSession {
+public class GameSession implements Json.Serializable {
     public enum GameMode {
         STANDARD_18,
         DAILY_CHALLENGE
     }
 
-    private final long masterSeed;
-    private final GameConfig.Difficulty difficulty;
-    private final GameMode mode;
-
-    private int currentHoleIndex = 0;
-    private int currentHoleStrokes = 0; // The "In-Progress" counter
-    private List<LevelData> courseLayout;
-    private int[] scores;
-    private boolean isFinished = false;
+    private long masterSeed;
+    private GameConfig.Difficulty difficulty;
+    private GameMode mode;
+    private int currentHoleStrokes = 0;
     private boolean isStarted = false;
-
+    private long timestamp;
     private CompetitiveScore competitiveScore;
 
-    public GameSession(long masterSeed, GameConfig.Difficulty difficulty, GameMode mode) {
+    private transient List<LevelData> courseLayout = new ArrayList<>();
+    private transient Runnable onStateChanged;
+
+    public GameSession() {}
+
+    public GameSession(long masterSeed, GameConfig.Difficulty difficulty, GameMode mode, long timestamp) {
         this.masterSeed = masterSeed;
         this.difficulty = difficulty;
         this.mode = mode;
-        this.scores = new int[18];
-        this.courseLayout = new ArrayList<>();
+        this.timestamp = timestamp;
+    }
+
+    public void rebuildLayout() {
+        this.courseLayout = LevelDataGenerator.generate18Holes(masterSeed);
+        if (this.competitiveScore == null) {
+            this.competitiveScore = new CompetitiveScore(courseLayout);
+        }
     }
 
     public void setCourseLayout(List<LevelData> layout) {
@@ -41,62 +50,79 @@ public class GameSession {
     public void incrementStrokes() {
         this.currentHoleStrokes++;
         this.isStarted = true;
+        if (competitiveScore != null) {
+            competitiveScore.recordStroke(getCurrentHoleIndex(), currentHoleStrokes);
+        }
+        notifyStateChanged();
     }
 
     public void advanceHole() {
-        if (currentHoleIndex < courseLayout.size()) {
-            // Use the internally tracked strokes
-            scores[currentHoleIndex] = currentHoleStrokes;
-
-            if (competitiveScore != null) {
-                competitiveScore.recordStroke(currentHoleIndex, currentHoleStrokes);
-            }
-
-            // Reset for the next hole
+        if (competitiveScore != null && getCurrentHoleIndex() < courseLayout.size()) {
+            competitiveScore.recordStroke(getCurrentHoleIndex(), currentHoleStrokes);
             currentHoleStrokes = 0;
-            currentHoleIndex++;
-
-            if (competitiveScore != null) {
-                competitiveScore.setCurrentHoleIndex(currentHoleIndex);
-            }
-        }
-
-        if (currentHoleIndex >= courseLayout.size() && !courseLayout.isEmpty()) {
-            isFinished = true;
+            competitiveScore.setCurrentHoleIndex(getCurrentHoleIndex() + 1);
+            notifyStateChanged();
         }
     }
 
-    public int getCurrentHoleStrokes() {
-        return currentHoleStrokes;
+    private void notifyStateChanged() {
+        if (onStateChanged != null) onStateChanged.run();
     }
 
-    public CompetitiveScore getCompetitiveScore() {
-        return competitiveScore;
+    public void setSaveCallback(Runnable callback) {
+        this.onStateChanged = callback;
     }
 
+    @Override
+    public void write(Json json) {
+        json.writeValue("masterSeed", masterSeed);
+        json.writeValue("difficulty", difficulty);
+        json.writeValue("mode", mode);
+        json.writeValue("currentHoleStrokes", currentHoleStrokes);
+        json.writeValue("isStarted", isStarted);
+        json.writeValue("timestamp", timestamp);
+        json.writeValue("competitiveScore", competitiveScore);
+    }
+
+    @Override
+    public void read(Json json, JsonValue jsonData) {
+        this.masterSeed = jsonData.getLong("masterSeed");
+        this.difficulty = json.readValue(GameConfig.Difficulty.class, jsonData.get("difficulty"));
+        this.mode = json.readValue(GameMode.class, jsonData.get("mode"));
+        this.currentHoleStrokes = jsonData.getInt("currentHoleStrokes");
+        this.isStarted = jsonData.getBoolean("isStarted");
+        this.timestamp = jsonData.getLong("timestamp");
+        this.competitiveScore = json.readValue(CompetitiveScore.class, jsonData.get("competitiveScore"));
+        rebuildLayout();
+    }
+
+    public int getCurrentHoleIndex() { return (competitiveScore != null) ? competitiveScore.getCurrentHoleIndex() : 0; }
+    public int[] getScores() { return (competitiveScore != null) ? competitiveScore.getScores() : new int[0]; }
+    public int getTotalScore() { return (competitiveScore != null) ? competitiveScore.getTotalStrokes() : 0; }
+
+    public boolean isFinished() {
+        if (courseLayout == null || courseLayout.isEmpty()) return false;
+        int currentIndex = getCurrentHoleIndex();
+        if (currentIndex >= courseLayout.size()) return true;
+        if (currentIndex == courseLayout.size() - 1) {
+            return competitiveScore != null && competitiveScore.getScoreForHole(currentIndex) > 0;
+        }
+        return false;
+    }
+
+    public LevelData getCurrentLevel() {
+        int index = getCurrentHoleIndex();
+        if (courseLayout == null || index >= courseLayout.size()) return null;
+        return courseLayout.get(index);
+    }
+
+    public int getCurrentHoleStrokes() { return currentHoleStrokes; }
+    public CompetitiveScore getCompetitiveScore() { return competitiveScore; }
     public List<LevelData> getCourseLayout() { return courseLayout; }
-    public int getCurrentHoleIndex() { return currentHoleIndex; }
-    public boolean isFinished() { return isFinished; }
-    public int[] getScores() { return scores; }
     public long getMasterSeed() { return masterSeed; }
     public GameConfig.Difficulty getDifficulty() { return difficulty; }
     public GameMode getMode() { return mode; }
     public boolean isStarted() { return isStarted; }
     public void setStarted(boolean started) { this.isStarted = started; }
-
-    public LevelData getCurrentLevel() {
-        if (courseLayout == null || currentHoleIndex >= courseLayout.size()) return null;
-        return courseLayout.get(currentHoleIndex);
-    }
-
-    public int getTotalScore() {
-        if (competitiveScore != null) {
-            return competitiveScore.getTotalStrokes();
-        }
-        int total = 0;
-        for (int i = 0; i < currentHoleIndex; i++) {
-            total += scores[i];
-        }
-        return total;
-    }
+    public long getTimestamp() { return timestamp; }
 }

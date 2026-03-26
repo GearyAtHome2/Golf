@@ -1,4 +1,4 @@
-package org.example.hud;
+package org.example.hud.minigame;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;

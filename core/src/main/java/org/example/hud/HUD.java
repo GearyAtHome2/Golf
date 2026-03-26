@@ -24,6 +24,7 @@ import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.*;
 import org.example.gameManagers.GameSession;
+import org.example.hud.minigame.MinigameController;
 import org.example.hud.mobile.MobileUIFactory;
 import org.example.hud.renderer.*;
 import org.example.input.GameInputProcessor;

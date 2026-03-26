@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Array;
+import org.example.hud.minigame.MinigameEngine;
 
 public class MinigameUI {
     private final Color colorOrange = new Color(1f, 0.5f, 0f, 0.4f);

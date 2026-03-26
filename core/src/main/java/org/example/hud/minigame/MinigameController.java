@@ -1,4 +1,4 @@
-package org.example.hud;
+package org.example.hud.minigame;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -17,6 +17,8 @@ import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotDifficulty;
+import org.example.hud.MinigameUI;
+import org.example.hud.ModAnimation;
 import org.example.hud.renderer.NotificationManager;
 import org.example.input.GameInputProcessor;
 import org.example.terrain.Terrain;

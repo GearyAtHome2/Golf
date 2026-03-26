@@ -77,7 +77,7 @@ public class VictoryRenderer {
             font.setColor(Color.GOLD);
             String hCapText = "YOUR HANDICAP: " + handicapStr;
             layout.setText(font, hCapText);
-            font.draw(batch, hCapText, centerX - (layout.width / 2f), promptY - 32);
+            font.draw(batch, hCapText, centerX - (layout.width / 2f), promptY - 40);
         }
 
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
@@ -87,7 +87,7 @@ public class VictoryRenderer {
             layout.setText(font, prompt);
             font.draw(batch, prompt, centerX - (layout.width / 2f), promptY);
         }
-        batch.end();
+        batch.end(); // Balanced end
     }
 
     private void renderSplitScoreTable(SpriteBatch batch, BitmapFont font, GameSession session, float x, float y) {
