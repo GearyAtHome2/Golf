@@ -113,9 +113,7 @@ project(":desktop") {
 
         // Platform specific flags
         if (isWindows) {
-            argsList << '--win-console'
         } else if (isMac) {
-            // Mac often requires an identifier for the app bundle
             argsList << '--mac-package-identifier' << "org.example.golfgame2026"
         }
 
