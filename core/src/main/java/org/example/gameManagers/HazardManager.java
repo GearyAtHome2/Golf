@@ -11,7 +11,9 @@ public class HazardManager {
 
     public interface HazardListener {
         void onOutOfBounds();
+
         void onWaterHazard();
+
         void onPracticeReset();
     }
 
@@ -38,9 +40,11 @@ public class HazardManager {
 
     private boolean checkInstantHazards(Ball ball, Terrain terrain, HazardListener listener) {
         Vector3 pos = ball.getPosition();
-        if (terrain.isPointOutOfBounds(pos.x, pos.z)) {
-            listener.onOutOfBounds();
-            return true;
+        if (ball.isInWater(terrain) || ball.getState() == Ball.State.ROLLING || ball.getState() == Ball.State.CONTACT) {
+            if (terrain.isPointOutOfBounds(pos.x, pos.z)) {
+                listener.onOutOfBounds();
+                return true;
+            }
         }
         return false;
     }
@@ -58,6 +62,11 @@ public class HazardManager {
         }
     }
 
-    public void setBallHit(boolean hit) { this.hasCurrentBallBeenHit = hit; }
-    public void resetTimer() { this.resetTimer = 0f; }
+    public void setBallHit(boolean hit) {
+        this.hasCurrentBallBeenHit = hit;
+    }
+
+    public void resetTimer() {
+        this.resetTimer = 0f;
+    }
 }

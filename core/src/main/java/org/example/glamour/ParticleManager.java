@@ -149,6 +149,8 @@ public class ParticleManager {
     }
 
     public void update(float delta, Terrain terrain) {
+        if (delta <= 0) return;
+
         for (int i = particles.size - 1; i >= 0; i--) {
             if (!particles.get(i).update(delta, terrain)) {
                 particles.removeIndex(i);
