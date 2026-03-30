@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
@@ -18,6 +19,8 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
@@ -62,6 +65,7 @@ public class HUD {
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
     private Table startMenuTable;
     private boolean mobileUIInitialized = false;
+    private MobileUIFactory.MobileUIPackage mobileUIPackage;
     private MainMenuRenderer.MenuState lastMobileMenuState = null;
     private int shotCount = 0;
     private final Vector2 spinDot = new Vector2(0, 0);
@@ -100,21 +104,18 @@ public class HUD {
         this.stage = new Stage(viewport, batch);
         this.startMenuStage = new Stage(viewport, batch);
 
-        try {
-            this.skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
-        } catch (Exception e) {
-            Gdx.app.error("HUD", "Could not load uiskin.json. Make sure it exists in assets/ui/");
-        }
-        this.spinIndicator = new SpinIndicator(shapeRenderer, font);
-        this.preShotDebugActor = new PreShotDebugActor(font);
-        this.minigameController.setNotificationManager(this.notificationManager);
-        this.minigameController.setOnShotFinalized(this::incrementShots);
-
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
         pm.fill();
         whitePixel = new Texture(pm);
         pm.dispose();
+
+        this.skin = getSkin();
+
+        this.spinIndicator = new SpinIndicator(shapeRenderer, font);
+        this.preShotDebugActor = new PreShotDebugActor(font);
+        this.minigameController.setNotificationManager(this.notificationManager);
+        this.minigameController.setOnShotFinalized(this::incrementShots);
     }
 
     private void drawShadowedText(String text, float x, float y, Color color) {
@@ -151,44 +152,56 @@ public class HUD {
         }
     }
 
+    /**
+     * UPDATED: Forces the leaderboard to expand on Android to use the center gap.
+     * Rebuilds the internal table to match the new size.
+     */
     private void updateLeaderboardLayout() {
         if (leaderboardUI != null) {
-            // 1. Calculate a dynamic width (e.g., 40% of screen)
-            float targetWidth = viewport.getWorldWidth() * 0.40f;
+            boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
 
-            // 2. Clamp it: 320px is the absolute floor for 5 buttons; 600px is the ceiling
-            float finalWidth = MathUtils.clamp(targetWidth, 320f, 600f);
-
-            // 3. Scale height relative to screen
+            // Increase width significantly for Android to provide room for the "expand" logic
+            float targetWidth = viewport.getWorldWidth() * (isAndroid ? 0.52f : 0.38f);
+            float finalWidth = MathUtils.clamp(targetWidth, isAndroid ? 550f : 350f, 900f);
             float finalHeight = viewport.getWorldHeight() * 0.85f;
 
+            // 1. Set the actor size first
             leaderboardUI.setSize(finalWidth, finalHeight);
 
-            // 4. Position it with a relative margin
+            // 2. Position it
             float margin = viewport.getWorldWidth() * 0.02f;
             float xPos = viewport.getWorldWidth() - finalWidth - margin;
             float yPos = (viewport.getWorldHeight() - finalHeight) / 2f;
-
             leaderboardUI.setPosition(xPos, yPos);
 
-            // 5. Force the UI to re-layout its internal children based on new size
+            // 3. Rebuild now uses the actual width of the actor
+            leaderboardUI.rebuild(isAndroid ? 1.15f : 1.0f);
+
+            // 4. Force LibGDX to re-calculate the table layout based on the new size
             leaderboardUI.invalidateHierarchy();
+            leaderboardUI.layout();
         }
     }
 
     public void setupMobileUI(MobileInputProcessor input) {
         if (mobileUIInitialized) return;
-        MobileUIFactory.MobileUIPackage ui = MobileUIFactory.create(
+
+        // 1. Initialize the class-level field properly
+        this.mobileUIPackage = MobileUIFactory.create(
                 viewport, batch, font, config, input, whitePixel, spinIndicator, preShotDebugActor
         );
-        this.stage = ui.stage;
-        this.startMenuStage = ui.startMenuStage;
-        this.pauseMenuStage = ui.pauseMenuStage;
-        this.gameplayTable = ui.gameplayTable;
-        this.victoryTable = ui.victoryTable;
-        this.infoToggleBtn = ui.infoToggleBtn;
-        this.skin = ui.skin;
-        this.startMenuTable = ui.startMenuTable;
+
+        // 2. Use the class field (mobileUIPackage) consistently for all assignments
+        this.stage = mobileUIPackage.stage;
+        this.startMenuStage = mobileUIPackage.startMenuStage;
+        this.pauseMenuStage = mobileUIPackage.pauseMenuStage;
+        this.gameplayTable = mobileUIPackage.gameplayTable;
+        this.victoryTable = mobileUIPackage.victoryTable;
+        this.infoToggleBtn = mobileUIPackage.infoToggleBtn;
+        this.skin = mobileUIPackage.skin;
+        this.startMenuTable = mobileUIPackage.startMenuTable;
+        this.mobileClubLabel = mobileUIPackage.clubLabel;
+
         this.infoToggleBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
@@ -196,7 +209,7 @@ public class HUD {
                 infoToggleBtn.setVisible(!showInfoDisplay);
             }
         });
-        this.mobileClubLabel = ui.clubLabel;
+
         mobileUIInitialized = true;
     }
 
@@ -422,9 +435,21 @@ public class HUD {
     public void renderVictory(int shots, LevelData levelData, GameSession session) {
         if (gameplayTable != null) gameplayTable.setVisible(false);
         if (victoryTable != null) victoryTable.setVisible(true);
+
+        if (mobileUIPackage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
+            boolean isFinished = (session != null && session.isFinished());
+            boolean isDaily = (session != null && session.getMode() == GameSession.GameMode.DAILY_CHALLENGE);
+
+            // Hide Next Level on the 18th hole; Show Menu/Submit instead
+            mobileUIPackage.nextLevelBtn.setVisible(!isFinished);
+            mobileUIPackage.submitScoreBtn.setVisible(isFinished && isDaily);
+            mobileUIPackage.mainMenuBtn.setVisible(isFinished);
+        }
+
         batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session);
         batch.end();
+
         if (Gdx.app.getType() == Application.ApplicationType.Android && stage != null) {
             stage.act();
             stage.draw();
@@ -495,9 +520,38 @@ public class HUD {
 
     public Skin getSkin() {
         if (skin == null) {
-            try { skin = new Skin(Gdx.files.internal("ui/uiskin.json")); }
-            catch (Exception e) { skin = new Skin(); }
+            try {
+                skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
+            } catch (Exception e) {
+                skin = new Skin();
+            }
         }
+
+        // Add standard compatibility styles
+        UIUtils.registerDefaultStyles(skin, font);
+
+        if (!skin.has("default-font", BitmapFont.class)) {
+            skin.add("default-font", font);
+        }
+
+        if (!skin.has("default", TextButton.TextButtonStyle.class)) {
+            TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
+            style.font = skin.getFont("default-font");
+            style.fontColor = Color.WHITE;
+            style.downFontColor = Color.GRAY;
+
+            if (skin.has("default-round", Drawable.class)) {
+                style.up = skin.getDrawable("default-round");
+                style.down = skin.getDrawable("default-round-down");
+            } else {
+                // Use our shared utility for consistent look
+                style.up = UIUtils.createRoundedRectDrawable(Color.DARK_GRAY, 6);
+                style.down = UIUtils.createRoundedRectDrawable(Color.LIGHT_GRAY, 6);
+            }
+
+            skin.add("default", style);
+        }
+
         return skin;
     }
 

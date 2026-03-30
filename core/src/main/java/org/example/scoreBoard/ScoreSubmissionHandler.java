@@ -1,5 +1,6 @@
 package org.example.scoreBoard;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Dialog;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
@@ -27,6 +28,8 @@ public class ScoreSubmissionHandler {
             protected void result(Object object) {
                 if (isFinished) return;
 
+                Gdx.input.setOnscreenKeyboardVisible(false);
+
                 if (object instanceof Boolean && (Boolean) object) {
                     String text = nameField.getText().trim();
                     if (!text.isEmpty()) {
@@ -43,6 +46,7 @@ public class ScoreSubmissionHandler {
                 String text = textField.getText().trim();
                 if (!text.isEmpty()) {
                     submit(text);
+                    Gdx.input.setOnscreenKeyboardVisible(false);
                     dialog.hide();
                     finish();
                 }
@@ -57,6 +61,8 @@ public class ScoreSubmissionHandler {
 
         dialog.show(stage);
         stage.setKeyboardFocus(nameField);
+
+        Gdx.input.setOnscreenKeyboardVisible(true);
     }
 
     private void finish() {

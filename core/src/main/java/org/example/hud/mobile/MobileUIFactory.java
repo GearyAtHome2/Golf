@@ -34,6 +34,7 @@ public class MobileUIFactory {
         public HoldButton resetBallBtn, newMapBtn;
         public Label clubLabel;
         public Skin skin;
+        public TextButton nextLevelBtn, submitScoreBtn, mainMenuBtn;
     }
 
     public static MobileUIPackage create(Viewport viewport, SpriteBatch batch, BitmapFont font, GameConfig config, MobileInputProcessor input, Texture whitePixel, SpinIndicator spinIndicator, PreShotDebugActor debugActor) {
@@ -77,36 +78,55 @@ public class MobileUIFactory {
         MainMenuRenderer.MenuState state = menuManager.getCurrentMenuState();
         String[] options = getOptionsForState(state);
 
-        float bW = viewport.getWorldWidth() * 0.45f;
-        float bH = viewport.getWorldHeight() * 0.09f;
-        float spacing = viewport.getWorldHeight() * 0.012f;
+        float screenW = viewport.getWorldWidth();
+        float screenH = viewport.getWorldHeight();
+
+        float leftPadding = screenW * 0.05f;
+        float bW = screenW * 0.45f;
+        float bH = screenH * 0.09f;
+        float spacing = screenH * 0.012f;
 
         for (int i = 0; i < options.length; i++) {
             final int index = i;
             String text = options[i];
+            boolean isDailyFinished = false;
 
-            // ADDED: Logic to show session progress on the buttons
             if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
                 if (i == 0 && standard != null && !standard.isFinished()) {
                     text = "RESUME 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)";
-                } else if (i == 1 && daily != null && !daily.isFinished()) {
-                    text = "RESUME DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)";
+                } else if (i == 1 && daily != null) {
+                    if (daily.isFinished()) {
+                        text = "DAILY CHALLENGE [COMPLETE]";
+                        isDailyFinished = true;
+                    } else {
+                        text = "RESUME DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)";
+                    }
                 }
             }
 
             TextButton btn = new TextButton(text, menuStyle);
             btn.getLabel().setFontScale(FONT_SCALE_START_MENU * 0.35f);
 
-            btn.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, Actor actor) {
-                    menuManager.handleExternalSelection(index, callback, standard, daily);
-                }
-            });
+            if (isDailyFinished) {
+                btn.setDisabled(true);
+                btn.getLabel().setColor(Color.GRAY);
+                btn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+                // Using a darker tint and making the font color dim
+                btn.setColor(0.17f, 0.17f, 0.17f, 1f);
+                btn.getLabel().getStyle().fontColor = Color.DARK_GRAY;
+            } else {
+                btn.addListener(new ChangeListener() {
+                    @Override
+                    public void changed(ChangeEvent event, Actor actor) {
+                        menuManager.handleExternalSelection(index, callback, standard, daily);
+                    }
+                });
+            }
 
-            table.add(btn).width(bW).height(bH).padBottom(spacing).row();
+            table.add(btn).width(bW).height(bH).padBottom(spacing).left().row();
         }
-        table.top().padTop(viewport.getWorldHeight() * 0.22f);
+
+        table.top().left().padTop(screenH * 0.22f).padLeft(leftPadding);
     }
 
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
@@ -209,13 +229,36 @@ public class MobileUIFactory {
 
     private static Skin setupSkin(BitmapFont font) {
         Skin skin = new Skin();
+
+        // 1. Core Resources
         skin.add("default", font);
+        skin.add("white", createRoundedRectDrawable(Color.WHITE, 2), Drawable.class);
+
+        // 2. Standard Button Drawables
         skin.add("btnUp", createRoundedRectDrawable(COLOR_BTN_UP, RADIUS_STD), Drawable.class);
         skin.add("btnDown", createRoundedRectDrawable(COLOR_BTN_DOWN, RADIUS_STD), Drawable.class);
         skin.add("hitUp", createRoundedRectDrawable(COLOR_HIT_UP, RADIUS_HIT), Drawable.class);
         skin.add("hitDown", createRoundedRectDrawable(COLOR_HIT_DOWN, RADIUS_HIT), Drawable.class);
         skin.add("maxHitUp", createRoundedRectDrawable(COLOR_MAX_UP, RADIUS_HIT), Drawable.class);
         skin.add("maxHitDown", createRoundedRectDrawable(COLOR_MAX_DOWN, RADIUS_HIT), Drawable.class);
+
+        // 3. TextFieldStyle (Fixes first crash)
+        TextField.TextFieldStyle tfs = new TextField.TextFieldStyle();
+        tfs.font = font;
+        tfs.fontColor = Color.WHITE;
+        tfs.background = createRoundedRectDrawable(new Color(0.15f, 0.15f, 0.15f, 0.9f), RADIUS_STD);
+        tfs.cursor = skin.newDrawable("white", Color.GOLD);
+        tfs.cursor.setMinWidth(2f);
+        tfs.selection = skin.newDrawable("white", new Color(0.3f, 0.3f, 0.8f, 0.5f));
+        skin.add("default", tfs);
+
+        // 4. WindowStyle (Fixes second crash for Dialogs)
+        Window.WindowStyle ws = new Window.WindowStyle();
+        ws.titleFont = font;
+        ws.titleFontColor = Color.GOLD;
+        ws.background = createRoundedRectDrawable(new Color(0.05f, 0.05f, 0.05f, 0.95f), RADIUS_STD);
+        skin.add("default", ws);
+
         return skin;
     }
 
@@ -253,19 +296,56 @@ public class MobileUIFactory {
     }
 
     private static void setupVictoryMenu(MobileUIPackage ui, MobileInputProcessor input, TextButton.TextButtonStyle style, Viewport viewport) {
-        TextButton.TextButtonStyle nextStyle = new TextButton.TextButtonStyle(style);
-        nextStyle.up = ui.skin.getDrawable("hitUp");
-        nextStyle.down = ui.skin.getDrawable("hitDown");
-        TextButton nextBtn = new TextButton("NEXT LEVEL", nextStyle);
-        nextBtn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 0.8f);
-        nextBtn.addListener(new ChangeListener() {
+        ui.victoryTable.clearChildren();
+        ui.victoryTable.bottom().padBottom(viewport.getWorldHeight() * 0.04f);
+
+        float btnW = viewport.getWorldWidth() * 0.28f;
+        float btnH = viewport.getWorldHeight() * 0.12f;
+        float fontScale = FONT_SCALE_GAMEPLAY * 0.6f;
+
+        TextButton.TextButtonStyle primaryStyle = new TextButton.TextButtonStyle(style);
+        primaryStyle.up = ui.skin.getDrawable("hitUp");
+        primaryStyle.down = ui.skin.getDrawable("hitDown");
+
+        // Initialize buttons
+        ui.nextLevelBtn = new TextButton("NEXT LEVEL", primaryStyle);
+        ui.nextLevelBtn.getLabel().setFontScale(fontScale);
+        ui.nextLevelBtn.addListener(new ChangeListener() {
             @Override
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+            public void changed(ChangeEvent event, Actor actor) {
                 input.triggerAction(GameInputProcessor.Action.NEW_LEVEL);
             }
         });
-        ui.victoryTable.bottom().padBottom(viewport.getWorldHeight() * 0.1f);
-        ui.victoryTable.add(nextBtn).width(viewport.getWorldWidth() * 0.35f).height(viewport.getWorldHeight() * 0.15f);
+
+        ui.submitScoreBtn = new TextButton("SUBMIT SCORE", primaryStyle);
+        ui.submitScoreBtn.getLabel().setFontScale(fontScale);
+        ui.submitScoreBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.SUBMIT_SCORE);
+            }
+        });
+
+        ui.mainMenuBtn = new TextButton("MAIN MENU", style);
+        ui.mainMenuBtn.getLabel().setFontScale(fontScale);
+        ui.mainMenuBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                input.triggerAction(GameInputProcessor.Action.MAIN_MENU);
+            }
+        });
+
+        Table buttonTable = new Table();
+
+        buttonTable.add(ui.submitScoreBtn).width(btnW).height(btnH).left().padLeft(20);
+
+        buttonTable.add().width(viewport.getWorldWidth() * 0.25f);
+
+        buttonTable.add(ui.mainMenuBtn).width(btnW).height(btnH).right().padRight(20);
+
+        ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center();
+        ui.victoryTable.row();
+        ui.victoryTable.add(buttonTable).center(); // Center the whole button row
     }
 
     private static TextButton createMenuButton(String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float fontScale) {
