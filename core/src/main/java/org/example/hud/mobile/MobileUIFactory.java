@@ -114,11 +114,10 @@ public class MobileUIFactory {
             case MAIN -> new String[]{"QUICK PLAY", "18 HOLES", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
             case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY CHALLENGE", "BACK"};
             case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
-            case DIFFICULTY_SELECT -> new String[]{"EASY", "NORMAL", "HARD", "EXPERT", "CUSTOM", "BACK"};
+            case DIFFICULTY_SELECT -> GameConfig.Difficulty.getNames();
         };
     }
 
-    // ... (Keep setupLeftStack, setupRightStack, setupClubSelection, setupPauseMenu unchanged) ...
 
     private static void setupLeftStack(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style, Viewport viewport) {
         Table leftStack = new Table();

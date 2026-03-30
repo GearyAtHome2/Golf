@@ -30,6 +30,15 @@ public class GameConfig {
         Difficulty(float s) {
             this.needleSpeedMult = s;
         }
+
+        public static String[] getNames() {
+            Difficulty[] values = Difficulty.values();
+            String[] names = new String[values.length];
+            for (int i = 0; i < values.length; i++) {
+                names[i] = values[i].name();
+            }
+            return names;
+        }
     }
 
     public void cycleAnimation() {

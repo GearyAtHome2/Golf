@@ -13,7 +13,7 @@ public class MinigameResult {
         SUPER(new String[]{"CRACKING!", "YOU BEAUTY!", "MASHED POTATOES!", "LIGHT THE CANDLE", "VERY CHEEKY"}, new float[]{0.3f, 0.2f, 0.1f, 0.1f, 0.3f}, Color.PINK),
         GREAT(new String[]{"SOLID", "LOVELY", "CHEEKY"}, new float[]{0.5f, 0.4f, 0.1f}, Color.GOLD),
         GOOD(new String[]{"She'll play", "Decent", "Nice", "That'll do, Pig"}, new float[]{7f, 2f, 1f, 0.2f}, Color.GREEN),
-        POOR(new String[]{"Meh.", "Sloppy", "Weak", "Does your husband play golf?"}, new float[]{0.6f, 0.3f, 0.1f, 0.2f}, Color.GRAY),
+        POOR(new String[]{"Meh.", "Sloppy", "Weak", "Does your husband play golf?", "Tiger Wouldn't"}, new float[]{0.6f, 0.3f, 0.2f, 0.1f, 0.3f}, Color.GRAY),
         WANK(new String[]{"TRAGIC!", "HORRIFIC!", "FOOOOOORE!"}, new float[]{0.4f, 0.4f, 0.2f}, Color.ORANGE),
         SHIT(new String[]{"ABYSMAL", "DELETE GAME", "WHIFFED IT", "GO HOME"}, new float[]{0.5f, 0.4f, 0.1f, 0.3f}, new Color(0.5f, 0.25f, 0f, 1f));
 

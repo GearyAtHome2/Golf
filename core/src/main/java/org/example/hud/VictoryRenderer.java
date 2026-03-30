@@ -83,11 +83,20 @@ public class VictoryRenderer {
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
-            String prompt = session.isFinished() ? "TOURNAMENT COMPLETE! [M] Main Menu" : "Press [N] for Next Hole";
+            String prompt;
+            if (session != null && session.isFinished()) {
+                if (session.getMode() == GameSession.GameMode.DAILY_CHALLENGE) {
+                    prompt = "COURSE COMPLETE! [S] Submit Score or [M] Main Menu";
+                } else {
+                    prompt = "COURSE COMPLETE! [M] Main Menu";
+                }
+            } else {
+                prompt = "HOLE COMPLETE! [N] Next Hole";
+            }
             layout.setText(font, prompt);
             font.draw(batch, prompt, centerX - (layout.width / 2f), promptY);
         }
-        batch.end(); // Balanced end
+        batch.end();
     }
 
     private void renderSplitScoreTable(SpriteBatch batch, BitmapFont font, GameSession session, float x, float y) {

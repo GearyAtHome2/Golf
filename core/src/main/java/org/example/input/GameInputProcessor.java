@@ -15,6 +15,7 @@ public interface GameInputProcessor {
         NEW_LEVEL,
         PAUSE,
         MAIN_MENU,
+        SUBMIT_SCORE,
         HELP,
         CAM_CONFIG,
         CYCLE_ANIMATION,

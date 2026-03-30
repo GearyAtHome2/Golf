@@ -21,6 +21,7 @@ import org.example.camera.CameraController;
 import org.example.gameManagers.*;
 import org.example.glamour.ParticleManager;
 import org.example.glamour.WindManager;
+import org.example.scoreBoard.ScoreSubmissionHandler;
 import org.example.hud.HUD;
 import org.example.hud.renderer.MainMenuRenderer.MenuState;
 import org.example.input.DesktopInputProcessor;
@@ -68,6 +69,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private WindManager windManager;
     private boolean isVictory = false;
     private boolean showClubInfo = false;
+    private boolean submissionStarted = false;
 
     private Model highlightModel;
     private ModelInstance highlightInstance;
@@ -163,6 +165,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void initLevel(long manualSeed) {
+        Gdx.app.log("DEBUG_FLOW", "initLevel called. Current Hole Index in Session: " +
+                (activeSession != null ? activeSession.getCurrentHoleIndex() : "N/A"));
+
         if (ball != null) ball.dispose();
         ghostManager.clear();
         shotController.reset();
@@ -186,6 +191,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         levelManager.buildLevel(result.generator, result.waterLevel, result.distance);
         setupSpawnAndPins();
         setupInputProcessor();
+        submissionStarted = false;
         isVictory = false;
         hazardManager.resetTimer();
         particleManager.clear();
@@ -203,7 +209,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             ball.setState(Ball.State.AIR);
         } else {
             long seed = 100l;
-            if (currentLevelData!=null){
+            if (currentLevelData != null) {
                 seed = currentLevelData.getSeed();
             }
             ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config, seed);
@@ -304,7 +310,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         if (currentState == GameState.COMPETITIVE && activeSession != null) {
             activeSession.getCompetitiveScore().recordStroke(activeSession.getCurrentHoleIndex(), hud.getShotCount());
+            Gdx.app.log("DEBUG_FLOW", "Victory! Advancing hole from index: " + activeSession.getCurrentHoleIndex());
             activeSession.advanceHole();
+            Gdx.app.log("DEBUG_FLOW", "Index after advance: " + activeSession.getCurrentHoleIndex());
             SessionPersistence.saveSession(activeSession);
         }
     }
@@ -319,7 +327,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
         boolean showMouse = (currentState == GameState.START || currentState == GameState.PAUSED ||
-                currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG || isVictory);
+                currentState == GameState.INSTRUCTIONS || currentState == GameState.CAMERA_CONFIG || isVictory || submissionStarted);
         Gdx.input.setCursorCatched(!showMouse);
 
         if (currentState == GameState.START) {
@@ -360,25 +368,84 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void renderUI() {
+        float delta = Gdx.graphics.getDeltaTime();
         boolean isPractice = (currentState == GameState.PRACTICE_RANGE || currentState == GameState.PUTTING_GREEN);
-        if (currentState == GameState.INSTRUCTIONS) {
-            hud.renderInstructions(inputProcessor);
-        } else if (currentState == GameState.CAMERA_CONFIG) {
-            hud.renderCameraConfig(inputProcessor);
-        } else if (isVictory) {
+
+        if (isVictory) {
             hud.renderVictory(hud.getShotCount(), currentLevelData, activeSession);
         } else if (currentState == GameState.PAUSED) {
-            hud.renderPauseMenu(currentLevelData, inputProcessor, activeSession);
+            hud.renderPauseMenu(currentLevelData, inputProcessor, activeSession, submissionStarted);
         } else {
             hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), activeSession, inputProcessor, showClubInfo, shotController);
+        }
+
+        com.badlogic.gdx.scenes.scene2d.Stage uiStage = hud.getStage();
+        if (uiStage != null) {
+            uiStage.act(delta);
+            uiStage.draw();
         }
     }
 
     private void handleInput() {
         GameState oldState = currentState;
-        if (hud.wasMainMenuRequested() || isVictoryCourseComplete()) {
+
+        if (hud.wasMainMenuRequested()) {
             exitToMainMenu();
-        } else if (hud.wasInstructionsRequested()) {
+            return;
+        }
+
+        if (submissionStarted) return;
+
+        if (isVictory) {
+            boolean complete = isVictoryCourseComplete();
+
+            if (complete) {
+                boolean isDaily = (activeSession != null && activeSession.getMode() == GameSession.GameMode.DAILY_CHALLENGE);
+                boolean sPressed = inputProcessor.isActionJustPressed(GameInputProcessor.Action.SUBMIT_SCORE);
+
+                if (isDaily && (sPressed)) {
+                    Gdx.app.log("DEBUG_LEAK", "Daily Submission Triggered.");
+                    submissionStarted = true;
+
+                    if (inputProcessor instanceof DesktopInputProcessor dip) {
+                        dip.setInputBlocked(true);
+                    }
+
+                    setupInputProcessor();
+                    new ScoreSubmissionHandler(activeSession, () -> {
+                        // CRITICAL: Force execution to the Main Thread to avoid the 19th hole race condition
+                        Gdx.app.postRunnable(() -> {
+                            Gdx.app.log("DEBUG_LEAK", "ScoreSubmissionHandler Callback - Running exitToMainMenu on Main Thread");
+                            submissionStarted = false;
+
+                            if (inputProcessor instanceof DesktopInputProcessor dip) {
+                                dip.setInputBlocked(false);
+                                dip.update(0);
+                            }
+
+                            exitToMainMenu();
+                            setupInputProcessor();
+                        });
+                    }).trigger(hud.getStage(), hud.getSkin());
+                    return;
+                }
+
+                boolean mPressed = inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU);
+                if (mPressed) {
+                    exitToMainMenu();
+                    return;
+                }
+            } else {
+                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) {
+                    handleNewLevelInput();
+                    return;
+                }
+            }
+
+            return;
+        }
+
+        if (hud.wasInstructionsRequested()) {
             enterInstructions();
         } else if (hud.wasCameraConfigRequested()) {
             enterCameraConfig();
@@ -443,14 +510,23 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
 
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL)) resetBallToLastShot();
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) {
+            Gdx.app.log("DEBUG_INPUT", "handleGameplayInput triggered NEW_LEVEL");
+            handleNewLevelInput();
+        }
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) config.adjustGameSpeed(true);
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_DOWN)) config.adjustGameSpeed(false);
     }
 
     private void handleNewLevelInput() {
+        // PROTECT: Never allow a new level to init if we are in the Menu or have no session.
+        if (currentState == GameState.START || activeSession == null) {
+            Gdx.app.log("DEBUG_LEAK", "CANCELLING handleNewLevelInput: State is START or Session is NULL.");
+            return;
+        }
+
         if (currentState == GameState.COMPETITIVE || (currentState == GameState.PAUSED && previousState == GameState.COMPETITIVE)) {
-            if (isVictory && activeSession != null && activeSession.getCurrentHoleIndex() < activeSession.getCourseLayout().size()) {
+            if (isVictory && activeSession.getCurrentHoleIndex() < activeSession.getCourseLayout().size()) {
                 SessionPersistence.saveSession(activeSession);
                 currentState = GameState.COMPETITIVE;
                 initLevel();
@@ -470,8 +546,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             hud.getStage().getViewport().unproject(tempV3);
             boolean close = false;
-            if (currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) close = true;
-            if (currentState == GameState.CAMERA_CONFIG && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) close = true;
+            if (currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y))
+                close = true;
+            if (currentState == GameState.CAMERA_CONFIG && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y))
+                close = true;
             if (close) {
                 currentState = returnState;
                 if (cameraController != null) cameraController.updateCursorState();
@@ -480,8 +558,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void setupInputProcessor() {
+        com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
+
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
-            com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
             if (currentState == GameState.START) {
                 com.badlogic.gdx.scenes.scene2d.Stage s = hud.getStartMenuStage();
                 if (s != null) multiplexer.addProcessor(s);
@@ -493,19 +572,31 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 if (s != null) multiplexer.addProcessor(s);
             }
             multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
-            Gdx.input.setInputProcessor(multiplexer);
         } else {
-            Gdx.input.setInputProcessor((com.badlogic.gdx.InputProcessor) inputProcessor);
+            if (currentState == GameState.START) {
+                multiplexer.addProcessor(hud.getStartMenuStage());
+            } else if (currentState == GameState.PAUSED) {
+                multiplexer.addProcessor(hud.getStage());
+            } else {
+                multiplexer.addProcessor(hud.getStage());
+            }
+
+            multiplexer.addProcessor((com.badlogic.gdx.InputProcessor) inputProcessor);
         }
+
+        Gdx.input.setInputProcessor(multiplexer);
     }
 
     private void exitToMainMenu() {
         shotController.reset();
         hud.resetShots();
+        isVictory = false;
+        submissionStarted = false;
         currentState = GameState.START;
+        activeSession = null;
         menuManager.setMenuState(MenuState.MAIN);
         menuManager.setMenuSelection(0);
-        isVictory = false;
+        setupInputProcessor();
     }
 
     private void enterInstructions() {
@@ -554,7 +645,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     public void onStartWithClipboardSeed() {
         long seed = -1;
         String clip = Gdx.app.getClipboard().getContents();
-        try { if (clip != null) seed = Long.parseLong(clip.trim()); } catch (Exception ignored) {}
+        try {
+            if (clip != null) seed = Long.parseLong(clip.trim());
+        } catch (Exception ignored) {
+        }
         currentState = GameState.PLAYING;
         initLevel(seed);
     }
@@ -590,7 +684,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         config.setDifficulty(difficulty);
         if (mode == 0) {
             long randomSeed = MathUtils.random.nextLong();
-            if (randomSeed < 0) randomSeed *= -1; // Keep it positive for cleaner UI/Logs
+            if (randomSeed < 0) randomSeed *= -1;
             startCompetitiveMatch(randomSeed, GameSession.GameMode.STANDARD_18);
         } else {
             Calendar cal = Calendar.getInstance();
@@ -625,6 +719,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private boolean isVictoryCourseComplete() {
-        return isVictory && currentState == GameState.COMPETITIVE && activeSession != null && activeSession.isFinished() && inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU);
+        return isVictory && currentState == GameState.COMPETITIVE &&
+                activeSession != null && activeSession.isFinished();
     }
 }

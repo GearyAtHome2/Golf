@@ -11,6 +11,7 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
     private final Map<Action, Integer> keyMap = new EnumMap<>(Action.class);
     private float accumulatedScroll = 0f;
     private float currentFrameScroll = 0f;
+    private boolean inputBlocked = false;
 
     public DesktopInputProcessor() {
         keyMap.put(Action.CHARGE_SHOT, Input.Keys.SPACE);
@@ -18,6 +19,7 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
         keyMap.put(Action.NEW_LEVEL, Input.Keys.N);
         keyMap.put(Action.PAUSE, Input.Keys.ESCAPE);
         keyMap.put(Action.MAIN_MENU, Input.Keys.M);
+        keyMap.put(Action.SUBMIT_SCORE, Input.Keys.S);
         keyMap.put(Action.HELP, Input.Keys.I);
         keyMap.put(Action.CAM_CONFIG, Input.Keys.O);
         keyMap.put(Action.TOGGLE_PARTICLES, Input.Keys.L);
@@ -35,14 +37,16 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
         keyMap.put(Action.SPIN_LEFT, Input.Keys.A);
         keyMap.put(Action.SPIN_RIGHT, Input.Keys.D);
 
-        // Use the primary key in the map
         keyMap.put(Action.MENU_UP, Input.Keys.UP);
         keyMap.put(Action.MENU_DOWN, Input.Keys.DOWN);
-
         keyMap.put(Action.SPEED_UP, Input.Keys.UP);
         keyMap.put(Action.SPEED_DOWN, Input.Keys.DOWN);
         keyMap.put(Action.MENU_SELECT, Input.Keys.ENTER);
         keyMap.put(Action.CANCEL_MENU, Input.Keys.ESCAPE);
+    }
+
+    public void setInputBlocked(boolean blocked) {
+        this.inputBlocked = blocked;
     }
 
     @Override
@@ -61,6 +65,7 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
 
     @Override
     public float getActionValue(Action action) {
+        if (inputBlocked) return 0f;
         if (action == Action.DRAG_X) return Gdx.input.getDeltaX();
         if (action == Action.DRAG_Y) return Gdx.input.getDeltaY();
         if (action == Action.SCROLL_Y) {
@@ -71,6 +76,7 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
 
     @Override
     public boolean isActionPressed(Action action) {
+        if (inputBlocked) return false;
         if (action == Action.SECONDARY_ACTION) {
             return Gdx.input.isButtonPressed(Input.Buttons.RIGHT);
         }
@@ -79,7 +85,6 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
                     Gdx.input.isKeyPressed(Input.Keys.SPACE);
         }
 
-        // Hardcode the OR logic for W/S keys
         if (action == Action.MENU_UP && Gdx.input.isKeyPressed(Input.Keys.W)) return true;
         if (action == Action.MENU_DOWN && Gdx.input.isKeyPressed(Input.Keys.S)) return true;
 
@@ -89,6 +94,7 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
 
     @Override
     public boolean isActionJustPressed(Action action) {
+        if (inputBlocked) return false;
         if (action == Action.MAX_POWER_SHOT) {
             return (Gdx.input.isKeyPressed(Input.Keys.CONTROL_LEFT) || Gdx.input.isKeyPressed(Input.Keys.CONTROL_RIGHT)) &&
                     Gdx.input.isKeyJustPressed(Input.Keys.SPACE);
@@ -97,7 +103,6 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
             return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE);
         }
 
-        // Hardcode the OR logic for W/S keys
         if (action == Action.MENU_UP && Gdx.input.isKeyJustPressed(Input.Keys.W)) return true;
         if (action == Action.MENU_DOWN && Gdx.input.isKeyJustPressed(Input.Keys.S)) return true;
 

@@ -102,18 +102,16 @@ public class GameSession implements Json.Serializable {
 
     public boolean isFinished() {
         if (courseLayout == null || courseLayout.isEmpty()) return false;
-        int currentIndex = getCurrentHoleIndex();
-        if (currentIndex >= courseLayout.size()) return true;
-        if (currentIndex == courseLayout.size() - 1) {
-            return competitiveScore != null && competitiveScore.getScoreForHole(currentIndex) > 0;
-        }
-        return false;
+
+        return getCurrentHoleIndex() >= courseLayout.size();
     }
 
     public LevelData getCurrentLevel() {
         int index = getCurrentHoleIndex();
-        if (courseLayout == null || index >= courseLayout.size()) return null;
-        return courseLayout.get(index);
+        if (courseLayout == null || courseLayout.isEmpty()) return null;
+
+        int safeIndex = Math.min(index, courseLayout.size() - 1);
+        return courseLayout.get(safeIndex);
     }
 
     public int getCurrentHoleStrokes() { return currentHoleStrokes; }
