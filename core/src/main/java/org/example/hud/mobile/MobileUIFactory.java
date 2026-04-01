@@ -83,7 +83,6 @@ public class MobileUIFactory {
 
         Table leftStack = new Table();
         leftStack.top().left();
-        // Added .left() to every cell to ensure buttons don't center within the column
         addActionButton(leftStack, "PAUSE", style, input, GameInputProcessor.Action.PAUSE, btnW, btnH, globalFontScale).left().padBottom(spacing).row();
         addActionButton(leftStack, "PROJECT", style, input, GameInputProcessor.Action.PROJECTION, btnW, btnH, globalFontScale).left().padBottom(spacing).row();
         addActionButton(leftStack, "DISTANCE", style, input, GameInputProcessor.Action.SHOW_RANGE, btnW, btnH, globalFontScale).left().padBottom(spacing).row();
@@ -117,7 +116,6 @@ public class MobileUIFactory {
         ui.infoToggleBtn.getLabel().setFontScale(globalFontScale);
         rightStack.add(ui.infoToggleBtn).width(btnW).height(btnH).right();
 
-        // Both stacks now expandX() and use explicit left/right alignment to anchor to the screen edges
         ui.gameplayTable.add(leftStack).expandX().fillY().left().padLeft(leftEdge).padTop(getLeftStackTopPad(viewport));
         ui.gameplayTable.add(rightStack).expandX().fillY().right().padRight(rightEdge).padTop(viewport.getWorldHeight() * (1.0f - MAX_BTN_Y));
     }
@@ -288,7 +286,9 @@ public class MobileUIFactory {
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
         float bW = viewport.getWorldWidth() * 0.45f, bH = viewport.getWorldHeight() * 0.09f;
         float scaledFont = FONT_SCALE_PAUSE_MENU * 0.4f;
+
         pauseTable.add(createMenuButton("RESUME", menuStyle, input, GameInputProcessor.Action.PAUSE, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+
         final TextButton animBtn = new TextButton("ANIMATION: " + config.animSpeed.name(), menuStyle);
         animBtn.getLabel().setFontScale(scaledFont);
         animBtn.addListener(new ChangeListener() {
@@ -299,21 +299,26 @@ public class MobileUIFactory {
             }
         });
         pauseTable.add(animBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
-        pauseTable.add(createMenuButton("HELP", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
-        pauseTable.add(createMenuButton("CAMERA", menuStyle, input, GameInputProcessor.Action.CAM_CONFIG, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+
+        pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+        pauseTable.add(createMenuButton("CAMERA CONFIG", menuStyle, input, GameInputProcessor.Action.CAM_CONFIG, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();
-        pauseTable.top().padTop(viewport.getWorldHeight() * 0.22f);
+
+        pauseTable.top().padTop(viewport.getWorldHeight() * 0.40f);
     }
 
     private static void setupVictoryMenu(MobileUIPackage ui, MobileInputProcessor input, TextButton.TextButtonStyle style, Viewport viewport) {
         ui.victoryTable.clearChildren();
         ui.victoryTable.bottom().padBottom(viewport.getWorldHeight() * 0.04f);
+
         float btnW = viewport.getWorldWidth() * 0.28f;
         float btnH = viewport.getWorldHeight() * 0.12f;
         float fontScale = FONT_SCALE_GAMEPLAY * 0.6f;
+
         TextButton.TextButtonStyle primaryStyle = new TextButton.TextButtonStyle(style);
         primaryStyle.up = ui.skin.getDrawable("hitUp");
         primaryStyle.down = ui.skin.getDrawable("hitDown");
+
         ui.nextLevelBtn = new TextButton("NEXT LEVEL", primaryStyle);
         ui.nextLevelBtn.getLabel().setFontScale(fontScale);
         ui.nextLevelBtn.addListener(new ChangeListener() {
@@ -322,6 +327,7 @@ public class MobileUIFactory {
                 input.triggerAction(GameInputProcessor.Action.NEW_LEVEL);
             }
         });
+
         ui.submitScoreBtn = new TextButton("SUBMIT SCORE", primaryStyle);
         ui.submitScoreBtn.getLabel().setFontScale(fontScale);
         ui.submitScoreBtn.addListener(new ChangeListener() {
@@ -330,6 +336,7 @@ public class MobileUIFactory {
                 input.triggerAction(GameInputProcessor.Action.SUBMIT_SCORE);
             }
         });
+
         ui.mainMenuBtn = new TextButton("MAIN MENU", style);
         ui.mainMenuBtn.getLabel().setFontScale(fontScale);
         ui.mainMenuBtn.addListener(new ChangeListener() {
@@ -338,13 +345,18 @@ public class MobileUIFactory {
                 input.triggerAction(GameInputProcessor.Action.MAIN_MENU);
             }
         });
+
         Table buttonTable = new Table();
-        buttonTable.add(ui.submitScoreBtn).width(btnW).height(btnH).left().padLeft(20);
-        buttonTable.add().width(viewport.getWorldWidth() * 0.25f);
-        buttonTable.add(ui.mainMenuBtn).width(btnW).height(btnH).right().padRight(20);
-        ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center();
+        buttonTable.setFillParent(false);
+        // Push Submit Score to left, Main Menu to right
+        buttonTable.add(ui.submitScoreBtn).width(btnW).height(btnH).left();
+        buttonTable.add().expandX(); // Flexible spacer
+        buttonTable.add(ui.mainMenuBtn).width(btnW).height(btnH).right();
+
+        ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center().padBottom(15);
         ui.victoryTable.row();
-        ui.victoryTable.add(buttonTable).center();
+        // Set the row to fill the width so the buttonTable expandX works
+        ui.victoryTable.add(buttonTable).expandX().fillX().padLeft(30).padRight(30);
     }
 
     private static TextButton createMenuButton(String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float fontScale) {

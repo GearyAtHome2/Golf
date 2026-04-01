@@ -50,9 +50,9 @@ public class NotificationManager {
     private float getScaleForRating(MinigameResult.Rating rating) {
         // These are now multipliers for the base proportional scale
         return switch (rating) {
-            case PERFECTION -> 2.2f; // Was 5.5 (Now significantly reined in)
-            case SUPER -> 1.8f;      // Was 4.5
-            case GREAT -> 1.5f;      // Was 3.5
+            case PERFECTION -> 1.8f; // Was 5.5 (Now significantly reined in)
+            case SUPER -> 1.55f;      // Was 4.5
+            case GREAT -> 1.35f;      // Was 3.5
             case GOOD -> 1.2f;       // Was 2.5
             default -> 1.0f;
         };

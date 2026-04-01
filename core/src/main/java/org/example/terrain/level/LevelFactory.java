@@ -24,7 +24,7 @@ public class LevelFactory {
                 distance = 600;
                 break;
             case PUTTING_GREEN:
-                generator = new PuttingGreenGenerator(manualSeed);
+                generator = new PuttingGreenGenerator(System.nanoTime());
                 defaultClub = Club.PUTTER;
                 waterLevel = -5.0f;
                 distance = 160;

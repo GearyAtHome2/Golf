@@ -135,7 +135,7 @@ public class SpinIndicator extends Actor {
         shapeRenderer.setColor(0.15f, 0.15f, 0.15f, 0.9f);
         shapeRenderer.circle(centerX, centerY, dynamicBigRadius);
         shapeRenderer.setColor(Color.RED);
-        float dr = dynamicBigRadius * 0.08f;
+        float dr = dynamicBigRadius * 0.04f;
         shapeRenderer.circle(centerX + spinDot.x * (dynamicBigRadius - dr), centerY + spinDot.y * (dynamicBigRadius - dr), dr);
         shapeRenderer.end();
         batch.begin();

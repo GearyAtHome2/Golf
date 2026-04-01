@@ -1,75 +1,113 @@
 package org.example.scoreBoard;
 
+import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.Dialog;
-import com.badlogic.gdx.scenes.scene2d.ui.Skin;
-import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.utils.Align;
 import org.example.session.GameSession;
 
 public class ScoreSubmissionHandler {
     private final GameSession session;
     private final HighscoreService highscoreService;
-    private final Runnable onComplete;
-    private boolean isFinished = false; // Prevents double execution
+    private final Runnable onSubmitSuccess;
+    private final Runnable onCancel;
 
-    public ScoreSubmissionHandler(GameSession session, Runnable onComplete) {
+    public ScoreSubmissionHandler(GameSession session, Runnable onSubmitSuccess, Runnable onCancel) {
         this.session = session;
-        this.onComplete = onComplete;
+        this.onSubmitSuccess = onSubmitSuccess;
+        this.onCancel = onCancel;
         this.highscoreService = new HighscoreService();
     }
 
     public void trigger(Stage stage, Skin skin) {
+        Gdx.app.log("SCORE_SUBMIT", "Triggered ScoreSubmissionHandler");
+
+        // Release cursor for Desktop users so they can actually click the buttons
+        if (Gdx.app.getType() == Application.ApplicationType.Desktop) {
+            Gdx.input.setCursorCatched(false);
+        }
+
         final TextField nameField = new TextField("", skin);
         nameField.setMessageText("Username");
 
-        final Dialog dialog = new Dialog("Daily Challenge Submission", skin) {
-            @Override
-            protected void result(Object object) {
-                if (isFinished) return;
+        final Dialog dialog = new Dialog("", skin);
+        dialog.setMovable(false);
 
+        TextButton subBtn = new TextButton("SUBMIT", skin);
+        TextButton canBtn = new TextButton("CANCEL", skin);
+
+        Runnable performSubmit = () -> {
+            String text = nameField.getText().trim();
+            Gdx.app.log("SCORE_SUBMIT", "Submit attempt. Content: '" + text + "'");
+            if (!text.isEmpty()) {
                 Gdx.input.setOnscreenKeyboardVisible(false);
-
-                if (object instanceof Boolean && (Boolean) object) {
-                    String text = nameField.getText().trim();
-                    if (!text.isEmpty()) {
-                        submit(text);
-                    }
-                }
-                finish();
+                submit(text);
+                dialog.hide();
+                dialog.remove();
+                if (onSubmitSuccess != null) onSubmitSuccess.run();
             }
         };
 
-        nameField.setTextFieldListener((textField, c) -> {
-            if (isFinished) return;
-            if (c == '\n' || c == '\r') {
-                String text = textField.getText().trim();
-                if (!text.isEmpty()) {
-                    submit(text);
-                    Gdx.input.setOnscreenKeyboardVisible(false);
-                    dialog.hide();
-                    finish();
+        nameField.addListener(new InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (keycode == Input.Keys.ENTER) {
+                    performSubmit.run();
+                    return true;
                 }
+                if (keycode == Input.Keys.ESCAPE) {
+                    cancel(dialog);
+                    return true;
+                }
+                return false;
             }
         });
 
-        dialog.getContentTable().add("Enter name for leaderboard:").pad(10);
-        dialog.getContentTable().row();
-        dialog.getContentTable().add(nameField).width(300).pad(10);
-        dialog.button("Submit", true);
-        dialog.button("Cancel", false);
+        canBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                cancel(dialog);
+            }
+        });
 
-        dialog.show(stage);
+        subBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                performSubmit.run();
+            }
+        });
+
+        Table content = dialog.getContentTable();
+        content.clear();
+        content.pad(6);
+        content.add("DAILY CHALLENGE SUBMISSION").colspan(3).padBottom(3).row();
+        content.add("Enter name for leaderboard:").colspan(3).padBottom(7).row();
+        content.add(canBtn).width(150).height(70).padRight(10);
+        content.add(nameField).width(380).height(70);
+        content.add(subBtn).width(150).height(70).padLeft(10);
+
+        stage.addActor(dialog);
+        dialog.invalidateHierarchy();
+        dialog.pack();
+
+        dialog.setWidth(stage.getWidth() * 0.98f);
+        dialog.setPosition(stage.getWidth() / 2f, stage.getHeight(), Align.top);
+
         stage.setKeyboardFocus(nameField);
-
         Gdx.input.setOnscreenKeyboardVisible(true);
     }
 
-    private void finish() {
-        if (!isFinished) {
-            isFinished = true;
-            onComplete.run();
-        }
+    private void cancel(Dialog dialog) {
+        Gdx.app.log("SCORE_SUBMIT", "Cancel action triggered");
+        Gdx.input.setOnscreenKeyboardVisible(false);
+        dialog.hide();
+        dialog.remove();
+        if (onCancel != null) onCancel.run();
     }
 
     private void submit(String username) {

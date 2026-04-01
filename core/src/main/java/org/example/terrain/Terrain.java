@@ -51,7 +51,6 @@ public class Terrain {
     private List<TerrainObject>[][] objectGrid;
     private int gridCols, gridRows;
     private final Vector3 tempRayDir = new Vector3();
-    private final Vector3 tempCamPos = new Vector3();
 
     public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
         this.SIZE_Z = dynamicSizeZ;

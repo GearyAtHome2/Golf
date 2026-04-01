@@ -417,18 +417,37 @@ public class HUD {
     public void showOutOfBounds() { notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f); }
 
     public void renderVictory(int shots, LevelData levelData, GameSession session) {
-        if (gameplayTable != null) gameplayTable.setVisible(false);
-        if (victoryTable != null) victoryTable.setVisible(true);
+        // 1. Hide the gameplay HUD elements
+        if (gameplayTable != null) {
+            gameplayTable.setVisible(false);
+        }
+
+        // 2. Hide the Info toggle button specifically if it exists
+        if (infoToggleBtn != null) {
+            infoToggleBtn.setVisible(false);
+        }
+
+        // 3. Show the victory-specific buttons
+        if (victoryTable != null) {
+            victoryTable.setVisible(true);
+        }
+
+        // 4. Handle button visibility based on session state
         if (mobileUIPackage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
             boolean isFinished = (session != null && session.isFinished());
             boolean isDaily = (session != null && session.getMode() == GameSession.GameMode.DAILY_CHALLENGE);
+
             mobileUIPackage.nextLevelBtn.setVisible(!isFinished);
             mobileUIPackage.submitScoreBtn.setVisible(isFinished && isDaily);
             mobileUIPackage.mainMenuBtn.setVisible(isFinished);
         }
+
+        // 5. Render the text overlay
         batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session);
         batch.end();
+
+        // 6. Draw the stage (which now only contains the visible victoryTable)
         if (Gdx.app.getType() == Application.ApplicationType.Android && stage != null) {
             stage.act();
             stage.draw();

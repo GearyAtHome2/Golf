@@ -139,7 +139,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private void setupInputProcessor() {
         com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
 
-        // 1. Determine which UI Stage is active based on state
         com.badlogic.gdx.scenes.scene2d.Stage activeStage;
         if (currentState == GameState.START) {
             activeStage = hud.getStartMenuStage();
@@ -149,12 +148,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             activeStage = hud.getStage();
         }
 
-        // Ensure the stage viewport is correct before processing input
         activeStage.getViewport().update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
-
         multiplexer.addProcessor(activeStage);
 
-        // PRIORITY 2: The Game World Input
         if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
         } else {
@@ -172,27 +168,29 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (!isOverlayState(this.currentState)) this.previousState = this.currentState;
 
         this.currentState = newState;
-        updateCursorState(newState);
+
+        switch (newState) {
+            case START:
+            case PAUSED:
+            case INSTRUCTIONS:
+            case CAMERA_CONFIG:
+                Gdx.app.log("CURSOR_CHECK", "Releasing cursor in changeState for: " + newState);
+                Gdx.input.setCursorCatched(false);
+                break;
+            default:
+                Gdx.input.setCursorCatched(!(isVictory || submissionStarted));
+                break;
+        }
 
         if (cameraController != null) {
-            cameraController.setPaused(newState == GameState.PAUSED);
+            cameraController.setPaused(newState == GameState.PAUSED || newState == GameState.START);
         }
         setupInputProcessor();
     }
 
-    private void updateCursorState(GameState state) {
-        boolean showMouse = (state == GameState.START ||
-                state == GameState.PAUSED ||
-                state == GameState.INSTRUCTIONS ||
-                state == GameState.CAMERA_CONFIG ||
-                isVictory ||
-                submissionStarted);
-
-        Gdx.input.setCursorCatched(!showMouse);
-    }
-
     private void handleInput() {
         if (hud.wasMainMenuRequested()) { exitToMainMenu(); return; }
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) { exitToMainMenu(); return; }
         if (submissionStarted) return;
 
         switch (currentState) {
@@ -243,6 +241,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private void handlePauseInput() {
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
             changeState(gameplayState);
+        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) {
+            enterInstructions();
+        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CAM_CONFIG)) {
+            enterCameraConfig();
         }
     }
 
@@ -287,16 +289,30 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void processScoreSubmission() {
+        Gdx.app.log("GOLF_GAME", "Starting Score Submission Process");
         submissionStarted = true;
         if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(true);
         setupInputProcessor();
-        new ScoreSubmissionHandler(sessionManager.getActive(), () -> {
-            Gdx.app.postRunnable(() -> {
-                submissionStarted = false;
-                if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
-                exitToMainMenu();
-            });
-        }).trigger(hud.getStage(), hud.getSkin());
+
+        new ScoreSubmissionHandler(
+                sessionManager.getActive(),
+                () -> {
+                    Gdx.app.postRunnable(() -> {
+                        Gdx.app.log("GOLF_GAME", "Submission successful, exiting to main menu");
+                        submissionStarted = false;
+                        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
+                        exitToMainMenu();
+                    });
+                },
+                () -> {
+                    Gdx.app.postRunnable(() -> {
+                        Gdx.app.log("GOLF_GAME", "Submission cancelled, resetting flags");
+                        submissionStarted = false;
+                        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
+                        setupInputProcessor();
+                    });
+                }
+        ).trigger(hud.getStage(), hud.getSkin());
     }
 
     private void initLevel() {
@@ -427,11 +443,14 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Terrain terrain = levelManager.getTerrain();
         if (terrain == null) return;
 
-        float effDelta = (currentState == GameState.PAUSED) ? 0 : delta * config.getGameSpeed();
-        float pauseParticleDelta = (currentState == GameState.PAUSED) ? delta * 0.03f : delta * config.getGameSpeed();
+        float speedMultiplier = config.getGameSpeed();
 
-        if (!isVictory && (isGameplayState() || currentState == GameState.PAUSED)) {
-            updateGameplaySystems(delta, effDelta, pauseParticleDelta, terrain);
+        float effDelta = (currentState == GameState.PAUSED) ? 0 : delta * speedMultiplier;
+
+        float particleDelta = (isVictory || currentState == GameState.PAUSED) ? delta * 0.06f : delta * speedMultiplier;
+
+        if (isGameplayState() || currentState == GameState.PAUSED) {
+            updateGameplaySystems(delta, effDelta, particleDelta, terrain);
         }
 
         terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
@@ -443,18 +462,27 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         if (currentState != GameState.PAUSED) {
             windManager.update(effDelta, currentWind, camera.position);
-            updateShotLogic(delta, terrain);
+
+            if (!isVictory) {
+                updateShotLogic(delta, terrain);
+            }
+
             ball.update(effDelta, terrain, currentWind);
         }
 
-        cameraController.update(ball.getPosition(), inputProcessor);
+        if (cameraController != null) {
+            cameraController.update(ball.getPosition(), inputProcessor);
+        }
+
         if (config.particlesEnabled) particleManager.handleBallInteraction(ball, terrain);
-        hazardManager.update(effDelta, ball, terrain, gameplayState == GameState.PRACTICE_RANGE, this);
-        if (ball.checkVictory(terrain)) triggerVictory();
+
+        if (!isVictory) {
+            hazardManager.update(effDelta, ball, terrain, gameplayState == GameState.PRACTICE_RANGE, this);
+            if (ball.checkVictory(terrain)) triggerVictory();
+        }
 
         particleManager.update(particleDelta, terrain);
     }
-
     private void updateShotLogic(float delta, Terrain terrain) {
         if (hud.wasMinigameCanceled()) shotController.reset();
 
@@ -477,7 +505,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         ball.render(modelBatch, environment);
         ball.renderTrail(modelBatch, environment);
         ghostManager.render(modelBatch, environment);
-        if (cameraController.isOverhead()) {
+        if (cameraController != null && cameraController.isOverhead()) {
             highlightInstance.transform.setToTranslation(ball.getPosition());
             modelBatch.render(highlightInstance, environment);
         }
@@ -505,11 +533,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 (currentState == GameState.START) ? hud.getStartMenuStage() : hud.getStage();
 
         if (uiStage != null) {
-            // FIX: Stage MUST call act() to process click/touch events.
             uiStage.act(Gdx.graphics.getDeltaTime());
             uiStage.draw();
 
-            // LOGGING: Where does the stage think your finger is?
             if (Gdx.input.justTouched()) {
                 stageTouch.set(Gdx.input.getX(), Gdx.input.getY());
                 uiStage.screenToStageCoordinates(stageTouch);
@@ -526,6 +552,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         sessionManager.clearActive();
         menuManager.setMenuState(MenuState.MAIN);
         menuManager.setMenuSelection(0);
+
+        // Nulling here ensures it doesn't fight the cursor logic in changeState
+        cameraController = null;
+
         changeState(GameState.START);
     }
 
