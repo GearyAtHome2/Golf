@@ -9,8 +9,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ScoreShout;
-import org.example.ball.CompetitiveScore;
-import org.example.gameManagers.GameSession;
+import org.example.session.GameSession;
 import org.example.terrain.level.LevelData;
 
 public class VictoryRenderer {

@@ -51,7 +51,7 @@ public class HazardManager {
 
     private boolean shouldActivateTimer(Ball ball, Terrain terrain, boolean isPracticeRange) {
         if (!hasCurrentBallBeenHit) return false;
-        return ball.isInWater(terrain) || isPracticeRange || ball.getState() == Ball.State.STATIONARY;
+        return ball.isInWater(terrain) || (isPracticeRange && ball.getState() == Ball.State.STATIONARY);
     }
 
     private void handleTimerThreshold(Ball ball, Terrain terrain, boolean isPracticeRange, HazardListener listener) {

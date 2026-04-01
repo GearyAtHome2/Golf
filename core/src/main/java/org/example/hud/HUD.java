@@ -8,7 +8,6 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
@@ -20,7 +19,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
-import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
@@ -29,7 +28,7 @@ import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotController;
 import org.example.ball.ShotDifficulty;
-import org.example.gameManagers.GameSession;
+import org.example.session.GameSession;
 import org.example.gameManagers.MenuManager;
 import org.example.hud.minigame.MinigameController;
 import org.example.hud.mobile.MobileUIFactory;
@@ -100,7 +99,8 @@ public class HUD {
                 Texture.TextureFilter.Linear
         );
 
-        viewport = new ScreenViewport();
+        // Changed to ExtendViewport to allow "drift" to physical edges
+        this.viewport = new ExtendViewport(1280, 720);
         this.stage = new Stage(viewport, batch);
         this.startMenuStage = new Stage(viewport, batch);
 
@@ -111,7 +111,6 @@ public class HUD {
         pm.dispose();
 
         this.skin = getSkin();
-
         this.spinIndicator = new SpinIndicator(shapeRenderer, font);
         this.preShotDebugActor = new PreShotDebugActor(font);
         this.minigameController.setNotificationManager(this.notificationManager);
@@ -146,52 +145,52 @@ public class HUD {
 
     public void resize(int width, int height) {
         viewport.update(width, height, true);
-        if (startMenuStage != null) {
-            startMenuStage.getViewport().update(width, height, true);
-            updateLeaderboardLayout();
-        }
+        if (startMenuStage != null) startMenuStage.getViewport().update(width, height, true);
+        if (pauseMenuStage != null) pauseMenuStage.getViewport().update(width, height, true);
+        if (stage != null) stage.getViewport().update(width, height, true);
+        updateLeaderboardLayout();
     }
 
-    /**
-     * UPDATED: Forces the leaderboard to expand on Android to use the center gap.
-     * Rebuilds the internal table to match the new size.
-     */
     private void updateLeaderboardLayout() {
-        if (leaderboardUI != null) {
-            boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        if (leaderboardUI == null) return;
 
-            // Increase width significantly for Android to provide room for the "expand" logic
-            float targetWidth = viewport.getWorldWidth() * (isAndroid ? 0.52f : 0.38f);
-            float finalWidth = MathUtils.clamp(targetWidth, isAndroid ? 550f : 350f, 900f);
-            float finalHeight = viewport.getWorldHeight() * 0.85f;
+        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        float screenW = startMenuStage.getViewport().getWorldWidth();
+        float screenH = startMenuStage.getViewport().getWorldHeight();
 
-            // 1. Set the actor size first
-            leaderboardUI.setSize(finalWidth, finalHeight);
+        float menuWidth = 620f;
+        float minGap = 20f;
+        float edgePadding = 15f; // Reduced from 30f to move further right
 
-            // 2. Position it
-            float margin = viewport.getWorldWidth() * 0.02f;
-            float xPos = viewport.getWorldWidth() - finalWidth - margin;
-            float yPos = (viewport.getWorldHeight() - finalHeight) / 2f;
-            leaderboardUI.setPosition(xPos, yPos);
+        float targetLeaderboardWidth = screenW * 0.45f;
+        float totalRequired = menuWidth + targetLeaderboardWidth + minGap + edgePadding;
 
-            // 3. Rebuild now uses the actual width of the actor
-            leaderboardUI.rebuild(isAndroid ? 1.15f : 1.0f);
+        float squeeze = 1.0f;
+        if (totalRequired > screenW) {
+            squeeze = screenW / totalRequired;
+        }
 
-            // 4. Force LibGDX to re-calculate the table layout based on the new size
-            leaderboardUI.invalidateHierarchy();
-            leaderboardUI.layout();
+        float finalWidth = targetLeaderboardWidth * squeeze;
+        float finalHeight = screenH * 0.75f; // Reduced from 0.88f to make it squatter
+
+        leaderboardUI.setSize(finalWidth, finalHeight);
+
+        // Positioned lower by using screenH * 0.42f instead of screenH / 2f
+        leaderboardUI.setPosition(screenW - edgePadding, screenH * 0.42f, com.badlogic.gdx.utils.Align.right);
+
+        leaderboardUI.rebuild(squeeze);
+
+        if (startMenuTable != null) {
+            startMenuTable.setTransform(true);
+            startMenuTable.setScale(squeeze);
         }
     }
 
     public void setupMobileUI(MobileInputProcessor input) {
         if (mobileUIInitialized) return;
-
-        // 1. Initialize the class-level field properly
         this.mobileUIPackage = MobileUIFactory.create(
                 viewport, batch, font, config, input, whitePixel, spinIndicator, preShotDebugActor
         );
-
-        // 2. Use the class field (mobileUIPackage) consistently for all assignments
         this.stage = mobileUIPackage.stage;
         this.startMenuStage = mobileUIPackage.startMenuStage;
         this.pauseMenuStage = mobileUIPackage.pauseMenuStage;
@@ -209,14 +208,12 @@ public class HUD {
                 infoToggleBtn.setVisible(!showInfoDisplay);
             }
         });
-
         mobileUIInitialized = true;
     }
 
     public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
-
         batch.begin();
         mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), standard, daily);
         batch.end();
@@ -234,11 +231,9 @@ public class HUD {
                     lastMobileMenuState = menuManager.getCurrentMenuState();
                 }
             }
-
             if (leaderboardUI != null) {
                 leaderboardUI.setVisible(menuManager.getCurrentMenuState() == MainMenuRenderer.MenuState.MAIN);
             }
-
             startMenuStage.act();
             startMenuStage.draw();
         }
@@ -253,12 +248,10 @@ public class HUD {
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput) {
         if (batch.isDrawing()) batch.end();
         if (!blockInput) handlePauseInput(levelData, input, session);
-
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer, session);
         batch.end();
-
         if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && pauseMenuStage != null) {
             pauseMenuStage.act();
             pauseMenuStage.draw();
@@ -287,31 +280,25 @@ public class HUD {
         if (batch.isDrawing()) batch.end();
         boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
         float delta = Gdx.graphics.getDeltaTime();
-
         if (isAndroid) {
             if (!mobileUIInitialized) setupMobileUI((MobileInputProcessor) input);
             this.spinDot.set(spinIndicator.getSpinDot());
         }
         if (mobileClubLabel != null) mobileClubLabel.setText(currentClub.name.toUpperCase());
-
         notificationManager.update(delta);
         updateSpinInput(delta, input);
-
         if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
             distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
             distanceDisplayTimer = 3.0f;
         }
         if (isPractice) updatePracticeDistanceLogic(ball);
-
         preShotDebugActor.update(terrain, ball, gameCamera);
         boolean shouldShowDebug = (ball.getState() == Ball.State.STATIONARY);
         preShotDebugActor.setVisible(!isAndroid && shouldShowDebug);
-
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         spinIndicator.updateScaling(viewport);
-
         batch.begin();
         if (levelData != null) windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         if (!isAndroid && shouldShowDebug) {
@@ -320,13 +307,11 @@ public class HUD {
         }
         if (!isAndroid) spinIndicator.draw(batch, 1.0f);
         notificationManager.render(batch, font, viewport);
-
         float rangeScale = isAndroid ? 2.8f : 1.8f;
         renderDistanceDisplay(delta, rangeScale);
         if (isPractice) renderShotDistance(ball, isAndroid ? 2.2f : 1.4f);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, session, terrain);
         batch.end();
-
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
 
@@ -375,7 +360,6 @@ public class HUD {
         } else if (showClubInfo) {
             renderClubInfo(currentClub);
         }
-
         if (minigameController.isActive()) {
             minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input, shotController);
         }
@@ -435,21 +419,16 @@ public class HUD {
     public void renderVictory(int shots, LevelData levelData, GameSession session) {
         if (gameplayTable != null) gameplayTable.setVisible(false);
         if (victoryTable != null) victoryTable.setVisible(true);
-
         if (mobileUIPackage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
             boolean isFinished = (session != null && session.isFinished());
             boolean isDaily = (session != null && session.getMode() == GameSession.GameMode.DAILY_CHALLENGE);
-
-            // Hide Next Level on the 18th hole; Show Menu/Submit instead
             mobileUIPackage.nextLevelBtn.setVisible(!isFinished);
             mobileUIPackage.submitScoreBtn.setVisible(isFinished && isDaily);
             mobileUIPackage.mainMenuBtn.setVisible(isFinished);
         }
-
         batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session);
         batch.end();
-
         if (Gdx.app.getType() == Application.ApplicationType.Android && stage != null) {
             stage.act();
             stage.draw();
@@ -480,15 +459,12 @@ public class HUD {
     public boolean wasCameraConfigRequested() { return cameraConfigRequested; }
     public void clearCameraConfigRequest() { cameraConfigRequested = false; }
     public void resetCameraConfigScroll() { cameraConfigRenderer.resetScroll(); }
-
     public boolean isTouchInsideCameraConfig(float x, float y) {
         return cameraConfigRequested && overlayRenderer.getCameraConfigRenderer().isClickInside(x, y);
     }
-
     public boolean wasInstructionsRequested() { return instructionsRequested; }
     public void clearInstructionsRequest() { instructionsRequested = false; }
     public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
-
     public boolean isTouchInsideInstructions(float x, float y) {
         return overlayRenderer.getInstructionRenderer().isClickInside(x, y);
     }
@@ -520,38 +496,25 @@ public class HUD {
 
     public Skin getSkin() {
         if (skin == null) {
-            try {
-                skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
-            } catch (Exception e) {
-                skin = new Skin();
-            }
+            try { skin = new Skin(Gdx.files.internal("ui/uiskin.json")); }
+            catch (Exception e) { skin = new Skin(); }
         }
-
-        // Add standard compatibility styles
         UIUtils.registerDefaultStyles(skin, font);
-
-        if (!skin.has("default-font", BitmapFont.class)) {
-            skin.add("default-font", font);
-        }
-
+        if (!skin.has("default-font", BitmapFont.class)) skin.add("default-font", font);
         if (!skin.has("default", TextButton.TextButtonStyle.class)) {
             TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
             style.font = skin.getFont("default-font");
             style.fontColor = Color.WHITE;
             style.downFontColor = Color.GRAY;
-
             if (skin.has("default-round", Drawable.class)) {
                 style.up = skin.getDrawable("default-round");
                 style.down = skin.getDrawable("default-round-down");
             } else {
-                // Use our shared utility for consistent look
                 style.up = UIUtils.createRoundedRectDrawable(Color.DARK_GRAY, 6);
                 style.down = UIUtils.createRoundedRectDrawable(Color.LIGHT_GRAY, 6);
             }
-
             skin.add("default", style);
         }
-
         return skin;
     }
 

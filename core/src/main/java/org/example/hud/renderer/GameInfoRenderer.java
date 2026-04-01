@@ -10,7 +10,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
 import org.example.ball.Ball;
-import org.example.gameManagers.GameSession;
+import org.example.session.GameSession;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 

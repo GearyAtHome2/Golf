@@ -22,23 +22,25 @@ public class MobileUIValues {
     // --- DESIGN TOKENS: DIMENSIONS ---
     protected static final int RADIUS_STD = 12;
     protected static final int RADIUS_HIT = 15;
-    protected static final float FONT_SCALE_GAMEPLAY = 2.2f;
+    protected static final float FONT_SCALE_GAMEPLAY = 1.8f;
     protected static final float FONT_SCALE_START_MENU = 3.85f;
     protected static final float FONT_SCALE_PAUSE_MENU = 3.6f;
 
     // --- RELATIVE GETTERS ---
-    protected static float getBtnWidth(Viewport v) { return v.getWorldWidth() * 0.16f; }
+    // Switched to WorldHeight-based widths to maintain aspect ratio on wide screens
+    protected static float getBtnWidth(Viewport v) { return v.getWorldHeight() * 0.28f; }
     protected static float getBtnHeight(Viewport v) { return v.getWorldHeight() * 0.11f; }
-    protected static float getHitBtnWidth(Viewport v) { return v.getWorldWidth() * 0.16f; }
+    protected static float getHitBtnWidth(Viewport v) { return v.getWorldHeight() * 0.30f; }
     protected static float getHitBtnHeight(Viewport v) { return v.getWorldHeight() * 0.14f; }
 
     protected static float getArrowWidth(Viewport v) { return v.getWorldWidth() * 0.08f; }
     protected static float getArrowHeight(Viewport v) { return v.getWorldHeight() * 0.09f; }
     protected static float getSpinSize(Viewport v) { return v.getWorldHeight() * 0.20f; }
-    protected static float getDebugWidth(Viewport v) { return v.getWorldWidth() * 0.30f; }
+    protected static float getDebugWidth(Viewport v) { return v.getWorldHeight() * 0.50f; }
 
     // --- PADDING & SPACING ---
-    protected static float getEdgePad(Viewport v) { return v.getWorldWidth() * 0.02f; }
+    // Reduced to 1% to pull right-hand elements closer to the bezel
+    protected static float getEdgePad(Viewport v) { return v.getWorldWidth() * 0.01f; }
     protected static float getStackSpacing(Viewport v) { return v.getWorldHeight() * 0.015f; }
     protected static float getLeftStackTopPad(Viewport v) { return v.getWorldHeight() * 0.31f; }
 }

@@ -3,6 +3,7 @@ package org.example.gameManagers;
 import org.example.GameConfig;
 import org.example.hud.renderer.MainMenuRenderer.MenuState;
 import org.example.input.GameInputProcessor;
+import org.example.session.GameSession;
 
 public class MenuManager {
     private MenuState currentMenuState = MenuState.MAIN;

@@ -1,4 +1,4 @@
-package org.example.gameManagers;
+package org.example.session;
 
 import com.badlogic.gdx.utils.Json;
 import com.badlogic.gdx.utils.JsonValue;

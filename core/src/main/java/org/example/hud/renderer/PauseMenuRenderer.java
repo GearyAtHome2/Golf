@@ -8,7 +8,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.GameConfig;
-import org.example.gameManagers.GameSession;
+import org.example.session.GameSession;
 
 public class PauseMenuRenderer {
     private final GlyphLayout layout = new GlyphLayout();
