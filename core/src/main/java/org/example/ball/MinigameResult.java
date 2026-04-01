@@ -9,7 +9,7 @@ public class MinigameResult {
     public Rating rating;
 
     public enum Rating {
-        PERFECTION(new String[]{"MONSTROUS!", "GOD-LIKE!", "YOU ARE GOLF", "BABABOOEY!", "GIVE ME BACK MY SON!", "I'VE ABANDONED MY CHILD!"}, new float[]{0.3f, 0.1f, 0.1f, 0.1f, 0.1f}, Color.PURPLE),
+        PERFECTION(new String[]{"MONSTROUS!", "GOD-LIKE!", "YOU ARE GOLF", "BABABOOEY!", "GIVE ME BACK MY SON!", "I'VE ABANDONED MY CHILD!"}, new float[]{0.3f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f}, Color.PURPLE),
         SUPER(new String[]{"CRACKING!", "YOU BEAUTY!", "MASHED POTATOES!", "LIGHT THE CANDLE", "VERY CHEEKY"}, new float[]{0.3f, 0.2f, 0.1f, 0.1f, 0.3f}, Color.PINK),
         GREAT(new String[]{"SOLID", "LOVELY", "CHEEKY"}, new float[]{0.5f, 0.4f, 0.1f}, Color.GOLD),
         GOOD(new String[]{"She'll play", "Decent", "Nice", "That'll do, Pig"}, new float[]{7f, 2f, 1f, 0.2f}, Color.GREEN),

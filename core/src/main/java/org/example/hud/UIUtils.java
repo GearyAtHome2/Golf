@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
@@ -13,6 +14,19 @@ import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 
 public class UIUtils {
+
+    // Set to false for a fixed 1-pixel shadow regardless of font scale.
+    public static final boolean SCALED_SHADOW_OFFSET = true;
+
+    public static void drawShadowedText(SpriteBatch batch, BitmapFont font, String text, float x, float y, Color color) {
+        if (!batch.isDrawing()) return;
+        float offset = SCALED_SHADOW_OFFSET ? font.getScaleX() * 1.1f : 1f;
+        float alpha = color.a;
+        font.setColor(0, 0, 0, alpha * 0.6f);
+        font.draw(batch, text, x + offset, y - offset);
+        font.setColor(color);
+        font.draw(batch, text, x, y);
+    }
 
     public static Drawable createRoundedRectDrawable(Color color, int radius) {
         int size = 64;

@@ -15,9 +15,11 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.input.GameInputProcessor;
 
 public class SpinIndicator extends Actor {
-    private final float UI_SIZE_FACTOR_DESKTOP = 0.12f; // Increased for Desktop
+    private final float UI_SIZE_FACTOR_DESKTOP = 0.12f;
     private final float UI_SIZE_FACTOR_ANDROID = 0.09f;
     private final float OVERLAY_SIZE_FACTOR = 0.25f;
+    private final float DOT_RADIUS_FACTOR_DESKTOP = 0.10f;
+    private final float DOT_RADIUS_FACTOR_ANDROID = 0.20f;
 
     private final Vector2 spinDot = new Vector2(0, 0);
     private final ShapeRenderer shapeRenderer;
@@ -70,23 +72,21 @@ public class SpinIndicator extends Actor {
         float centerX = getX() + radius;
         float centerY = getY() + radius;
         float baseScale = Gdx.graphics.getHeight() * 0.0013f;
+        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
 
         batch.end();
         shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Solid Black Outer Border
         shapeRenderer.setColor(Color.BLACK);
         shapeRenderer.circle(centerX, centerY, radius);
 
-        // White Ball Surface
         shapeRenderer.setColor(0.95f, 0.95f, 0.95f, 1f);
-        shapeRenderer.circle(centerX, centerY, radius - (3f * baseScale));
+        shapeRenderer.circle(centerX, centerY, radius * 0.93f);
 
-        // Red Spin Dot
         shapeRenderer.setColor(Color.RED);
-        float dotRadius = 5f * baseScale;
-        float limit = radius - (12f * baseScale);
+        float dotRadius = radius * (isAndroid ? DOT_RADIUS_FACTOR_ANDROID : DOT_RADIUS_FACTOR_DESKTOP);
+        float limit = radius - dotRadius - (radius * 0.05f);
         shapeRenderer.circle(centerX + (spinDot.x * limit), centerY + (spinDot.y * limit), dotRadius);
 
         shapeRenderer.end();
@@ -97,6 +97,7 @@ public class SpinIndicator extends Actor {
         font.setColor(Color.WHITE);
         layout.setText(font, "SPIN");
         font.draw(batch, "SPIN", centerX - (layout.width / 2f), getY() + (radius * 2.5f));
+        font.getData().setScale(1.0f);
     }
 
     public void setInputProcessor(GameInputProcessor input) { this.input = input; }
@@ -135,7 +136,7 @@ public class SpinIndicator extends Actor {
         shapeRenderer.setColor(0.15f, 0.15f, 0.15f, 0.9f);
         shapeRenderer.circle(centerX, centerY, dynamicBigRadius);
         shapeRenderer.setColor(Color.RED);
-        float dr = dynamicBigRadius * 0.04f;
+        float dr = dynamicBigRadius * 0.02f;
         shapeRenderer.circle(centerX + spinDot.x * (dynamicBigRadius - dr), centerY + spinDot.y * (dynamicBigRadius - dr), dr);
         shapeRenderer.end();
         batch.begin();

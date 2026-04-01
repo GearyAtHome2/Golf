@@ -3,7 +3,6 @@ package org.example.session;
 import com.badlogic.gdx.math.MathUtils;
 import org.example.GameConfig;
 import org.example.terrain.level.LevelDataGenerator;
-import java.util.Calendar;
 
 public class SessionManager {
     private GameSession activeSession;
@@ -29,9 +28,7 @@ public class SessionManager {
     }
 
     public void startDailyChallenge() {
-        Calendar cal = Calendar.getInstance();
-        long dateSeed = (long) cal.get(Calendar.YEAR) * 10000 + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
-        startCompetitiveMatch(applySecretSauce(dateSeed), GameSession.GameMode.DAILY_CHALLENGE);
+        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp()), GameSession.GameMode.DAILY_CHALLENGE);
     }
 
     public void startStandardMatch() {

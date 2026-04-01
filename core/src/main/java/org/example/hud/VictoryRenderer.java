@@ -71,6 +71,7 @@ public class VictoryRenderer {
 
         if (session.isFinished()) {
             int totalDiff = session.getCompetitiveScore().getTotalToPar();
+            // Golf convention: under-par scores give a positive handicap, over-par gives negative
             String handicapStr = (totalDiff <= 0) ? "+" + Math.abs(totalDiff) : String.valueOf(-totalDiff);
             font.getData().setScale(1.3f);
             font.setColor(Color.GOLD);

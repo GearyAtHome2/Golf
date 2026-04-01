@@ -344,11 +344,12 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private LevelFactory.LevelCreationResult generateLevelResult(long manualSeed) {
-        LevelFactory.GameMode mode = LevelFactory.GameMode.PLAYING;
-        try {
-            mode = LevelFactory.GameMode.valueOf(gameplayState.name());
-        } catch (Exception ignored) {
-        }
+        LevelFactory.GameMode mode = switch (gameplayState) {
+            case START          -> LevelFactory.GameMode.START;
+            case PRACTICE_RANGE -> LevelFactory.GameMode.PRACTICE_RANGE;
+            case PUTTING_GREEN  -> LevelFactory.GameMode.PUTTING_GREEN;
+            default             -> LevelFactory.GameMode.PLAYING;
+        };
 
         GameSession active = sessionManager.getActive();
         if (gameplayState == GameState.COMPETITIVE && active != null) {
@@ -404,8 +405,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         GameSession active = sessionManager.getActive();
         if (gameplayState == GameState.COMPETITIVE && active != null) {
-            active.getCompetitiveScore().recordStroke(active.getCurrentHoleIndex(), hud.getShotCount());
-            active.advanceHole();
+            active.advanceHole();   // internally records the final stroke count and advances the hole index
             sessionManager.saveActive();
         }
     }
@@ -560,13 +560,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void enterInstructions() {
-        hud.clearInstructionsRequest();
         hud.resetInstructionScroll();
         changeState(GameState.INSTRUCTIONS);
     }
 
     private void enterCameraConfig() {
-        hud.clearCameraConfigRequest();
         hud.resetCameraConfigScroll();
         changeState(GameState.CAMERA_CONFIG);
     }

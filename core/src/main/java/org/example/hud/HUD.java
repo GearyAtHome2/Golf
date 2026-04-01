@@ -44,16 +44,12 @@ public class HUD {
     private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
     private LeaderboardUI leaderboardUI;
     private final HighscoreService highscoreService = new HighscoreService();
-    private boolean instructionsRequested = false;
-    private boolean cameraConfigRequested = false;
     private final SpriteBatch batch;
     private final ShapeRenderer shapeRenderer;
     private final BitmapFont font;
     private final Viewport viewport;
     private final GameConfig config;
     private final MinigameController minigameController = new MinigameController();
-    private final InstructionRenderer instructionRenderer = new InstructionRenderer();
-    private final CameraConfigRenderer cameraConfigRenderer = new CameraConfigRenderer();
     private final VictoryRenderer victoryRenderer = new VictoryRenderer();
     private com.badlogic.gdx.scenes.scene2d.ui.Label mobileClubLabel;
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
@@ -103,6 +99,7 @@ public class HUD {
         this.viewport = new ExtendViewport(1280, 720);
         this.stage = new Stage(viewport, batch);
         this.startMenuStage = new Stage(viewport, batch);
+        this.pauseMenuStage = new Stage(viewport, batch);
 
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
@@ -115,15 +112,6 @@ public class HUD {
         this.preShotDebugActor = new PreShotDebugActor(font);
         this.minigameController.setNotificationManager(this.notificationManager);
         this.minigameController.setOnShotFinalized(this::incrementShots);
-    }
-
-    private void drawShadowedText(String text, float x, float y, Color color) {
-        if (batch == null || !batch.isDrawing()) return;
-        float alpha = color.a;
-        font.setColor(0, 0, 0, alpha * 0.7f);
-        font.draw(batch, text, x + 1, y - 1);
-        font.setColor(color);
-        font.draw(batch, text, x, y);
     }
 
     public void setActiveSession(GameSession session) {
@@ -267,8 +255,6 @@ public class HUD {
         if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES))
             config.particlesEnabled = !config.particlesEnabled;
         if (input.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) mainMenuRequested = true;
-        if (input.isActionJustPressed(GameInputProcessor.Action.HELP)) instructionsRequested = true;
-        if (input.isActionJustPressed(GameInputProcessor.Action.CAM_CONFIG)) cameraConfigRequested = true;
         if (input.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && levelData != null) {
             Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
             seedFeedbackTimer = 2.0f;
@@ -385,13 +371,13 @@ public class HUD {
         boolean isMoving = ball.getState() == Ball.State.AIR || ball.getState() == Ball.State.ROLLING || ball.getState() == Ball.State.CONTACT;
         if (isMoving || distanceTracker.shouldShow()) {
             float distanceToShow = isMoving ? ball.getShotDistance() : distanceTracker.getDisplayDistance();
-            float responsiveScale = (viewport.getWorldHeight() * 0.035f) / font.getLineHeight();
+            float responsiveScale = (viewport.getWorldHeight() * 0.035f) / font.getData().lineHeight;
             font.getData().setScale(responsiveScale * baseScale);
             if (!isMoving) font.setColor(1f, 0.85f, 0f, MathUtils.clamp(distanceTracker.getTimer(), 0, 1));
             else font.setColor(Color.WHITE);
             String text = String.format("DISTANCE: %.1f yds", distanceToShow);
             layout.setText(font, text);
-            drawShadowedText(text, viewport.getWorldWidth() - layout.width - (viewport.getWorldWidth() * 0.02f), (viewport.getWorldHeight() * 0.2f) + layout.height, font.getColor());
+            UIUtils.drawShadowedText(batch, font, text,viewport.getWorldWidth() - layout.width - (viewport.getWorldWidth() * 0.02f), (viewport.getWorldHeight() * 0.2f) + layout.height, font.getColor());
             font.setColor(Color.WHITE);
             font.getData().setScale(1.0f);
         }
@@ -403,7 +389,7 @@ public class HUD {
             float fontSize = baseScale * 0.6f;
             font.getData().setScale(fontSize);
             layout.setText(font, distanceText);
-            drawShadowedText(distanceText, (viewport.getWorldWidth() / 2f) - (layout.width / 2f), viewport.getWorldHeight() - (40 * (fontSize / 0.6f)), new Color(1, 1, 0, Math.min(1, distanceDisplayTimer)));
+            UIUtils.drawShadowedText(batch, font, distanceText,(viewport.getWorldWidth() / 2f) - (layout.width / 2f), viewport.getWorldHeight() - (40 * (fontSize / 0.6f)), new Color(1, 1, 0, Math.min(1, distanceDisplayTimer)));
             font.getData().setScale(1.0f);
         }
     }
@@ -461,29 +447,23 @@ public class HUD {
         distanceDisplayTimer = 0;
         seedFeedbackTimer = 0;
         mainMenuRequested = false;
-        instructionsRequested = false;
-        cameraConfigRequested = false;
         spinDot.set(0, 0);
         overlayRenderer.resetScrolls();
     }
 
     public void renderInstructions(GameInputProcessor input) {
-        overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> instructionsRequested = false);
+        overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> {});
     }
 
     public void renderCameraConfig(GameInputProcessor input) {
-        overlayRenderer.renderCameraConfig(batch, shapeRenderer, font, viewport, config, input, () -> cameraConfigRequested = false);
+        overlayRenderer.renderCameraConfig(batch, shapeRenderer, font, viewport, config, input, () -> {});
     }
 
-    public boolean wasCameraConfigRequested() { return cameraConfigRequested; }
-    public void clearCameraConfigRequest() { cameraConfigRequested = false; }
-    public void resetCameraConfigScroll() { cameraConfigRenderer.resetScroll(); }
+    public void resetCameraConfigScroll() { overlayRenderer.getCameraConfigRenderer().resetScroll(); }
     public boolean isTouchInsideCameraConfig(float x, float y) {
-        return cameraConfigRequested && overlayRenderer.getCameraConfigRenderer().isClickInside(x, y);
+        return overlayRenderer.getCameraConfigRenderer().isClickInside(x, y);
     }
-    public boolean wasInstructionsRequested() { return instructionsRequested; }
-    public void clearInstructionsRequest() { instructionsRequested = false; }
-    public void resetInstructionScroll() { instructionRenderer.resetScroll(); }
+    public void resetInstructionScroll() { overlayRenderer.getInstructionRenderer().resetScroll(); }
     public boolean isTouchInsideInstructions(float x, float y) {
         return overlayRenderer.getInstructionRenderer().isClickInside(x, y);
     }
@@ -506,12 +486,12 @@ public class HUD {
 
     public void resetSpin() {
         this.spinDot.set(0, 0);
-        if (spinIndicator != null) spinIndicator.reset();
+        spinIndicator.reset();
     }
 
-    public Stage getStage() { return stage != null ? stage : new Stage(viewport, batch); }
-    public Stage getStartMenuStage() { return startMenuStage != null ? startMenuStage : new Stage(viewport, batch); }
-    public Stage getPauseMenuStage() { return pauseMenuStage != null ? pauseMenuStage : new Stage(viewport, batch); }
+    public Stage getStage() { return stage; }
+    public Stage getStartMenuStage() { return startMenuStage; }
+    public Stage getPauseMenuStage() { return pauseMenuStage; }
 
     public Skin getSkin() {
         if (skin == null) {

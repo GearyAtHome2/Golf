@@ -7,7 +7,7 @@ isStarted: true
 timestamp: 20260401
 competitiveScore: {
 	pars: [ 4, 4, 5, 5, 3, 4, 3, 5, 4, 5, 5, 4, 4, 5, 4, 5, 5, 4 ]
-	scores: [ 5, 4, 5, 5, 3, 4, 3, 5, 4, 5, 5, 4, 4, 5, 4, 5, 6, 0 ]
-	currentHoleIndex: 17
+	scores: [ 5, 4, 5, 5, 3, 4, 3, 5, 4, 5, 5, 4, 4, 5, 4, 5, 6, 3 ]
+	currentHoleIndex: 18
 }
 }

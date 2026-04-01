@@ -85,7 +85,7 @@ public class CompetitiveScore {
 
     public String getToParString() {
         int toPar = getTotalToPar();
-        if (toPar == 0) return "E";
+        if (toPar == 0) return "Even";
         return (toPar > 0 ? "+" : "") + toPar;
     }
 

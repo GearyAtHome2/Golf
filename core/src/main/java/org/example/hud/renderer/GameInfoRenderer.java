@@ -8,13 +8,13 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
+import org.example.hud.UIUtils;
 import org.example.GameConfig;
 import org.example.ball.Ball;
 import org.example.session.GameSession;
 import org.example.terrain.Terrain;
+import org.example.ball.CompetitiveScore;
 import org.example.terrain.level.LevelData;
-
-import java.util.List;
 
 public class GameInfoRenderer {
     private final Vector3 tempV1 = new Vector3();
@@ -38,11 +38,11 @@ public class GameInfoRenderer {
 
         if (isPractice) {
             font.getData().setScale(baseScale * 0.8f);
-            drawShadowedText(batch, font, "PRACTICE RANGE", marginX, currentY, Color.CYAN);
+            UIUtils.drawShadowedText(batch, font, "PRACTICE RANGE", marginX, currentY, Color.CYAN);
         } else if (levelData != null) {
             font.getData().setScale(baseScale * 0.85f);
             String header = (levelData.getArchetype() != null ? levelData.getArchetype().name().replace("_", " ") : "COURSE") + " | PAR " + levelData.getPar();
-            drawShadowedText(batch, font, header, marginX, currentY, Color.GOLD);
+            UIUtils.drawShadowedText(batch, font, header, marginX, currentY, Color.GOLD);
 
             currentY -= lineSpacing;
             font.getData().setScale(baseScale * 0.75f);
@@ -54,16 +54,16 @@ public class GameInfoRenderer {
 
                 if (isAndroid) {
                     layout.setText(font, scoreStr);
-                    drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
+                    UIUtils.drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
                     float shotsX = marginX + layout.width + (screenW * 0.04f);
-                    drawShadowedText(batch, font, "SHOTS: " + shotCount, shotsX, currentY, Color.WHITE);
+                    UIUtils.drawShadowedText(batch, font, "SHOTS: " + shotCount, shotsX, currentY, Color.WHITE);
                 } else {
-                    drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
+                    UIUtils.drawShadowedText(batch, font, scoreStr, marginX, currentY, Color.YELLOW);
                     currentY -= lineSpacing;
-                    drawShadowedText(batch, font, "SHOTS: " + shotCount, marginX, currentY, Color.WHITE);
+                    UIUtils.drawShadowedText(batch, font, "SHOTS: " + shotCount, marginX, currentY, Color.WHITE);
                 }
             } else {
-                drawShadowedText(batch, font, "SHOTS: " + shotCount, marginX, currentY, Color.WHITE);
+                UIUtils.drawShadowedText(batch, font, "SHOTS: " + shotCount, marginX, currentY, Color.WHITE);
             }
         }
 
@@ -71,23 +71,17 @@ public class GameInfoRenderer {
         renderBottomRightInfo(batch, font, config, ball, club, terrain, screenW, screenH, baseScale, lineSpacing, isAndroid);
     }
 
+    // Only counts completed holes (before currentHoleIndex) so the displayed
+    // to-par doesn't fluctuate with each shot taken on the current hole.
     private String calculateToParString(GameSession session) {
-        int totalStrokes = 0;
-        int totalPar = 0;
-        int[] scores = session.getScores();
-        List<LevelData> layout = session.getCourseLayout();
-
-        // Calculate based on all COMPLETED holes
+        CompetitiveScore cs = session.getCompetitiveScore();
+        int toPar = 0;
         for (int i = 0; i < session.getCurrentHoleIndex(); i++) {
-            if (scores[i] > 0) {
-                totalStrokes += scores[i];
-                totalPar += layout.get(i).getPar();
-            }
+            int score = cs.getScoreForHole(i);
+            if (score > 0) toPar += score - cs.getParForHole(i);
         }
-
-        int diff = totalStrokes - totalPar;
-        if (diff == 0) return "EVEN";
-        return (diff > 0 ? "+" : "") + diff;
+        if (toPar == 0) return "Even";
+        return (toPar > 0 ? "+" : "") + toPar;
     }
 
     private void renderBottomRightInfo(SpriteBatch batch, BitmapFont font, GameConfig config, Ball ball, Club club,
@@ -105,7 +99,7 @@ public class GameInfoRenderer {
         layout.setText(font, clubName);
 
         float clubYOffset = isAndroid ? (lineSpacing * 2.05f) : (lineSpacing * 1.8f);
-        drawShadowedText(batch, font, clubName, rightMarginX - layout.width, bottomY + clubYOffset, Color.WHITE);
+        UIUtils.drawShadowedText(batch, font, clubName, rightMarginX - layout.width, bottomY + clubYOffset, Color.WHITE);
         font.getData().setScale(1.0f);
     }
 
@@ -116,7 +110,7 @@ public class GameInfoRenderer {
         font.getData().setScale(scale);
         String speedStr = String.format("SPEED: %.1fx", config.getGameSpeed());
         layout.setText(font, speedStr);
-        drawShadowedText(batch, font, speedStr, rightAnchorX - layout.width, speedY, Color.LIGHT_GRAY);
+        UIUtils.drawShadowedText(batch, font, speedStr, rightAnchorX - layout.width, speedY, Color.LIGHT_GRAY);
 
         float currentSpinMag = ball.getSpin().len();
         String spinLabel = "NONE";
@@ -134,15 +128,7 @@ public class GameInfoRenderer {
 
         String spinStr = String.format("SPIN: %.1fk (%s)", (currentSpinMag * 100f) / 1000f, spinLabel);
         layout.setText(font, spinStr);
-        drawShadowedText(batch, font, spinStr, rightAnchorX - layout.width, spinY, (currentSpinMag < 0.1f) ? Color.GRAY : typeColor);
+        UIUtils.drawShadowedText(batch, font, spinStr, rightAnchorX - layout.width, spinY, (currentSpinMag < 0.1f) ? Color.GRAY : typeColor);
     }
 
-    private void drawShadowedText(SpriteBatch batch, BitmapFont font, String text, float x, float y, Color color) {
-        float alpha = color.a;
-        float offset = font.getScaleX() * 1.1f;
-        font.setColor(0, 0, 0, alpha * 0.6f);
-        font.draw(batch, text, x + offset, y - offset);
-        font.setColor(color);
-        font.draw(batch, text, x, y);
-    }
 }
