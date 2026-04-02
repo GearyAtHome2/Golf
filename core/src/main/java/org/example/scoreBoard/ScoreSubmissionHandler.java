@@ -13,12 +13,22 @@ import org.example.session.GameSession;
 
 public class ScoreSubmissionHandler {
     private final GameSession session;
+    private final CourseType courseType;
     private final HighscoreService highscoreService;
     private final Runnable onSubmitSuccess;
     private final Runnable onCancel;
 
     public ScoreSubmissionHandler(GameSession session, Runnable onSubmitSuccess, Runnable onCancel) {
         this.session = session;
+        this.courseType = CourseType.fromMode(session.getMode());
+        this.onSubmitSuccess = onSubmitSuccess;
+        this.onCancel = onCancel;
+        this.highscoreService = new HighscoreService();
+    }
+
+    public ScoreSubmissionHandler(GameSession session, CourseType courseType, Runnable onSubmitSuccess, Runnable onCancel) {
+        this.session = session;
+        this.courseType = courseType;
         this.onSubmitSuccess = onSubmitSuccess;
         this.onCancel = onCancel;
         this.highscoreService = new HighscoreService();
@@ -27,7 +37,6 @@ public class ScoreSubmissionHandler {
     public void trigger(Stage stage, Skin skin) {
         Gdx.app.log("SCORE_SUBMIT", "Triggered ScoreSubmissionHandler");
 
-        // Release cursor for Desktop users so they can actually click the buttons
         if (Gdx.app.getType() == Application.ApplicationType.Desktop) {
             Gdx.input.setCursorCatched(false);
         }
@@ -43,7 +52,6 @@ public class ScoreSubmissionHandler {
 
         Runnable performSubmit = () -> {
             String text = nameField.getText().trim();
-            Gdx.app.log("SCORE_SUBMIT", "Submit attempt. Content: '" + text + "'");
             if (!text.isEmpty()) {
                 Gdx.input.setOnscreenKeyboardVisible(false);
                 submit(text);
@@ -56,14 +64,8 @@ public class ScoreSubmissionHandler {
         nameField.addListener(new InputListener() {
             @Override
             public boolean keyDown(InputEvent event, int keycode) {
-                if (keycode == Input.Keys.ENTER) {
-                    performSubmit.run();
-                    return true;
-                }
-                if (keycode == Input.Keys.ESCAPE) {
-                    cancel(dialog);
-                    return true;
-                }
+                if (keycode == Input.Keys.ENTER) { performSubmit.run(); return true; }
+                if (keycode == Input.Keys.ESCAPE) { cancel(dialog); return true; }
                 return false;
             }
         });
@@ -82,10 +84,12 @@ public class ScoreSubmissionHandler {
             }
         });
 
+        String dialogTitle = buildDialogTitle();
+
         Table content = dialog.getContentTable();
         content.clear();
         content.pad(6);
-        content.add("DAILY CHALLENGE SUBMISSION").colspan(3).padBottom(3).row();
+        content.add(dialogTitle).colspan(3).padBottom(3).row();
         content.add("Enter name for leaderboard:").colspan(3).padBottom(7).row();
         content.add(canBtn).width(150).height(70).padRight(10);
         content.add(nameField).width(380).height(70);
@@ -102,6 +106,14 @@ public class ScoreSubmissionHandler {
         Gdx.input.setOnscreenKeyboardVisible(true);
     }
 
+    private String buildDialogTitle() {
+        return switch (courseType) {
+            case HOLES_1 -> "DAILY 1-HOLE SUBMISSION";
+            case HOLES_9 -> "DAILY 9-HOLE SUBMISSION";
+            default -> "DAILY CHALLENGE SUBMISSION";
+        };
+    }
+
     private void cancel(Dialog dialog) {
         Gdx.app.log("SCORE_SUBMIT", "Cancel action triggered");
         Gdx.input.setOnscreenKeyboardVisible(false);
@@ -113,6 +125,7 @@ public class ScoreSubmissionHandler {
     private void submit(String username) {
         int finalScore = session.getCompetitiveScore().getTotalStrokes();
         String difficulty = session.getDifficulty().name();
-        highscoreService.submitScore(username, finalScore, difficulty);
+        float elapsedTime = session.getElapsedTimeSeconds();
+        highscoreService.submitScore(username, finalScore, difficulty, courseType, elapsedTime);
     }
 }

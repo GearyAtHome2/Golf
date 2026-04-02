@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 
 public class MainMenuRenderer {
@@ -18,7 +19,7 @@ public class MainMenuRenderer {
     private float pulseTimer = 0;
     private final GlyphLayout layout = new GlyphLayout();
 
-    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, int selection, MenuState state, GameSession standard, GameSession daily) {
+    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, int selection, MenuState state, CompetitiveSessions sessions) {
         pulseTimer += Gdx.graphics.getDeltaTime();
 
         float screenW = viewport.getWorldWidth();
@@ -29,7 +30,6 @@ public class MainMenuRenderer {
         float baseTitleScale = isAndroid ? screenH * 0.0035f : screenH * 0.0043f;
         float titleY = screenH * 0.92f;
 
-        // --- SHARED TITLE LOGIC ---
         float pulse = baseTitleScale + MathUtils.sin(pulseTimer * 2f) * (baseTitleScale * 0.03f);
         font.getData().setScale(pulse);
         layout.setText(font, title);
@@ -42,13 +42,13 @@ public class MainMenuRenderer {
         font.draw(batch, title, centeredX, titleY);
 
         if (!isAndroid) {
-            renderDesktopMenu(batch, font, screenW, screenH, selection, state, standard, daily, baseTitleScale);
+            renderDesktopMenu(batch, font, screenW, screenH, selection, state, sessions, baseTitleScale);
         }
 
         font.getData().setScale(1.0f);
     }
 
-    private void renderDesktopMenu(SpriteBatch batch, BitmapFont font, float screenW, float screenH, int selection, MenuState state, GameSession standard, GameSession daily, float baseScale) {
+    private void renderDesktopMenu(SpriteBatch batch, BitmapFont font, float screenW, float screenH, int selection, MenuState state, CompetitiveSessions sessions, float baseScale) {
         float fixedLeftX = screenW * 0.03f;
         float menuStartY = screenH * 0.60f;
         float spacing = screenH * 0.075f;
@@ -58,7 +58,7 @@ public class MainMenuRenderer {
 
         switch (state) {
             case MAIN -> renderMainMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
-            case EIGHTEEN_HOLES -> renderEighteenMenu(batch, font, selection, fixedLeftX, menuStartY, spacing, standard, daily);
+            case EIGHTEEN_HOLES -> renderEighteenMenu(batch, font, selection, fixedLeftX, menuStartY, spacing, sessions);
             case DIFFICULTY_SELECT -> renderDifficultyMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
             case PRACTICE -> renderPracticeMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
         }
@@ -81,15 +81,37 @@ public class MainMenuRenderer {
         drawOption(batch, font, selection == 4, hasValidSeed, seedText, x, y - (s * 4));
     }
 
-    private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, GameSession standard, GameSession daily) {
+    private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, CompetitiveSessions sessions) {
+        GameSession standard = sessions != null ? sessions.standard : null;
+        GameSession daily18 = sessions != null ? sessions.daily18 : null;
+        GameSession daily9 = sessions != null ? sessions.daily9 : null;
+        GameSession daily1 = sessions != null ? sessions.daily1 : null;
+
         boolean standardFinished = standard != null && standard.isFinished();
-        String play18Text = standardFinished ? "18 HOLES (COMPLETED)" : (standard != null ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)" : "PLAY 18");
-        boolean dailyFinished = daily != null && daily.isFinished();
-        String daily18Text = dailyFinished ? "DAILY 18 (COMPLETED)" : (daily != null ? "CONTINUE DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)" : "DAILY 18");
+        String play18Text = standardFinished
+            ? "18 HOLES (COMPLETED)"
+            : (standard != null ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)" : "PLAY 18");
+
+        boolean daily18Finished = daily18 != null && daily18.isFinished();
+        String daily18Text = daily18Finished
+            ? "DAILY 18 (COMPLETED)"
+            : (daily18 != null ? "CONTINUE DAILY 18 (" + (daily18.getCurrentHoleIndex() + 1) + "/18)" : "DAILY 18");
+
+        boolean daily9Finished = daily9 != null && daily9.isFinished();
+        String daily9Text = daily9Finished
+            ? "DAILY 9 (COMPLETED)"
+            : (daily9 != null ? "CONTINUE DAILY 9 (" + (daily9.getCurrentHoleIndex() + 1) + "/9)" : "DAILY 9");
+
+        boolean daily1Finished = daily1 != null && daily1.isFinished();
+        String daily1Text = daily1Finished
+            ? "DAILY 1-HOLE (COMPLETED)"
+            : (daily1 != null ? "CONTINUE DAILY 1-HOLE (1/1)" : "DAILY 1-HOLE");
 
         drawOption(batch, font, selection == 0, !standardFinished, play18Text, x, y);
-        drawOption(batch, font, selection == 1, !dailyFinished, daily18Text, x, y - s);
-        drawOption(batch, font, selection == 2, true, "< BACK TO MAIN", x, y - (s * 2.5f));
+        drawOption(batch, font, selection == 1, !daily18Finished, daily18Text, x, y - s);
+        drawOption(batch, font, selection == 2, !daily9Finished, daily9Text, x, y - (s * 2));
+        drawOption(batch, font, selection == 3, !daily1Finished, daily1Text, x, y - (s * 3));
+        drawOption(batch, font, selection == 4, true, "< BACK TO MAIN", x, y - (s * 4.5f));
     }
 
     private void renderDifficultyMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {

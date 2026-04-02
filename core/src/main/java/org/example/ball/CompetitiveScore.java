@@ -4,14 +4,12 @@ import org.example.terrain.level.LevelData;
 import java.util.List;
 
 public class CompetitiveScore {
-    private final int totalHoles = 18;
-    // Removed final to allow JSON deserialization to fill these
+    private int totalHoles = 18;
     private int[] pars = new int[totalHoles];
     private int[] scores = new int[totalHoles];
     private int currentHoleIndex = 0;
 
     public CompetitiveScore() {
-        // Initialize arrays so the JSON reader has a target to write into
         for (int i = 0; i < totalHoles; i++) {
             pars[i] = 4;
             scores[i] = 0;
@@ -19,13 +17,11 @@ public class CompetitiveScore {
     }
 
     public CompetitiveScore(List<LevelData> course) {
-        this(); // Call no-arg to ensure arrays are ready
+        totalHoles = course.size();
+        pars = new int[totalHoles];
+        scores = new int[totalHoles];
         for (int i = 0; i < totalHoles; i++) {
-            if (i < course.size()) {
-                pars[i] = course.get(i).getPar();
-            } else {
-                pars[i] = 4; // Fallback
-            }
+            pars[i] = course.get(i).getPar();
             scores[i] = 0;
         }
     }

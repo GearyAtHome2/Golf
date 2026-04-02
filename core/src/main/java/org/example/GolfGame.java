@@ -32,6 +32,7 @@ import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 import org.example.performance.PhysicsProfiler;
 import org.example.scoreBoard.ScoreSubmissionHandler;
+import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.session.SessionManager;
 import org.example.terrain.ClassicGenerator;
@@ -194,7 +195,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (submissionStarted) return;
 
         switch (currentState) {
-            case START -> menuManager.handleInput(inputProcessor, this, sessionManager.getStandard(), sessionManager.getDaily());
+            case START -> menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions());
             case INSTRUCTIONS, CAMERA_CONFIG -> handleOverlayInput();
             case PAUSED -> handlePauseInput();
             default -> handleGameplayInput();
@@ -405,7 +406,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         GameSession active = sessionManager.getActive();
         if (gameplayState == GameState.COMPETITIVE && active != null) {
-            active.advanceHole();   // internally records the final stroke count and advances the hole index
+            active.advanceHole();
             sessionManager.saveActive();
         }
     }
@@ -426,7 +427,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
         if (currentState == GameState.START) {
-            hud.renderStartMenu(menuManager, this, sessionManager.getStandard(), sessionManager.getDaily());
+            hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions());
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
@@ -444,17 +445,26 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (terrain == null) return;
 
         float speedMultiplier = config.getGameSpeed();
-
         float effDelta = (currentState == GameState.PAUSED) ? 0 : delta * speedMultiplier;
-
         float particleDelta = (isVictory || currentState == GameState.PAUSED) ? delta * 0.06f : delta * speedMultiplier;
 
         if (isGameplayState() || currentState == GameState.PAUSED) {
             updateGameplaySystems(delta, effDelta, particleDelta, terrain);
         }
 
+        updateDaily1Timer(delta);
+
         terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
         terrain.updateFlag(camera.position);
+    }
+
+    /** Advances the elapsed timer for DAILY_1 mode when gameplay is active. */
+    private void updateDaily1Timer(float delta) {
+        if (gameplayState != GameState.COMPETITIVE || currentState == GameState.PAUSED || isVictory) return;
+        GameSession active = sessionManager.getActive();
+        if (active != null && active.getMode() == GameSession.GameMode.DAILY_1) {
+            active.addElapsedTime(delta);
+        }
     }
 
     private void updateGameplaySystems(float delta, float effDelta, float particleDelta, Terrain terrain) {
@@ -483,6 +493,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         particleManager.update(particleDelta, terrain);
     }
+
     private void updateShotLogic(float delta, Terrain terrain) {
         if (hud.wasMinigameCanceled()) shotController.reset();
 
@@ -552,10 +563,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         sessionManager.clearActive();
         menuManager.setMenuState(MenuState.MAIN);
         menuManager.setMenuSelection(0);
-
-        // Nulling here ensures it doesn't fight the cursor logic in changeState
         cameraController = null;
-
         changeState(GameState.START);
     }
 
@@ -627,8 +635,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     @Override
-    public void onSelectDailyChallenge() {
-        GameSession daily = sessionManager.getDaily();
+    public void onSelectDaily18() {
+        GameSession daily = sessionManager.getDaily18();
         if (daily != null && !daily.isFinished()) {
             sessionManager.setActive(daily);
             changeState(GameState.COMPETITIVE);
@@ -641,14 +649,43 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     @Override
+    public void onSelectDaily9() {
+        GameSession daily = sessionManager.getDaily9();
+        if (daily != null && !daily.isFinished()) {
+            sessionManager.setActive(daily);
+            changeState(GameState.COMPETITIVE);
+            initLevel();
+        } else {
+            menuManager.setPendingMatchMode(2);
+            menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
+            menuManager.setMenuSelection(0);
+        }
+    }
+
+    @Override
+    public void onSelectDaily1() {
+        GameSession daily = sessionManager.getDaily1();
+        if (daily != null && !daily.isFinished()) {
+            sessionManager.setActive(daily);
+            changeState(GameState.COMPETITIVE);
+            initLevel();
+        } else {
+            menuManager.setPendingMatchMode(3);
+            menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
+            menuManager.setMenuSelection(0);
+        }
+    }
+
+    @Override
     public void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode) {
         config.setDifficulty(difficulty);
         shotController.setGuidelineEnabled(false);
 
-        if (mode == 0) {
-            sessionManager.startStandardMatch();
-        } else {
-            sessionManager.startDailyChallenge();
+        switch (mode) {
+            case 0 -> sessionManager.startStandardMatch();
+            case 1 -> sessionManager.startDaily18();
+            case 2 -> sessionManager.startDaily9();
+            case 3 -> sessionManager.startDaily1();
         }
 
         changeState(GameState.COMPETITIVE);

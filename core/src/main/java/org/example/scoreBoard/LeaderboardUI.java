@@ -15,6 +15,7 @@ public class LeaderboardUI extends Table {
     private final Skin skin;
     private final Table scoreTable;
     private String currentDifficulty = GameConfig.Difficulty.NOVICE.name();
+    private CourseType currentCourseType = CourseType.HOLES_18;
     private float lastAppliedScale = 1.0f;
 
     public LeaderboardUI(Skin skin, HighscoreService service) {
@@ -22,7 +23,6 @@ public class LeaderboardUI extends Table {
         this.service = service;
         ensureStylesExist();
         this.scoreTable = new Table();
-
         this.right();
         this.scoreTable.top().left();
 
@@ -59,33 +59,11 @@ public class LeaderboardUI extends Table {
         title.setAlignment(Align.center);
         title.setFontScale(uiScale * 1.0f);
 
-        Table tabTable = new Table();
-        ButtonGroup<TextButton> group = new ButtonGroup<>();
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        // Course type tab row (above difficulty tabs)
+        Table courseTabTable = buildCourseTypeTabs(uiScale);
 
-        float btnScale = uiScale * (isAndroid ? 0.65f : 0.75f);
-        int cols = isAndroid ? 2 : 3;
-        int currentCell = 0;
-
-        for (final String diff : GameConfig.Difficulty.getNames()) {
-            TextButton btn = new TextButton(diff, skin, "default");
-            btn.getLabel().setFontScale(btnScale);
-            if (diff.equals(currentDifficulty)) btn.setChecked(true);
-
-            btn.addListener(new ClickListener() {
-                @Override
-                public void clicked(InputEvent event, float x, float y) {
-                    currentDifficulty = diff;
-                    refresh();
-                }
-            });
-
-            tabTable.add(btn).expandX().fillX().height(40 * uiScale).pad(2 * uiScale);
-            group.add(btn);
-
-            currentCell++;
-            if (currentCell % cols == 0) tabTable.row();
-        }
+        // Difficulty tab row
+        Table tabTable = buildDifficultyTabs(uiScale);
 
         ScrollPane scroll = new ScrollPane(scoreTable, skin);
         scroll.setFadeScrollBars(false);
@@ -94,16 +72,65 @@ public class LeaderboardUI extends Table {
         TextButton refreshBtn = new TextButton("REFRESH", skin, "default");
         refreshBtn.getLabel().setFontScale(uiScale * 0.75f);
         refreshBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                refresh();
-            }
+            @Override public void clicked(InputEvent event, float x, float y) { refresh(); }
         });
 
-        this.add(title).expandX().fillX().padBottom(15 * uiScale).row();
+        this.add(title).expandX().fillX().padBottom(10 * uiScale).row();
+        this.add(courseTabTable).expandX().fillX().padBottom(6 * uiScale).row();
         this.add(tabTable).expandX().fillX().padBottom(10 * uiScale).row();
         this.add(scroll).expand().fill().row();
         this.add(refreshBtn).width(140 * uiScale).height(40 * uiScale).right().padTop(10 * uiScale);
+    }
+
+    private Table buildCourseTypeTabs(float uiScale) {
+        Table courseTabTable = new Table();
+        ButtonGroup<TextButton> courseGroup = new ButtonGroup<>();
+        float btnScale = uiScale * 0.75f;
+
+        CourseType[] types = {CourseType.HOLES_18, CourseType.HOLES_9, CourseType.HOLES_1};
+        String[] labels = {"18H", "9H", "1H"};
+
+        for (int i = 0; i < types.length; i++) {
+            final CourseType type = types[i];
+            TextButton btn = new TextButton(labels[i], skin, "default");
+            btn.getLabel().setFontScale(btnScale);
+            if (type == currentCourseType) btn.setChecked(true);
+            btn.addListener(new ClickListener() {
+                @Override public void clicked(InputEvent event, float x, float y) {
+                    currentCourseType = type;
+                    refresh();
+                }
+            });
+            courseTabTable.add(btn).expandX().fillX().height(40 * uiScale).pad(2 * uiScale);
+            courseGroup.add(btn);
+        }
+        return courseTabTable;
+    }
+
+    private Table buildDifficultyTabs(float uiScale) {
+        Table tabTable = new Table();
+        ButtonGroup<TextButton> group = new ButtonGroup<>();
+        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        float btnScale = uiScale * (isAndroid ? 0.65f : 0.75f);
+        int cols = isAndroid ? 2 : 3;
+        int currentCell = 0;
+
+        for (final String diff : GameConfig.Difficulty.getNames()) {
+            TextButton btn = new TextButton(diff, skin, "default");
+            btn.getLabel().setFontScale(btnScale);
+            if (diff.equals(currentDifficulty)) btn.setChecked(true);
+            btn.addListener(new ClickListener() {
+                @Override public void clicked(InputEvent event, float x, float y) {
+                    currentDifficulty = diff;
+                    refresh();
+                }
+            });
+            tabTable.add(btn).expandX().fillX().height(40 * uiScale).pad(2 * uiScale);
+            group.add(btn);
+            currentCell++;
+            if (currentCell % cols == 0) tabTable.row();
+        }
+        return tabTable;
     }
 
     public void refresh() {
@@ -112,13 +139,9 @@ public class LeaderboardUI extends Table {
         loading.setFontScale(lastAppliedScale * 0.7f);
         scoreTable.add(loading).center().padTop(40 * lastAppliedScale);
 
-        service.fetchHighscores(currentDifficulty, new HighscoreService.HighscoreListener() {
-            @Override
-            public void onSuccess(Array<HighscoreService.HighscoreEntry> entries) {
-                updateTable(entries, lastAppliedScale);
-            }
-            @Override
-            public void onFailure(Throwable t) {
+        service.fetchHighscores(currentDifficulty, currentCourseType, new HighscoreService.HighscoreListener() {
+            @Override public void onSuccess(Array<HighscoreService.HighscoreEntry> entries) { updateTable(entries, lastAppliedScale); }
+            @Override public void onFailure(Throwable t) {
                 scoreTable.clear();
                 Label error = new Label("Offline", skin, "default");
                 error.setColor(Color.RED);
@@ -130,65 +153,107 @@ public class LeaderboardUI extends Table {
 
     private void updateTable(Array<HighscoreService.HighscoreEntry> entries, float uiScale) {
         scoreTable.clear();
-        // Force a small gutter on the left to prevent the 'R' in RANK from clipping
         scoreTable.top().left().padLeft(10 * uiScale);
 
-        // Calculate width while strictly subtracting the table's own padding
         float tablePadding = scoreTable.getPadLeft() + scoreTable.getPadRight();
         float totalWidth = (this.getWidth() - (this.getPadLeft() + this.getPadRight())) - tablePadding;
+        float textScale = uiScale * 0.70f;
 
-        // Adjusted percentages to give RANK slightly more breathing room
-        float rkW = totalWidth * 0.2f;
+        if (currentCourseType == CourseType.HOLES_1) {
+            updateTableOneHole(entries, uiScale, totalWidth, textScale);
+        } else {
+            updateTableStandard(entries, uiScale, totalWidth, textScale);
+        }
+    }
+
+    private void updateTableStandard(Array<HighscoreService.HighscoreEntry> entries, float uiScale, float totalWidth, float textScale) {
+        float rkW = totalWidth * 0.20f;
         float playerW = totalWidth * 0.39f;
         float scoreW = totalWidth * 0.23f;
         float timeW = totalWidth * 0.18f;
 
-        float textScale = uiScale * 0.70f;
-
-        // Header - Note the use of expandX() to ensure the table fills the available width
         scoreTable.add(new Label("RANK", skin, "default")).width(rkW).left();
         scoreTable.add(new Label("PLAYER", skin, "default")).width(playerW).left();
         scoreTable.add(new Label("SCORE", skin, "default")).width(scoreW).center();
         scoreTable.add(new Label("TIME", skin, "default")).width(timeW).right();
         scoreTable.row();
-
-        if (skin.has("white", com.badlogic.gdx.scenes.scene2d.utils.Drawable.class)) {
-            scoreTable.add(new com.badlogic.gdx.scenes.scene2d.ui.Image(skin.newDrawable("white", Color.GRAY)))
-                    .colspan(4).fillX().height(1f).padTop(2).padBottom(8 * uiScale).row();
-        }
+        addDivider(4, uiScale);
 
         if (entries == null || entries.size == 0) {
-            Label none = new Label("No scores yet", skin, "default");
-            none.setFontScale(textScale);
-            scoreTable.add(none).colspan(4).center().padTop(30 * uiScale);
+            scoreTable.add(new Label("No scores yet", skin, "default")).colspan(4).center().padTop(30 * uiScale);
             return;
         }
 
         int rank = 1;
         for (HighscoreService.HighscoreEntry entry : entries) {
-            Label rL = new Label(rank + ".", skin, "default");
-            rL.setFontScale(textScale);
+            Label rL = makeLabel(rank + ".", textScale);
             scoreTable.add(rL).width(rkW).left();
-
-            Label nL = new Label(entry.name, skin, "default");
-            nL.setFontScale(textScale);
-            nL.setEllipsis("..."); // Explicitly setting ellipsis string
+            Label nL = makeLabel(entry.name, textScale);
+            nL.setEllipsis("...");
             scoreTable.add(nL).width(playerW).left();
-
-            Label sL = new Label(String.valueOf(entry.score), skin, "default");
-            sL.setFontScale(textScale);
-            scoreTable.add(sL).width(scoreW).center();
-
-            String displayTime = "--:--";
-            if (entry.date != null && entry.date.contains("T")) {
-                try { displayTime = entry.date.split("T")[1].substring(0, 5); } catch (Exception e) {}
-            }
-            Label tL = new Label(displayTime, skin, "default");
-            tL.setFontScale(textScale);
-            scoreTable.add(tL).width(timeW).right();
-
+            scoreTable.add(makeLabel(String.valueOf(entry.score), textScale)).width(scoreW).center();
+            scoreTable.add(makeLabel(formatSubmittedTime(entry.date), textScale)).width(timeW).right();
             scoreTable.row().padBottom(4 * uiScale);
             rank++;
         }
+    }
+
+    private void updateTableOneHole(Array<HighscoreService.HighscoreEntry> entries, float uiScale, float totalWidth, float textScale) {
+        float rkW = totalWidth * 0.12f;
+        float playerW = totalWidth * 0.33f;
+        float timeW = totalWidth * 0.18f;
+        float strokesW = totalWidth * 0.15f;
+        float submittedW = totalWidth * 0.22f;
+
+        scoreTable.add(new Label("RANK", skin, "default")).width(rkW).left();
+        scoreTable.add(new Label("PLAYER", skin, "default")).width(playerW).left();
+        scoreTable.add(new Label("TIME", skin, "default")).width(timeW).center();
+        scoreTable.add(new Label("STROKES", skin, "default")).width(strokesW).center();
+        scoreTable.add(new Label("SUBMITTED", skin, "default")).width(submittedW).right();
+        scoreTable.row();
+        addDivider(5, uiScale);
+
+        if (entries == null || entries.size == 0) {
+            scoreTable.add(new Label("No scores yet", skin, "default")).colspan(5).center().padTop(30 * uiScale);
+            return;
+        }
+
+        int rank = 1;
+        for (HighscoreService.HighscoreEntry entry : entries) {
+            scoreTable.add(makeLabel(rank + ".", textScale)).width(rkW).left();
+            Label nL = makeLabel(entry.name, textScale);
+            nL.setEllipsis("...");
+            scoreTable.add(nL).width(playerW).left();
+            scoreTable.add(makeLabel(formatElapsedTime(entry.elapsedTime), textScale)).width(timeW).center();
+            scoreTable.add(makeLabel(String.valueOf(entry.score), textScale)).width(strokesW).center();
+            scoreTable.add(makeLabel(formatSubmittedTime(entry.date), textScale)).width(submittedW).right();
+            scoreTable.row().padBottom(4 * uiScale);
+            rank++;
+        }
+    }
+
+    private void addDivider(int colspan, float uiScale) {
+        if (skin.has("white", com.badlogic.gdx.scenes.scene2d.utils.Drawable.class)) {
+            scoreTable.add(new com.badlogic.gdx.scenes.scene2d.ui.Image(skin.newDrawable("white", Color.GRAY)))
+                    .colspan(colspan).fillX().height(1f).padTop(2).padBottom(8 * uiScale).row();
+        }
+    }
+
+    private Label makeLabel(String text, float fontScale) {
+        Label lbl = new Label(text, skin, "default");
+        lbl.setFontScale(fontScale);
+        return lbl;
+    }
+
+    private String formatSubmittedTime(String date) {
+        if (date != null && date.contains("T")) {
+            try { return date.split("T")[1].substring(0, 5); } catch (Exception ignored) {}
+        }
+        return "--:--";
+    }
+
+    private String formatElapsedTime(float seconds) {
+        int total = (int) seconds;
+        return String.format("%02d:%02d", total / 60, total % 60);
     }
 }

@@ -12,7 +12,17 @@ import java.util.List;
 public class GameSession implements Json.Serializable {
     public enum GameMode {
         STANDARD_18,
-        DAILY_CHALLENGE
+        DAILY_18,
+        DAILY_9,
+        DAILY_1;
+
+        public int holeCount() {
+            return switch (this) {
+                case DAILY_1 -> 1;
+                case DAILY_9 -> 9;
+                default -> 18;
+            };
+        }
     }
 
     private long masterSeed;
@@ -21,6 +31,7 @@ public class GameSession implements Json.Serializable {
     private int currentHoleStrokes = 0;
     private boolean isStarted = false;
     private long timestamp;
+    private float elapsedTimeSeconds = 0f;
     private CompetitiveScore competitiveScore;
 
     private transient List<LevelData> courseLayout = new ArrayList<>();
@@ -36,7 +47,9 @@ public class GameSession implements Json.Serializable {
     }
 
     public void rebuildLayout() {
-        this.courseLayout = LevelDataGenerator.generate18Holes(masterSeed);
+        List<LevelData> full18 = LevelDataGenerator.generate18Holes(masterSeed);
+        int count = (mode != null) ? mode.holeCount() : 18;
+        this.courseLayout = (count < full18.size()) ? full18.subList(0, count) : full18;
         if (this.competitiveScore == null) {
             this.competitiveScore = new CompetitiveScore(courseLayout);
         }
@@ -65,6 +78,23 @@ public class GameSession implements Json.Serializable {
         }
     }
 
+    /** Accumulates elapsed time only while the session is active (started and not finished). */
+    public void addElapsedTime(float delta) {
+        if (isStarted && !isFinished()) {
+            elapsedTimeSeconds += delta;
+        }
+    }
+
+    public float getElapsedTimeSeconds() { return elapsedTimeSeconds; }
+
+    /** Returns elapsed time formatted as "MM:SS". */
+    public String getElapsedTimeFormatted() {
+        int total = (int) elapsedTimeSeconds;
+        int minutes = total / 60;
+        int seconds = total % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
     private void notifyStateChanged() {
         if (onStateChanged != null) onStateChanged.run();
     }
@@ -81,6 +111,7 @@ public class GameSession implements Json.Serializable {
         json.writeValue("currentHoleStrokes", currentHoleStrokes);
         json.writeValue("isStarted", isStarted);
         json.writeValue("timestamp", timestamp);
+        json.writeValue("elapsedTimeSeconds", elapsedTimeSeconds);
         json.writeValue("competitiveScore", competitiveScore);
     }
 
@@ -92,6 +123,7 @@ public class GameSession implements Json.Serializable {
         this.currentHoleStrokes = jsonData.getInt("currentHoleStrokes");
         this.isStarted = jsonData.getBoolean("isStarted");
         this.timestamp = jsonData.getLong("timestamp");
+        this.elapsedTimeSeconds = jsonData.getFloat("elapsedTimeSeconds", 0f);
         this.competitiveScore = json.readValue(CompetitiveScore.class, jsonData.get("competitiveScore"));
         rebuildLayout();
     }
@@ -102,16 +134,13 @@ public class GameSession implements Json.Serializable {
 
     public boolean isFinished() {
         if (courseLayout == null || courseLayout.isEmpty()) return false;
-
         return getCurrentHoleIndex() >= courseLayout.size();
     }
 
     public LevelData getCurrentLevel() {
         int index = getCurrentHoleIndex();
         if (courseLayout == null || courseLayout.isEmpty()) return null;
-
-        int safeIndex = Math.min(index, courseLayout.size() - 1);
-        return courseLayout.get(safeIndex);
+        return courseLayout.get(Math.min(index, courseLayout.size() - 1));
     }
 
     public int getCurrentHoleStrokes() { return currentHoleStrokes; }

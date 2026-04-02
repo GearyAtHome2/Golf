@@ -91,7 +91,7 @@ public class VictoryRenderer {
             font.setColor(Color.YELLOW);
             String prompt;
             if (session.isFinished()) {
-                if (session.getMode() == GameSession.GameMode.DAILY_CHALLENGE) {
+                if (session.getMode() == GameSession.GameMode.DAILY_18 || session.getMode() == GameSession.GameMode.DAILY_9 || session.getMode() == GameSession.GameMode.DAILY_1) {
                     prompt = "COURSE COMPLETE! [S] Submit Score or [M] Main Menu";
                 } else {
                     prompt = "COURSE COMPLETE! [M] Main Menu";

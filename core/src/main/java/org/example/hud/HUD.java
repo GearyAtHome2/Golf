@@ -28,6 +28,7 @@ import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotController;
 import org.example.ball.ShotDifficulty;
+import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.gameManagers.MenuManager;
 import org.example.hud.minigame.MinigameController;
@@ -58,6 +59,7 @@ public class HUD {
     private final OverlayRenderer overlayRenderer = new OverlayRenderer();
     private final NotificationManager notificationManager = new NotificationManager();
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
+    private final HoleTimerRenderer holeTimerRenderer = new HoleTimerRenderer();
     private Table startMenuTable;
     private boolean mobileUIInitialized = false;
     private MobileUIFactory.MobileUIPackage mobileUIPackage;
@@ -95,7 +97,6 @@ public class HUD {
                 Texture.TextureFilter.Linear
         );
 
-        // Changed to ExtendViewport to allow "drift" to physical edges
         this.viewport = new ExtendViewport(1280, 720);
         this.stage = new Stage(viewport, batch);
         this.startMenuStage = new Stage(viewport, batch);
@@ -148,7 +149,7 @@ public class HUD {
 
         float menuWidth = 620f;
         float minGap = 20f;
-        float edgePadding = 15f; // Reduced from 30f to move further right
+        float edgePadding = 15f;
 
         float targetLeaderboardWidth = screenW * 0.45f;
         float totalRequired = menuWidth + targetLeaderboardWidth + minGap + edgePadding;
@@ -159,13 +160,10 @@ public class HUD {
         }
 
         float finalWidth = targetLeaderboardWidth * squeeze;
-        float finalHeight = screenH * 0.75f; // Reduced from 0.88f to make it squatter
+        float finalHeight = screenH * 0.75f;
 
         leaderboardUI.setSize(finalWidth, finalHeight);
-
-        // Positioned lower by using screenH * 0.42f instead of screenH / 2f
         leaderboardUI.setPosition(screenW - edgePadding, screenH * 0.42f, com.badlogic.gdx.utils.Align.right);
-
         leaderboardUI.rebuild(squeeze);
 
         if (startMenuTable != null) {
@@ -199,11 +197,11 @@ public class HUD {
         mobileUIInitialized = true;
     }
 
-    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily) {
+    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), standard, daily);
+        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), sessions);
         batch.end();
 
         if (leaderboardUI == null && startMenuStage != null) {
@@ -215,7 +213,7 @@ public class HUD {
         if (startMenuStage != null) {
             if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
                 if (lastMobileMenuState != menuManager.getCurrentMenuState()) {
-                    setupMobileStartMenu(menuManager, callback, standard, daily);
+                    setupMobileStartMenu(menuManager, callback, sessions);
                     lastMobileMenuState = menuManager.getCurrentMenuState();
                 }
             }
@@ -227,10 +225,10 @@ public class HUD {
         }
     }
 
-    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily) {
+    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions) {
         if (startMenuTable == null) return;
         startMenuTable.clearChildren();
-        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, standard, daily, viewport, font);
+        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, viewport, font);
     }
 
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput) {
@@ -297,6 +295,9 @@ public class HUD {
         renderDistanceDisplay(delta, rangeScale);
         if (isPractice) renderShotDistance(ball, isAndroid ? 2.2f : 1.4f);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, session, terrain);
+        if (session != null && session.getMode() == GameSession.GameMode.DAILY_1) {
+            holeTimerRenderer.render(batch, font, viewport, session.getElapsedTimeSeconds(), session.isStarted());
+        }
         batch.end();
         renderOverlays(currentClub, gameCamera, terrain, input, delta, showClubInfo, shotController);
     }
@@ -377,7 +378,7 @@ public class HUD {
             else font.setColor(Color.WHITE);
             String text = String.format("DISTANCE: %.1f yds", distanceToShow);
             layout.setText(font, text);
-            UIUtils.drawShadowedText(batch, font, text,viewport.getWorldWidth() - layout.width - (viewport.getWorldWidth() * 0.02f), (viewport.getWorldHeight() * 0.2f) + layout.height, font.getColor());
+            UIUtils.drawShadowedText(batch, font, text, viewport.getWorldWidth() - layout.width - (viewport.getWorldWidth() * 0.02f), (viewport.getWorldHeight() * 0.2f) + layout.height, font.getColor());
             font.setColor(Color.WHITE);
             font.getData().setScale(1.0f);
         }
@@ -389,7 +390,7 @@ public class HUD {
             float fontSize = baseScale * 0.6f;
             font.getData().setScale(fontSize);
             layout.setText(font, distanceText);
-            UIUtils.drawShadowedText(batch, font, distanceText,(viewport.getWorldWidth() / 2f) - (layout.width / 2f), viewport.getWorldHeight() - (40 * (fontSize / 0.6f)), new Color(1, 1, 0, Math.min(1, distanceDisplayTimer)));
+            UIUtils.drawShadowedText(batch, font, distanceText, (viewport.getWorldWidth() / 2f) - (layout.width / 2f), viewport.getWorldHeight() - (40 * (fontSize / 0.6f)), new Color(1, 1, 0, Math.min(1, distanceDisplayTimer)));
             font.getData().setScale(1.0f);
         }
     }
@@ -403,41 +404,30 @@ public class HUD {
     public void showOutOfBounds() { notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f); }
 
     public void renderVictory(int shots, LevelData levelData, GameSession session) {
-        // 1. Hide the gameplay HUD elements
-        if (gameplayTable != null) {
-            gameplayTable.setVisible(false);
-        }
+        if (gameplayTable != null) gameplayTable.setVisible(false);
+        if (infoToggleBtn != null) infoToggleBtn.setVisible(false);
+        if (victoryTable != null) victoryTable.setVisible(true);
 
-        // 2. Hide the Info toggle button specifically if it exists
-        if (infoToggleBtn != null) {
-            infoToggleBtn.setVisible(false);
-        }
-
-        // 3. Show the victory-specific buttons
-        if (victoryTable != null) {
-            victoryTable.setVisible(true);
-        }
-
-        // 4. Handle button visibility based on session state
         if (mobileUIPackage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
             boolean isFinished = (session != null && session.isFinished());
-            boolean isDaily = (session != null && session.getMode() == GameSession.GameMode.DAILY_CHALLENGE);
-
+            boolean isDaily = (session != null && isDailyMode(session.getMode()));
             mobileUIPackage.nextLevelBtn.setVisible(!isFinished);
             mobileUIPackage.submitScoreBtn.setVisible(isFinished && isDaily);
             mobileUIPackage.mainMenuBtn.setVisible(isFinished);
         }
 
-        // 5. Render the text overlay
         batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session);
         batch.end();
 
-        // 6. Draw the stage (which now only contains the visible victoryTable)
         if (Gdx.app.getType() == Application.ApplicationType.Android && stage != null) {
             stage.act();
             stage.draw();
         }
+    }
+
+    private boolean isDailyMode(GameSession.GameMode mode) {
+        return mode == GameSession.GameMode.DAILY_18 || mode == GameSession.GameMode.DAILY_9 || mode == GameSession.GameMode.DAILY_1;
     }
 
     public void reset() {

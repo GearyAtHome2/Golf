@@ -3,6 +3,7 @@ package org.example.gameManagers;
 import org.example.GameConfig;
 import org.example.hud.renderer.MainMenuRenderer.MenuState;
 import org.example.input.GameInputProcessor;
+import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 
 public class MenuManager {
@@ -10,20 +11,20 @@ public class MenuManager {
     private int menuSelection = 0;
     private int pendingMatchMode = 0;
 
-    public void handleInput(GameInputProcessor input, MenuHandler callback, GameSession standard, GameSession daily) {
+    public void handleInput(GameInputProcessor input, MenuHandler callback, CompetitiveSessions sessions) {
         int maxSelection = getMaxSelection();
         int oldSelection = menuSelection;
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_UP)) {
             do {
                 menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
-            } while (isSelectionLocked(standard, daily) && menuSelection != oldSelection);
+            } while (isSelectionLocked(sessions) && menuSelection != oldSelection);
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN)) {
             do {
                 menuSelection = (menuSelection + 1) % maxSelection;
-            } while (isSelectionLocked(standard, daily) && menuSelection != oldSelection);
+            } while (isSelectionLocked(sessions) && menuSelection != oldSelection);
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU) && currentMenuState != MenuState.MAIN) {
@@ -32,20 +33,17 @@ public class MenuManager {
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_SELECT)) {
-            processSelection(callback, standard, daily);
+            processSelection(callback, sessions);
         }
     }
 
-    /**
-     * Called by Android UI buttons to bypass the MENU_SELECT action check.
-     */
-    public void handleExternalSelection(int index, MenuHandler callback, GameSession standard, GameSession daily) {
+    public void handleExternalSelection(int index, MenuHandler callback, CompetitiveSessions sessions) {
         this.menuSelection = index;
-        processSelection(callback, standard, daily);
+        processSelection(callback, sessions);
     }
 
-    private void processSelection(MenuHandler callback, GameSession standard, GameSession daily) {
-        if (isSelectionLocked(standard, daily)) return;
+    private void processSelection(MenuHandler callback, CompetitiveSessions sessions) {
+        if (isSelectionLocked(sessions)) return;
 
         switch (currentMenuState) {
             case MAIN -> handleMain(callback);
@@ -55,10 +53,12 @@ public class MenuManager {
         }
     }
 
-    private boolean isSelectionLocked(GameSession standard, GameSession daily) {
+    private boolean isSelectionLocked(CompetitiveSessions sessions) {
         if (currentMenuState == MenuState.EIGHTEEN_HOLES) {
-            if (menuSelection == 0) return standard != null && standard.isFinished();
-            if (menuSelection == 1) return daily != null && daily.isFinished();
+            if (menuSelection == 0) return sessions.standard != null && sessions.standard.isFinished();
+            if (menuSelection == 1) return sessions.daily18 != null && sessions.daily18.isFinished();
+            if (menuSelection == 2) return sessions.daily9 != null && sessions.daily9.isFinished();
+            if (menuSelection == 3) return sessions.daily1 != null && sessions.daily1.isFinished();
         }
         return false;
     }
@@ -86,8 +86,10 @@ public class MenuManager {
     private void handleEighteen(MenuHandler callback) {
         switch (menuSelection) {
             case 0 -> callback.onSelectStandard18();
-            case 1 -> callback.onSelectDailyChallenge();
-            case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 1; }
+            case 1 -> callback.onSelectDaily18();
+            case 2 -> callback.onSelectDaily9();
+            case 3 -> callback.onSelectDaily1();
+            case 4 -> { currentMenuState = MenuState.MAIN; menuSelection = 1; }
         }
     }
 
@@ -111,7 +113,8 @@ public class MenuManager {
     private int getMaxSelection() {
         return switch (currentMenuState) {
             case MAIN -> 5;
-            case EIGHTEEN_HOLES, PRACTICE -> 3;
+            case EIGHTEEN_HOLES -> 5;
+            case PRACTICE -> 3;
             case DIFFICULTY_SELECT -> 6;
         };
     }
@@ -127,7 +130,9 @@ public class MenuManager {
         void onShowInstructions();
         void onStartWithClipboardSeed();
         void onSelectStandard18();
-        void onSelectDailyChallenge();
+        void onSelectDaily18();
+        void onSelectDaily9();
+        void onSelectDaily1();
         void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode);
         void onStartPracticeRange();
         void onStartPuttingGreen();

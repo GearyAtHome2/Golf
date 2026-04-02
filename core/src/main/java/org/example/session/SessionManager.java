@@ -3,32 +3,60 @@ package org.example.session;
 import com.badlogic.gdx.math.MathUtils;
 import org.example.GameConfig;
 import org.example.terrain.level.LevelDataGenerator;
+import java.util.List;
+import org.example.terrain.level.LevelData;
 
 public class SessionManager {
     private GameSession activeSession;
     private GameSession standardSession;
-    private GameSession dailySession;
+    private GameSession daily18Session;
+    private GameSession daily9Session;
+    private GameSession daily1Session;
     private final GameConfig config;
 
     public SessionManager(GameConfig config) {
         this.config = config;
         this.standardSession = SessionPersistence.loadSession(GameSession.GameMode.STANDARD_18);
-        this.dailySession = SessionPersistence.loadSession(GameSession.GameMode.DAILY_CHALLENGE);
+        this.daily18Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_18);
+        this.daily9Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_9);
+        this.daily1Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_1);
     }
 
     public void startCompetitiveMatch(long seed, GameSession.GameMode mode) {
         activeSession = new GameSession(seed, config.difficulty, mode, SessionPersistence.getTodayTimestamp());
         activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession));
-        activeSession.setCourseLayout(LevelDataGenerator.generate18Holes(seed));
-        
-        if (mode == GameSession.GameMode.STANDARD_18) standardSession = activeSession;
-        else dailySession = activeSession;
-        
+
+        List<LevelData> full18 = LevelDataGenerator.generate18Holes(seed);
+        int count = mode.holeCount();
+        List<LevelData> layout = (count < full18.size()) ? full18.subList(0, count) : full18;
+        activeSession.setCourseLayout(layout);
+
+        switch (mode) {
+            case STANDARD_18 -> standardSession = activeSession;
+            case DAILY_18 -> daily18Session = activeSession;
+            case DAILY_9 -> daily9Session = activeSession;
+            case DAILY_1 -> daily1Session = activeSession;
+        }
+
         SessionPersistence.saveSession(activeSession);
     }
 
+    public void startDaily18() {
+        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp()), GameSession.GameMode.DAILY_18);
+    }
+
+    public void startDaily9() {
+        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp() * 37L + 1L), GameSession.GameMode.DAILY_9);
+    }
+
+    public void startDaily1() {
+        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp() * 71L + 3L), GameSession.GameMode.DAILY_1);
+    }
+
+    /** @deprecated Use startDaily18() instead. Kept for backward compatibility. */
+    @Deprecated
     public void startDailyChallenge() {
-        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp()), GameSession.GameMode.DAILY_CHALLENGE);
+        startDaily18();
     }
 
     public void startStandardMatch() {
@@ -47,13 +75,24 @@ public class SessionManager {
         if (activeSession != null) SessionPersistence.saveSession(activeSession);
     }
 
+    public CompetitiveSessions getCompetitiveSessions() {
+        return new CompetitiveSessions(standardSession, daily18Session, daily9Session, daily1Session);
+    }
+
     public GameSession getActive() { return activeSession; }
     public void setActive(GameSession session) { this.activeSession = session; }
     public GameSession getStandard() { return standardSession; }
-    public GameSession getDaily() { return dailySession; }
+    /** @deprecated Use getDaily18() instead. */
+    @Deprecated
+    public GameSession getDaily() { return daily18Session; }
+    public GameSession getDaily18() { return daily18Session; }
+    public GameSession getDaily9() { return daily9Session; }
+    public GameSession getDaily1() { return daily1Session; }
     public void clearActive() { activeSession = null; }
 
     public boolean isDailyActive() {
-        return activeSession != null && activeSession.getMode() == GameSession.GameMode.DAILY_CHALLENGE;
+        if (activeSession == null) return false;
+        GameSession.GameMode m = activeSession.getMode();
+        return m == GameSession.GameMode.DAILY_18 || m == GameSession.GameMode.DAILY_9 || m == GameSession.GameMode.DAILY_1;
     }
 }

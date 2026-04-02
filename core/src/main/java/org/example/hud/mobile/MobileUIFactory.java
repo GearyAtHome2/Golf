@@ -13,6 +13,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.GameConfig;
+import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.gameManagers.MenuManager;
 import org.example.hud.HoldButton;
@@ -135,7 +136,7 @@ public class MobileUIFactory {
         return table.add(btn).width(w).height(h);
     }
 
-    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, GameSession standard, GameSession daily, Viewport viewport, BitmapFont font) {
+    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, Viewport viewport, BitmapFont font) {
         table.clearChildren();
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
         MainMenuRenderer.MenuState state = menuManager.getCurrentMenuState();
@@ -153,17 +154,31 @@ public class MobileUIFactory {
         for (int i = 0; i < options.length; i++) {
             final int index = i;
             String text = options[i];
-            boolean isDailyFinished = false;
+            boolean isLocked = false;
 
             if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
-                if (i == 0 && standard != null && !standard.isFinished()) {
-                    text = "RESUME 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)";
-                } else if (i == 1 && daily != null) {
-                    if (daily.isFinished()) {
-                        text = "DAILY CHALLENGE [COMPLETE]";
-                        isDailyFinished = true;
+                if (i == 0 && sessions.standard != null && !sessions.standard.isFinished()) {
+                    text = "RESUME 18 (" + (sessions.standard.getCurrentHoleIndex() + 1) + "/18)";
+                } else if (i == 1 && sessions.daily18 != null) {
+                    if (sessions.daily18.isFinished()) {
+                        text = "DAILY 18 [COMPLETE]";
+                        isLocked = true;
                     } else {
-                        text = "RESUME DAILY (" + (daily.getCurrentHoleIndex() + 1) + "/18)";
+                        text = "RESUME DAILY 18 (" + (sessions.daily18.getCurrentHoleIndex() + 1) + "/18)";
+                    }
+                } else if (i == 2 && sessions.daily9 != null) {
+                    if (sessions.daily9.isFinished()) {
+                        text = "DAILY 9 [COMPLETE]";
+                        isLocked = true;
+                    } else {
+                        text = "RESUME DAILY 9 (" + (sessions.daily9.getCurrentHoleIndex() + 1) + "/9)";
+                    }
+                } else if (i == 3 && sessions.daily1 != null) {
+                    if (sessions.daily1.isFinished()) {
+                        text = "DAILY 1-HOLE [COMPLETE]";
+                        isLocked = true;
+                    } else {
+                        text = "RESUME DAILY 1-HOLE";
                     }
                 }
             }
@@ -171,7 +186,7 @@ public class MobileUIFactory {
             TextButton btn = new TextButton(text, menuStyle);
             btn.getLabel().setFontScale(FONT_SCALE_START_MENU * 0.32f);
 
-            if (isDailyFinished) {
+            if (isLocked) {
                 btn.setDisabled(true);
                 btn.getLabel().setColor(Color.GRAY);
                 btn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
@@ -183,7 +198,7 @@ public class MobileUIFactory {
                 btn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
-                        menuManager.handleExternalSelection(index, callback, standard, daily);
+                        menuManager.handleExternalSelection(index, callback, sessions);
                     }
                 });
             }
@@ -194,7 +209,7 @@ public class MobileUIFactory {
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
             case MAIN -> new String[]{"QUICK PLAY", "18 HOLES", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
-            case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY CHALLENGE", "BACK"};
+            case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY 1-HOLE", "BACK"};
             case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.getNames();
         };
@@ -206,7 +221,7 @@ public class MobileUIFactory {
         arrowContainer.setFillParent(true);
         arrowContainer.bottom().right().padBottom(viewport.getWorldHeight() * CLUB_ARROW_Y).padRight(getEdgePad(viewport) * 0.5f);
         Table arrowRow = new Table();
-        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, getArrowWidth(viewport), getArrowHeight(viewport)).padRight(10);
+        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, getArrowWidth(viewport), getArrowHeight(viewport));
         addActionButton(arrowRow, ">", style, input, GameInputProcessor.Action.CLUB_DOWN, getArrowWidth(viewport), getArrowHeight(viewport));
         arrowContainer.add(arrowRow);
     }
@@ -348,14 +363,12 @@ public class MobileUIFactory {
 
         Table buttonTable = new Table();
         buttonTable.setFillParent(false);
-        // Push Submit Score to left, Main Menu to right
         buttonTable.add(ui.submitScoreBtn).width(btnW).height(btnH).left();
-        buttonTable.add().expandX(); // Flexible spacer
+        buttonTable.add().expandX();
         buttonTable.add(ui.mainMenuBtn).width(btnW).height(btnH).right();
 
         ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center().padBottom(15);
         ui.victoryTable.row();
-        // Set the row to fill the width so the buttonTable expandX works
         ui.victoryTable.add(buttonTable).expandX().fillX().padLeft(30).padRight(30);
     }
 
