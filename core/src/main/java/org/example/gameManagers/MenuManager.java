@@ -82,6 +82,10 @@ public class MenuManager {
         return false;
     }
 
+    public void navigateBack() {
+        if (currentMenuState != MenuState.MAIN) handleBackNavigation();
+    }
+
     private void handleBackNavigation() {
         switch (currentMenuState) {
             case MAP_SELECT -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 1; mapScrollOffset = 0; }

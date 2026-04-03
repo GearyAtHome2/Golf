@@ -83,7 +83,38 @@ public class UIUtils {
                 radius, radius + shadowOffset, radius, radius + shadowOffset));
     }
 
-public static void registerDefaultStyles(Skin skin, BitmapFont font) {
+    /**
+     * Embossed style: bright highlight strip on top/left edges, dark shadow on bottom/right.
+     * Gives a coin/chip raised look — more subtle than createRaisedButtonDrawable.
+     */
+    public static Drawable createEmbossedButtonDrawable(Color base, int radius, int bevelSize) {
+        int size = 64;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0, 0, 0, 0);
+        pixmap.fill();
+
+        // Base fill
+        pixmap.setColor(base);
+        fillRoundedRect(pixmap, 0, 0, size, size, radius);
+
+        // Dark strips on bottom and right edges (shadow)
+        pixmap.setColor(new Color(base.r * 0.32f, base.g * 0.32f, base.b * 0.32f, base.a));
+        pixmap.fillRectangle(radius, size - bevelSize, size - 2 * radius, bevelSize);
+        pixmap.fillRectangle(size - bevelSize, radius, bevelSize, size - 2 * radius);
+
+        // Light strips on top and left edges (highlight)
+        pixmap.setColor(new Color(Math.min(1f, base.r + 0.45f), Math.min(1f, base.g + 0.45f), Math.min(1f, base.b + 0.45f), base.a));
+        pixmap.fillRectangle(radius, 0, size - 2 * radius, bevelSize);
+        pixmap.fillRectangle(0, radius, bevelSize, size - 2 * radius);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        return new NinePatchDrawable(new NinePatch(new TextureRegion(texture), radius, radius, radius, radius));
+    }
+
+    public static void registerDefaultStyles(Skin skin, BitmapFont font) {
         if (!skin.has("white", Drawable.class)) {
             skin.add("white", createRoundedRectDrawable(Color.WHITE, 2));
         }

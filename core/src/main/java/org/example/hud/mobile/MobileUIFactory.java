@@ -193,6 +193,16 @@ public static class MobileUIPackage {
             String text = options[i];
             boolean isLocked = false;
 
+            if (state == MainMenuRenderer.MenuState.PLAY_OPTIONS && i == 2) {
+                String seed = getClipboardSeed();
+                if (seed.isEmpty()) {
+                    text = "PLAY SEED (EMPTY)";
+                    isLocked = true;
+                } else {
+                    text = "PLAY SEED [" + seed + "]";
+                }
+            }
+
             if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
                 if (i == 0 && sessions.standard != null && !sessions.standard.isFinished()) {
                     text = "RESUME 18 (" + (sessions.standard.getCurrentHoleIndex() + 1) + "/18)";
@@ -468,6 +478,14 @@ public static class MobileUIPackage {
             });
         }
         return btn;
+    }
+
+    private static String getClipboardSeed() {
+        String content = com.badlogic.gdx.Gdx.app.getClipboard().getContents();
+        if (content != null && !content.isEmpty()) {
+            try { return String.valueOf(Long.parseLong(content.trim())); } catch (Exception ignored) {}
+        }
+        return "";
     }
 
     private static TextButton.TextButtonStyle createMenuStyle(BitmapFont font) {

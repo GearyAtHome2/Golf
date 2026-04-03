@@ -201,7 +201,19 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (submissionStarted) return;
 
         switch (currentState) {
-            case START -> menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions());
+            case START -> {
+                menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions());
+                // Android: tap the right half of the screen to go back from any sub-menu
+                if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android
+                        && menuManager.getCurrentMenuState() != org.example.hud.renderer.MainMenuRenderer.MenuState.MAIN
+                        && com.badlogic.gdx.Gdx.input.justTouched()) {
+                    stageTouch.set(com.badlogic.gdx.Gdx.input.getX(), com.badlogic.gdx.Gdx.input.getY());
+                    hud.getStartMenuStage().getViewport().unproject(stageTouch);
+                    if (stageTouch.x > hud.getStartMenuStage().getViewport().getWorldWidth() / 2f) {
+                        menuManager.navigateBack();
+                    }
+                }
+            }
             case INSTRUCTIONS, CAMERA_CONFIG -> handleOverlayInput();
             case PAUSED -> handlePauseInput();
             default -> handleGameplayInput();
