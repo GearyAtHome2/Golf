@@ -8,6 +8,7 @@ import org.example.terrain.features.*;
 import org.example.terrain.level.LevelData;
 import org.example.terrain.objects.Monolith;
 import org.example.terrain.objects.Tree;
+import org.example.util.PerfLog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -102,13 +103,27 @@ public class ClassicGenerator implements ITerrainGenerator {
         float greenOffset = (rng.nextFloat() - 0.5f) * (SIZE_X * 0.5f);
         int greenCenterX = MathUtils.clamp((int) (SIZE_X / 2 + greenOffset), 20, SIZE_X - 20);
 
-        mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, flags.isIslandMap);
+        long tTotal = PerfLog.now();
+        PerfLog.snapshot("ClassicGenerator.generate() start  arch=" + data.getArchetype().name() + " dist=" + data.getDistance());
 
+        long t1 = PerfLog.now();
+        mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, flags.isIslandMap);
+        PerfLog.log("mapStandardFeatures", t1);
+
+        long t2 = PerfLog.now();
         boolean[][] isPathMask = getPathMask(map);
         boolean[][] greenBuffer = createGreenBuffer(map);
+        PerfLog.log("getPathMask + createGreenBuffer", t2);
 
+        long t3 = PerfLog.now();
         generateHeightMap(map, heights, greenCenterX, greenCenterZ, isPathMask, greenBuffer, flags);
+        PerfLog.log("generateHeightMap", t3);
+
+        long t4 = PerfLog.now();
         applyPostProcessing(map, heights, monoliths, trees, greenCenterX, greenCenterZ, teePos, holePos, greenBuffer, flags);
+        PerfLog.log("applyPostProcessing", t4);
+
+        PerfLog.total("ClassicGenerator.generate() TOTAL", tTotal);
 
         Gdx.app.log("GENERATOR", String.format("Map: %s length: %s par: %s", data.getArchetype().name(), data.getDistance(), data.getPar()));
     }
@@ -176,6 +191,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_X = map.length;
         int SIZE_Z = map[0].length;
 
+        long tArch = PerfLog.now();
         if (flags.isMonolithPlains) {
             data.setWaterLevel(-2.0f);
         } else if (flags.isCraterFields) {
@@ -194,34 +210,57 @@ public class ClassicGenerator implements ITerrainGenerator {
         } else if (flags.isVineyards) {
             vineyardsGenerator.generateVineyards(h, map, rng, data.getTeeHeight() + 2.0f, 4.0f, 0.12f);
         } else if (flags.isClippertonRock) {
-            // Placeholder call for Clipperton Rock
             data.setWaterLevel(0.0f);
             clippertonRockGenerator.generateClippertonRock(map, h, gX, gZ, 0.0f);
         }
+        PerfLog.log("archetype-specific generator", tArch);
 
         float water = data.getWaterLevel();
+
+        long tBunker = PerfLog.now();
         bunkerGenerator.generateBunkers(map, h, data.getnBunkers(), data.getBunkerDepth(), gX, gZ, teeP, bunkerRecords, water);
+        PerfLog.log("generateBunkers", tBunker);
 
         if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY) {
+            long tOffset = PerfLog.now();
             applyPathOffset(map, h, 25.0f, gBuf);
             tagChasmWalls(map);
+            PerfLog.log("applyPathOffset+tagChasmWalls (RAISED)", tOffset);
         } else if (data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY) {
+            long tOffset = PerfLog.now();
             applyPathOffset(map, h, -40.0f, gBuf);
             tagChasmWalls(map);
             water = (Math.min(data.getTeeHeight() + 0.2f, data.getGreenHeight()) - 35.0f) - 10.0f;
             data.setWaterLevel(water);
+            PerfLog.log("applyPathOffset+tagChasmWalls (SUNKEN)", tOffset);
         }
 
+        long tSmooth = PerfLog.now();
         smoothGreenBorders(map, h, flags.isPathDependent);
-        if (flags.isMogulHighlands) processor.applyFairwayGaussianSmoothing(map, h);
+        PerfLog.log("smoothGreenBorders", tSmooth);
 
+        if (flags.isMogulHighlands) {
+            long tGauss = PerfLog.now();
+            processor.applyFairwayGaussianSmoothing(map, h);
+            PerfLog.log("applyFairwayGaussianSmoothing", tGauss);
+        }
+
+        long tCoast = PerfLog.now();
         coastlineGenerator.applyFairwayWaterBuffer(map, h, water, 3.0f);
-        coastlineGenerator.applySlopeBasedStone(map, h, 0.35f);
+        PerfLog.log("applyFairwayWaterBuffer", tCoast);
 
+        long tStone = PerfLog.now();
+        coastlineGenerator.applySlopeBasedStone(map, h, 0.35f);
+        PerfLog.log("applySlopeBasedStone", tStone);
+
+        long tTrees = PerfLog.now();
         finalizePositionsAndTrees(map, h, teeP, holeP, t, m, gX, gZ, water, flags);
+        PerfLog.log("finalizePositionsAndTrees", tTrees);
 
         if (flags.isMonolithPlains) {
+            long tMono = PerfLog.now();
             generateMonolithPlains(map, h, m, gX, gZ);
+            PerfLog.log("generateMonolithPlains", tMono);
         }
     }
 

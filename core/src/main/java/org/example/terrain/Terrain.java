@@ -18,6 +18,7 @@ import org.example.terrain.features.PuttingGreenGenerator;
 import org.example.terrain.objects.Monolith;
 import org.example.terrain.objects.TerrainObject;
 import org.example.terrain.objects.Tree;
+import org.example.util.PerfLog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,8 +61,14 @@ public class Terrain {
         this.teeCenter = new Vector3();
         this.holePosition = new Vector3();
 
+        long tTotal = PerfLog.now();
+        PerfLog.snapshot("Terrain() start  SIZE_X=" + SIZE_X + " SIZE_Z=" + SIZE_Z);
+
         initializeGrids();
+
+        long tGen = PerfLog.now();
         generator.generate(terrainMap, heightMap, trees, monoliths, teeCenter, holePosition);
+        PerfLog.log("generator.generate()", tGen);
 
         allObjects.addAll(trees);
         allObjects.addAll(monoliths);
@@ -77,19 +84,36 @@ public class Terrain {
             this.waterLevel = -1;
         }
 
+        long tGrid = PerfLog.now();
         populateGrids();
-        calculateGreenBounds();
-        createWaterPlane();
+        PerfLog.log("populateGrids()", tGrid);
 
+        long tGreenBounds = PerfLog.now();
+        calculateGreenBounds();
+        PerfLog.log("calculateGreenBounds()", tGreenBounds);
+
+        long tWater = PerfLog.now();
+        createWaterPlane();
+        PerfLog.log("createWaterPlane()", tWater);
+
+        PerfLog.snapshot("before buildChunks  count=" + (int) Math.ceil((float) SIZE_Z / CHUNK_Z));
+        long tChunks = PerfLog.now();
         for (int z = 0; z < SIZE_Z; z += CHUNK_Z) {
             chunks.add(buildChunk(z, Math.min(z + CHUNK_Z, SIZE_Z)));
         }
+        PerfLog.log("buildChunks (all)", tChunks);
 
+        long tFlag = PerfLog.now();
         createFlag(holePosition);
+        PerfLog.log("createFlag()", tFlag);
 
         if (!(generator instanceof PuttingGreenGenerator)) {
+            long tTee = PerfLog.now();
             createTee(teeCenter);
+            PerfLog.log("createTee()", tTee);
         }
+
+        PerfLog.total("Terrain() constructor TOTAL", tTotal);
     }
 
     @SuppressWarnings("unchecked")

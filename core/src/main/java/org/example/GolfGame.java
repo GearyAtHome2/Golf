@@ -39,6 +39,7 @@ import org.example.terrain.ClassicGenerator;
 import org.example.terrain.ITerrainGenerator;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
+import org.example.terrain.level.LevelDataGenerator;
 import org.example.terrain.level.LevelFactory;
 
 public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHandler, HazardManager.HazardListener {
@@ -48,6 +49,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private GameState currentState = GameState.START;
     private GameState previousState = GameState.START;
     private GameState gameplayState = GameState.PLAYING;
+    private LevelData.Archetype selectedArchetype = null;
 
     private GhostManager ghostManager;
     private MenuManager menuManager;
@@ -145,12 +147,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             activeStage = hud.getStartMenuStage();
         } else if (currentState == GameState.PAUSED) {
             activeStage = hud.getPauseMenuStage();
+        } else if (isOverlayState(currentState)) {
+            activeStage = null; // overlay input handled via Gdx.input directly; no stage needed
         } else {
             activeStage = hud.getStage();
         }
 
-        activeStage.getViewport().update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
-        multiplexer.addProcessor(activeStage);
+        if (activeStage != null) {
+            activeStage.getViewport().update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
+            multiplexer.addProcessor(activeStage);
+        }
 
         if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
             multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
@@ -358,6 +364,12 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             LevelData data = active.getCourseLayout().get(active.getCurrentHoleIndex());
             ITerrainGenerator generator = new ClassicGenerator(data);
             return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
+        } else if (mode == LevelFactory.GameMode.PLAYING && selectedArchetype != null) {
+            long seed = (manualSeed == -1) ? System.nanoTime() : manualSeed;
+            LevelData data = LevelDataGenerator.createFixedLevelData(seed, selectedArchetype);
+            ITerrainGenerator generator = new ClassicGenerator(data);
+            hud.resetShots();
+            return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
         } else {
             LevelFactory.LevelCreationResult res = levelFactory.createLevel(mode, manualSeed);
             hud.resetShots();
@@ -543,7 +555,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         com.badlogic.gdx.scenes.scene2d.Stage uiStage =
                 (currentState == GameState.START) ? hud.getStartMenuStage() : hud.getStage();
 
-        if (uiStage != null) {
+        if (uiStage != null && currentState != GameState.PAUSED) {
             uiStage.act(Gdx.graphics.getDeltaTime());
             uiStage.draw();
 
@@ -599,6 +611,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     @Override
     public void onStartQuickPlay() {
+        selectedArchetype = null;
         changeState(GameState.PLAYING);
         initLevel();
     }
@@ -610,6 +623,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     @Override
     public void onStartWithClipboardSeed() {
+        selectedArchetype = null;
         long seed = -1;
         String clip = Gdx.app.getClipboard().getContents();
         try {
@@ -618,6 +632,13 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
         changeState(GameState.PLAYING);
         initLevel(seed);
+    }
+
+    @Override
+    public void onStartWithArchetype(LevelData.Archetype archetype) {
+        selectedArchetype = archetype;
+        changeState(GameState.PLAYING);
+        initLevel(-1);
     }
 
     @Override

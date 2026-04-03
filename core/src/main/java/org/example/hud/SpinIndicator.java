@@ -96,7 +96,7 @@ public class SpinIndicator extends Actor {
         font.getData().setScale(baseScale * 0.85f);
         font.setColor(Color.WHITE);
         layout.setText(font, "SPIN");
-        font.draw(batch, "SPIN", centerX - (layout.width / 2f), getY() + (radius * 2.5f));
+        font.draw(batch, "SPIN", centerX - (layout.width / 2f), getY() + (radius * 2.9f));
         font.getData().setScale(1.0f);
     }
 

@@ -67,9 +67,14 @@ public class ClubInfoRenderer {
         float padding = width * 0.06f;
 
         if (isAndroid) {
-            font.getData().setScale(0.98f);
-            float lineSpacing = height * 0.28f;
-            float startY = y + height - (height * 0.18f);
+            // Scale so each line is ~27% of box height, then centre the 3-line block
+            float nativeLineH = font.getData().lineHeight;
+            float scale = (height * 0.27f) / nativeLineH;
+            font.getData().setScale(scale);
+            float lineH      = font.getLineHeight();
+            float lineSpacing = lineH * 1.05f;
+            float blockH     = lineSpacing * 2 + lineH;
+            float startY     = y + (height + blockH) / 2f;
 
             // Distance: Strip " yds" or "yds" if present
             String distClean = dist.replace(" yds", "");

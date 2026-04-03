@@ -5,7 +5,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -85,7 +84,6 @@ public class HUD {
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
     private boolean showInfoDisplay = false;
     private final Vector3 tempV3 = new Vector3();
-    private Texture whitePixel;
     public static final float UI_SCALE = (Gdx.app.getType() == Application.ApplicationType.Android) ? 2.0f : 1.0f;
 
     public HUD(GameConfig config) {
@@ -103,13 +101,7 @@ public class HUD {
         this.startMenuStage = new Stage(viewport, batch);
         this.pauseMenuStage = new Stage(viewport, batch);
 
-        Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        pm.setColor(Color.WHITE);
-        pm.fill();
-        whitePixel = new Texture(pm);
-        pm.dispose();
-
-        this.skin = getSkin();
+this.skin = getSkin();
         this.spinIndicator = new SpinIndicator(shapeRenderer, font);
         this.preShotDebugActor = new PreShotDebugActor(font);
         this.minigameController.setNotificationManager(this.notificationManager);
@@ -176,7 +168,7 @@ public class HUD {
     public void setupMobileUI(MobileInputProcessor input) {
         if (mobileUIInitialized) return;
         this.mobileUIPackage = MobileUIFactory.create(
-                viewport, batch, font, config, input, whitePixel, spinIndicator, preShotDebugActor
+                viewport, batch, font, config, input, spinIndicator, preShotDebugActor
         );
         this.stage = mobileUIPackage.stage;
         this.startMenuStage = mobileUIPackage.startMenuStage;
@@ -202,7 +194,7 @@ public class HUD {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), sessions);
+        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), sessions, menuManager.getMapScrollOffset());
         batch.end();
 
         if (leaderboardUI == null && startMenuStage != null) {
@@ -436,6 +428,8 @@ public class HUD {
     public void reset() {
         if (gameplayTable != null) gameplayTable.setVisible(true);
         if (victoryTable != null) victoryTable.setVisible(false);
+        showInfoDisplay = false;
+        if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
         minigameController.reset();
         distanceDisplayTimer = 0;
         seedFeedbackTimer = 0;
@@ -514,7 +508,6 @@ public class HUD {
         batch.dispose();
         shapeRenderer.dispose();
         font.dispose();
-        if (whitePixel != null) whitePixel.dispose();
         if (stage != null) stage.dispose();
         if (startMenuStage != null) startMenuStage.dispose();
         if (pauseMenuStage != null) pauseMenuStage.dispose();

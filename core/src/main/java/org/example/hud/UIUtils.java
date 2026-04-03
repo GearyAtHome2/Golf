@@ -50,7 +50,40 @@ public class UIUtils {
         return new NinePatchDrawable(new NinePatch(new TextureRegion(texture), radius, radius, radius, radius));
     }
 
-    public static void registerDefaultStyles(Skin skin, BitmapFont font) {
+    private static void fillRoundedRect(Pixmap p, int x, int y, int w, int h, int r) {
+        p.fillRectangle(x + r, y, w - 2 * r, h);
+        p.fillRectangle(x, y + r, w, h - 2 * r);
+        p.fillCircle(x + r,     y + r,     r);
+        p.fillCircle(x + w - r, y + r,     r);
+        p.fillCircle(x + r,     y + h - r, r);
+        p.fillCircle(x + w - r, y + h - r, r);
+    }
+
+    /** Rounded rect with a dark shadow strip at bottom-right — gives a raised 3D look. */
+    public static Drawable createRaisedButtonDrawable(Color base, int radius, int shadowOffset) {
+        int size = 64;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0, 0, 0, 0);
+        pixmap.fill();
+
+        // Shadow layer: offset down-right, darker
+        pixmap.setColor(new Color(base.r * 0.35f, base.g * 0.35f, base.b * 0.35f, 1f));
+        fillRoundedRect(pixmap, shadowOffset, shadowOffset, size - shadowOffset, size - shadowOffset, radius);
+
+        // Main face: top-left, same dimensions, covers shadow except the exposed strip
+        pixmap.setColor(base);
+        fillRoundedRect(pixmap, 0, 0, size - shadowOffset, size - shadowOffset, radius);
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        // Extra right/bottom NinePatch border keeps the shadow strip fixed-width when stretched
+        return new NinePatchDrawable(new NinePatch(new TextureRegion(texture),
+                radius, radius + shadowOffset, radius, radius + shadowOffset));
+    }
+
+public static void registerDefaultStyles(Skin skin, BitmapFont font) {
         if (!skin.has("white", Drawable.class)) {
             skin.add("white", createRoundedRectDrawable(Color.WHITE, 2));
         }

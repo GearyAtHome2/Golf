@@ -9,7 +9,7 @@ elapsedTimeSeconds: 0
 competitiveScore: {
 	totalHoles: 9
 	pars: [ 4, 5, 4, 4, 3, 5, 4, 4, 4 ]
-	scores: [ 3, 0, 0, 0, 0, 0, 0, 0, 0 ]
-	currentHoleIndex: 1
+	scores: [ 3, 6, 4, 3, 2, 3, 4, 4, 2 ]
+	currentHoleIndex: 9
 }
 }

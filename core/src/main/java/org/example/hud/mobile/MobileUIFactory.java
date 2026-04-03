@@ -1,7 +1,6 @@
 package org.example.hud.mobile;
 
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -17,6 +16,8 @@ import org.example.GameConfig;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.gameManagers.MenuManager;
+import org.example.hud.SparkleButton;
+import org.example.terrain.level.LevelData;
 import org.example.hud.HoldButton;
 import org.example.hud.PreShotDebugActor;
 import org.example.hud.SpinIndicator;
@@ -24,12 +25,13 @@ import org.example.hud.renderer.MainMenuRenderer;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 
+import org.example.hud.UIUtils;
 import static org.example.hud.UIUtils.createRoundedRectDrawable;
 import static org.example.hud.mobile.MobileUIValues.*;
 
 public class MobileUIFactory {
 
-    public static class MobileUIPackage {
+public static class MobileUIPackage {
         public Stage stage, startMenuStage, pauseMenuStage;
         public Table gameplayTable, victoryTable, startMenuTable;
         public TextButton infoToggleBtn;
@@ -39,7 +41,7 @@ public class MobileUIFactory {
         public TextButton nextLevelBtn, submitScoreBtn, mainMenuBtn;
     }
 
-    public static MobileUIPackage create(Viewport viewport, SpriteBatch batch, BitmapFont font, GameConfig config, MobileInputProcessor input, Texture whitePixel, SpinIndicator spinIndicator, PreShotDebugActor debugActor) {
+    public static MobileUIPackage create(Viewport viewport, SpriteBatch batch, BitmapFont font, GameConfig config, MobileInputProcessor input, SpinIndicator spinIndicator, PreShotDebugActor debugActor) {
         MobileUIPackage ui = new MobileUIPackage();
         ui.stage = new Stage(viewport, batch);
         ui.startMenuStage = new Stage(viewport, batch);
@@ -61,7 +63,7 @@ public class MobileUIFactory {
         ui.startMenuTable.top().left();
         ui.startMenuStage.addActor(ui.startMenuTable);
 
-        setupGameplayLayout(ui, input, spinIndicator, debugActor, baseStyle, viewport, whitePixel);
+        setupGameplayLayout(ui, input, spinIndicator, debugActor, baseStyle, viewport);
         setupClubSelection(ui, input, baseStyle, viewport);
         setupPauseMenu(ui, font, viewport, config, input);
         setupVictoryMenu(ui, input, baseStyle, viewport);
@@ -69,7 +71,7 @@ public class MobileUIFactory {
         return ui;
     }
 
-    private static void setupGameplayLayout(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style, Viewport viewport, Texture whitePixel) {
+    private static void setupGameplayLayout(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style, Viewport viewport) {
         ui.gameplayTable.clear();
 
         float rightEdge = 10f;
@@ -106,11 +108,12 @@ public class MobileUIFactory {
         hitStyle.down = ui.skin.getDrawable("hitDown");
         rightStack.add(createTriggerButton(hitStyle, "HIT", input, GameInputProcessor.Action.CHARGE_SHOT, FONT_SCALE_GAMEPLAY * 0.75f)).width(hitW).height(hitH).right().padBottom(spacing).row();
 
-        ui.resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, whitePixel);
-        ui.resetBallBtn.getLabel().setFontScale(globalFontScale);
+        Drawable holdFill = createRoundedRectDrawable(new Color(0.95f, 0.60f, 0.10f, 0.70f), RADIUS_STD);
+        ui.resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, holdFill);
+        ui.resetBallBtn.getLabel().setFontScale(globalFontScale * 0.78f);
         rightStack.add(ui.resetBallBtn).width(btnW).height(btnH).right().padBottom(spacing).row();
 
-        ui.newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, whitePixel);
+        ui.newMapBtn = new HoldButton("NEW MAP", style, GameInputProcessor.Action.NEW_LEVEL, input, holdFill);
         ui.newMapBtn.getLabel().setFontScale(globalFontScale);
         rightStack.add(ui.newMapBtn).width(btnW).height(btnH).right().padBottom(spacing).row();
 
@@ -152,6 +155,39 @@ public class MobileUIFactory {
         float bH = screenH * 0.10f;
         float spacing = screenH * 0.015f;
 
+        // MAP_SELECT uses a ScrollPane so the growing archetype list doesn't overflow the screen
+        if (state == MainMenuRenderer.MenuState.MAP_SELECT) {
+            Table innerTable = new Table();
+            innerTable.top().left();
+            for (int i = 0; i < options.length; i++) {
+                final int index = i;
+                TextButton btn = new TextButton(options[i], menuStyle);
+                float baseMenuScale = FONT_SCALE_START_MENU * 0.32f;
+                GlyphLayout gl = new GlyphLayout();
+                font.getData().setScale(1.0f);
+                gl.setText(font, options[i]);
+                float textWidthAtBase = gl.width * baseMenuScale;
+                float finalMenuScale = textWidthAtBase > bW * 0.85f ? baseMenuScale * (bW * 0.85f / textWidthAtBase) : baseMenuScale;
+                btn.getLabel().setFontScale(finalMenuScale);
+                font.getData().setScale(1.0f);
+                btn.addListener(new ChangeListener() {
+                    @Override
+                    public void changed(ChangeEvent event, Actor actor) {
+                        menuManager.handleExternalSelection(index, callback, sessions);
+                    }
+                });
+                innerTable.add(btn).width(bW).height(bH).padBottom(spacing).left().row();
+            }
+            ScrollPane.ScrollPaneStyle sps = new ScrollPane.ScrollPaneStyle();
+            ScrollPane scrollPane = new ScrollPane(innerTable, sps);
+            scrollPane.setScrollingDisabled(true, false);
+            scrollPane.setOverscroll(false, false);
+            scrollPane.setFadeScrollBars(true);
+            scrollPane.setSmoothScrolling(true);
+            table.add(scrollPane).width(bW + 20f).height(screenH * 0.70f).top().left();
+            return;
+        }
+
         for (int i = 0; i < options.length; i++) {
             final int index = i;
             String text = options[i];
@@ -184,7 +220,10 @@ public class MobileUIFactory {
                 }
             }
 
-            TextButton btn = new TextButton(text, menuStyle);
+            boolean doSparkle = !isLocked && shouldSparkle(state, i, sessions);
+            TextButton btn = doSparkle ? new SparkleButton(text, menuStyle) : new TextButton(text, menuStyle);
+            if (doSparkle) ((SparkleButton) btn).setSparkleEnabled(true);
+
             float baseMenuScale = FONT_SCALE_START_MENU * 0.32f;
             float maxTextWidth = bW * 0.85f;
             GlyphLayout gl = new GlyphLayout();
@@ -213,11 +252,42 @@ public class MobileUIFactory {
             }
             table.add(btn).width(bW).height(bH).padBottom(spacing).left().row();
         }
+
+    }
+
+    private static boolean isSessionUnfinished(org.example.session.GameSession s) {
+        return s == null || !s.isFinished();
+    }
+
+    private static boolean shouldSparkle(MainMenuRenderer.MenuState state, int i, CompetitiveSessions sessions) {
+        if (state == MainMenuRenderer.MenuState.MAIN) {
+            return i == 1 && (sessions == null || isSessionUnfinished(sessions.standard)
+                    || isSessionUnfinished(sessions.daily18) || isSessionUnfinished(sessions.daily9)
+                    || isSessionUnfinished(sessions.daily1));
+        }
+        if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
+            if (sessions == null) return i >= 1 && i <= 3;
+            if (i == 0) return false; // standard 18 never sparkles — focus users on daily rounds
+            if (i == 1) return isSessionUnfinished(sessions.daily18);
+            if (i == 2) return isSessionUnfinished(sessions.daily9);
+            if (i == 3) return isSessionUnfinished(sessions.daily1);
+        }
+        return false;
     }
 
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
-            case MAIN -> new String[]{"QUICK PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
+            case MAIN -> new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE"};
+            case PLAY_OPTIONS -> new String[]{"RANDOM MAP", "SELECT MAP", "PLAY SEED", "BACK"};
+            case MAP_SELECT -> {
+                LevelData.Archetype[] archetypes = LevelData.Archetype.values();
+                String[] result = new String[archetypes.length + 1];
+                for (int i = 0; i < archetypes.length; i++) {
+                    result[i] = MainMenuRenderer.archetypeDisplayName(archetypes[i]);
+                }
+                result[archetypes.length] = "BACK";
+                yield result;
+            }
             case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY 1-HOLE", "BACK"};
             case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
             case DIFFICULTY_SELECT -> {
@@ -331,7 +401,6 @@ public class MobileUIFactory {
         pauseTable.add(animBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
 
         pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
-        pauseTable.add(createMenuButton("CAMERA CONFIG", menuStyle, input, GameInputProcessor.Action.CAM_CONFIG, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();
 
         pauseTable.top().padTop(viewport.getWorldHeight() * 0.40f);
@@ -404,9 +473,10 @@ public class MobileUIFactory {
     private static TextButton.TextButtonStyle createMenuStyle(BitmapFont font) {
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
         style.font = font;
-        style.up = createRoundedRectDrawable(COLOR_MENU_UP, RADIUS_STD);
-        style.down = createRoundedRectDrawable(COLOR_MENU_DOWN, RADIUS_STD);
         style.fontColor = Color.WHITE;
+        Color base = new Color(0.38f, 0.26f, 0.14f, 0.95f);
+        style.up   = UIUtils.createRaisedButtonDrawable(base, RADIUS_STD, 5);
+        style.down = createRoundedRectDrawable(new Color(0.20f, 0.14f, 0.07f, 1f), RADIUS_STD);
         return style;
     }
 }

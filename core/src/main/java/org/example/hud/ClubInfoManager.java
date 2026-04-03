@@ -56,6 +56,6 @@ public class ClubInfoManager {
     }
 
     public static String getLoftInfo(Club club) {
-        return "Loft: " + club.loft + "°";
+        return "Loft: " + club.loft;
     }
 }

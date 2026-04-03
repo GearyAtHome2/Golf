@@ -1,11 +1,10 @@
 package org.example.hud;
 
-import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 
@@ -14,13 +13,13 @@ public class HoldButton extends TextButton {
     private final float requiredTime = 1.2f;
     private final GameInputProcessor.Action action;
     private final MobileInputProcessor mobileInput;
-    private final Texture whitePixel;
+    private final Drawable fillDrawable;
 
-    public HoldButton(String text, TextButtonStyle style, GameInputProcessor.Action action, MobileInputProcessor mobileInput, Texture whitePixel) {
+    public HoldButton(String text, TextButtonStyle style, GameInputProcessor.Action action, MobileInputProcessor mobileInput, Drawable fillDrawable) {
         super(text, style);
         this.action = action;
         this.mobileInput = mobileInput;
-        this.whitePixel = whitePixel;
+        this.fillDrawable = fillDrawable;
 
         addListener(new InputListener() {
             @Override
@@ -56,11 +55,7 @@ public class HoldButton extends TextButton {
         if (isPressed() && !isDisabled() && holdTime > 0) {
             float progress = Math.min(holdTime / requiredTime, 1f);
             float barW = getWidth() * progress;
-            float barH = getHeight();
-
-            batch.setColor(1f, 1f, 1f, 0.4f);
-            batch.draw(whitePixel, getX(), getY(), barW, barH);
-            batch.setColor(Color.WHITE);
+            fillDrawable.draw(batch, getX(), getY(), barW, getHeight());
         }
     }
 }
