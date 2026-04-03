@@ -1,0 +1,13 @@
+{
+masterSeed: 5575260315729016316
+difficulty: NOVICE
+mode: STANDARD_18
+currentHoleStrokes: 1
+isStarted: true
+timestamp: 20260331
+competitiveScore: {
+	pars: [ 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 5, 5, 4, 5, 5, 5, 4, 4 ]
+	scores: [ 2, 20, 6, 6, 3, 2, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+	currentHoleIndex: 7
+}
+}

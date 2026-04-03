@@ -50,7 +50,18 @@ public class SessionManager {
     }
 
     public void startDaily1() {
-        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp() * 71L + 3L), GameSession.GameMode.DAILY_1);
+        long baseSeed = applySecretSauce(SessionPersistence.getTodayTimestamp() * 71L + 3L);
+        startCompetitiveMatch(findPar3Seed(baseSeed), GameSession.GameMode.DAILY_1);
+    }
+
+    /** Finds the nearest seed (starting from baseSeed) that produces a par-3 first hole. Package-private for testing. */
+    static long findPar3Seed(long baseSeed) {
+        long seed = baseSeed;
+        for (int attempt = 0; attempt < 100; attempt++) {
+            if (LevelDataGenerator.generate18Holes(seed).get(0).getPar() == 3) return seed;
+            seed = baseSeed + attempt + 1;
+        }
+        return baseSeed;
     }
 
     /** @deprecated Use startDaily18() instead. Kept for backward compatibility. */

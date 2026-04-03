@@ -87,12 +87,13 @@ public class GameSession implements Json.Serializable {
 
     public float getElapsedTimeSeconds() { return elapsedTimeSeconds; }
 
-    /** Returns elapsed time formatted as "MM:SS". */
+    /** Returns elapsed time formatted as "MM:SS.T". */
     public String getElapsedTimeFormatted() {
         int total = (int) elapsedTimeSeconds;
         int minutes = total / 60;
         int seconds = total % 60;
-        return String.format("%02d:%02d", minutes, seconds);
+        int tenths = (int) (elapsedTimeSeconds * 10) % 10;
+        return String.format("%02d:%02d.%d", minutes, seconds, tenths);
     }
 
     private void notifyStateChanged() {

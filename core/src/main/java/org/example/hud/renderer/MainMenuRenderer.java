@@ -18,6 +18,7 @@ public class MainMenuRenderer {
 
     private float pulseTimer = 0;
     private final GlyphLayout layout = new GlyphLayout();
+    private float maxMenuTextWidth = Float.MAX_VALUE;
 
     public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, int selection, MenuState state, CompetitiveSessions sessions) {
         pulseTimer += Gdx.graphics.getDeltaTime();
@@ -54,6 +55,7 @@ public class MainMenuRenderer {
         float spacing = screenH * 0.075f;
         float optionScale = baseScale * 0.32f;
 
+        maxMenuTextWidth = screenW * 0.50f;
         font.getData().setScale(optionScale);
 
         switch (state) {
@@ -71,7 +73,7 @@ public class MainMenuRenderer {
 
     private void renderMainMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {
         drawOption(batch, font, selection == 0, true, "PLAY GAME", x, y);
-        drawOption(batch, font, selection == 1, true, "18 HOLES >", x, y - s);
+        drawOption(batch, font, selection == 1, true, "COMPETITIVE >", x, y - s);
         drawOption(batch, font, selection == 2, true, "INSTRUCTIONS", x, y - (s * 2));
         drawOption(batch, font, selection == 3, true, "PRACTICE >", x, y - (s * 3));
 
@@ -131,10 +133,19 @@ public class MainMenuRenderer {
     private void drawOption(SpriteBatch batch, BitmapFont font, boolean selected, boolean enabled, String text, float x, float y) {
         String fullText = (selected && enabled) ? "> " + text : text;
         Color targetColor = !enabled ? Color.DARK_GRAY : (selected ? Color.YELLOW : Color.WHITE);
+
+        float savedScale = font.getScaleX();
+        layout.setText(font, fullText);
+        if (layout.width > maxMenuTextWidth) {
+            font.getData().setScale(savedScale * (maxMenuTextWidth / layout.width));
+        }
+
         font.setColor(0, 0, 0, 0.7f);
         font.draw(batch, fullText, x + 1, y - 1);
         font.setColor(targetColor);
         font.draw(batch, fullText, x, y);
+
+        font.getData().setScale(savedScale);
     }
 
     private String getClipboardSeed() {

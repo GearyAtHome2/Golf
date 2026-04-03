@@ -19,7 +19,7 @@ public class SpinIndicator extends Actor {
     private final float UI_SIZE_FACTOR_ANDROID = 0.09f;
     private final float OVERLAY_SIZE_FACTOR = 0.25f;
     private final float DOT_RADIUS_FACTOR_DESKTOP = 0.10f;
-    private final float DOT_RADIUS_FACTOR_ANDROID = 0.20f;
+    private final float DOT_RADIUS_FACTOR_ANDROID = 0.12f;
 
     private final Vector2 spinDot = new Vector2(0, 0);
     private final ShapeRenderer shapeRenderer;
@@ -136,7 +136,7 @@ public class SpinIndicator extends Actor {
         shapeRenderer.setColor(0.15f, 0.15f, 0.15f, 0.9f);
         shapeRenderer.circle(centerX, centerY, dynamicBigRadius);
         shapeRenderer.setColor(Color.RED);
-        float dr = dynamicBigRadius * 0.02f;
+        float dr = dynamicBigRadius * 0.07f;
         shapeRenderer.circle(centerX + spinDot.x * (dynamicBigRadius - dr), centerY + spinDot.y * (dynamicBigRadius - dr), dr);
         shapeRenderer.end();
         batch.begin();

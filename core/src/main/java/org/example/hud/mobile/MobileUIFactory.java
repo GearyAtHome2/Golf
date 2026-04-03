@@ -3,6 +3,7 @@ package org.example.hud.mobile;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
@@ -184,7 +185,15 @@ public class MobileUIFactory {
             }
 
             TextButton btn = new TextButton(text, menuStyle);
-            btn.getLabel().setFontScale(FONT_SCALE_START_MENU * 0.32f);
+            float baseMenuScale = FONT_SCALE_START_MENU * 0.32f;
+            float maxTextWidth = bW * 0.85f;
+            GlyphLayout gl = new GlyphLayout();
+            font.getData().setScale(1.0f);
+            gl.setText(font, text);
+            float textWidthAtBase = gl.width * baseMenuScale;
+            float finalMenuScale = textWidthAtBase > maxTextWidth ? baseMenuScale * (maxTextWidth / textWidthAtBase) : baseMenuScale;
+            btn.getLabel().setFontScale(finalMenuScale);
+            font.getData().setScale(1.0f);
 
             if (isLocked) {
                 btn.setDisabled(true);
@@ -208,7 +217,7 @@ public class MobileUIFactory {
 
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
-            case MAIN -> new String[]{"QUICK PLAY", "18 HOLES", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
+            case MAIN -> new String[]{"QUICK PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
             case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY 1-HOLE", "BACK"};
             case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.getNames();
@@ -221,7 +230,7 @@ public class MobileUIFactory {
         arrowContainer.setFillParent(true);
         arrowContainer.bottom().right().padBottom(viewport.getWorldHeight() * CLUB_ARROW_Y).padRight(getEdgePad(viewport) * 0.5f);
         Table arrowRow = new Table();
-        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, getArrowWidth(viewport), getArrowHeight(viewport));
+        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, getArrowWidth(viewport), getArrowHeight(viewport)).padRight(viewport.getWorldWidth() * 0.02f);
         addActionButton(arrowRow, ">", style, input, GameInputProcessor.Action.CLUB_DOWN, getArrowWidth(viewport), getArrowHeight(viewport));
         arrowContainer.add(arrowRow);
     }

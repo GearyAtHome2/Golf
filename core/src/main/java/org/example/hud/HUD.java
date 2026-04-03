@@ -4,6 +4,7 @@ import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -207,6 +208,7 @@ public class HUD {
         if (leaderboardUI == null && startMenuStage != null) {
             leaderboardUI = new LeaderboardUI(getSkin(), highscoreService);
             startMenuStage.addActor(leaderboardUI);
+            leaderboardUI.bindStage(startMenuStage);
             updateLeaderboardLayout();
         }
 
@@ -221,6 +223,7 @@ public class HUD {
                 leaderboardUI.setVisible(menuManager.getCurrentMenuState() == MainMenuRenderer.MenuState.MAIN);
             }
             startMenuStage.act();
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             startMenuStage.draw();
         }
     }

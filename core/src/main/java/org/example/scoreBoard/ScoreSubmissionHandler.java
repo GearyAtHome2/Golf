@@ -91,9 +91,9 @@ public class ScoreSubmissionHandler {
         content.pad(6);
         content.add(dialogTitle).colspan(3).padBottom(3).row();
         content.add("Enter name for leaderboard:").colspan(3).padBottom(7).row();
-        content.add(canBtn).width(150).height(70).padRight(10);
+        content.add(canBtn).width(200).height(70).padRight(10);
         content.add(nameField).width(380).height(70);
-        content.add(subBtn).width(150).height(70).padLeft(10);
+        content.add(subBtn).width(200).height(70).padLeft(10);
 
         stage.addActor(dialog);
         dialog.invalidateHierarchy();
@@ -126,6 +126,8 @@ public class ScoreSubmissionHandler {
         int finalScore = session.getCompetitiveScore().getTotalStrokes();
         String difficulty = session.getDifficulty().name();
         float elapsedTime = session.getElapsedTimeSeconds();
-        highscoreService.submitScore(username, finalScore, difficulty, courseType, elapsedTime);
+        int[] pars = session.getCompetitiveScore().getPars();
+        int[] scores = session.getCompetitiveScore().getScores();
+        highscoreService.submitScore(username, finalScore, difficulty, courseType, elapsedTime, pars, scores);
     }
 }

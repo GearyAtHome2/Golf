@@ -39,9 +39,13 @@ public class VictoryRenderer {
         font.draw(batch, subText, centerX - (layout.width / 2f), screenH * 0.82f);
 
         if (session != null) {
-            batch.end();
-            renderCompetitiveResults(batch, shapeRenderer, font, viewport, session, centerX, screenH * 0.45f);
-            batch.begin();
+            if (session.getMode() == GameSession.GameMode.DAILY_1) {
+                renderDaily1Results(batch, font, viewport, session, centerX, screenH);
+            } else {
+                batch.end();
+                renderCompetitiveResults(batch, shapeRenderer, font, viewport, session, centerX, screenH * 0.45f);
+                batch.begin();
+            }
         } else if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
@@ -105,6 +109,34 @@ public class VictoryRenderer {
         batch.end();
     }
 
+    private void renderDaily1Results(SpriteBatch batch, BitmapFont font, Viewport viewport, GameSession session, float centerX, float screenH) {
+        float lineY = screenH * 0.65f;
+        float lineSpacing = screenH * 0.07f;
+
+        font.getData().setScale(1.4f);
+        font.setColor(Color.WHITE);
+
+        String timeStr = "TIME: " + session.getElapsedTimeFormatted();
+        layout.setText(font, timeStr);
+        font.draw(batch, timeStr, centerX - layout.width / 2f, lineY);
+
+        int totalDiff = session.getCompetitiveScore().getTotalToPar();
+        String parStr = "VS PAR: " + (totalDiff == 0 ? "Even" : (totalDiff > 0 ? "+" + totalDiff : String.valueOf(totalDiff)));
+        font.setColor(totalDiff < 0 ? Color.CYAN : (totalDiff > 0 ? Color.RED : Color.WHITE));
+        layout.setText(font, parStr);
+        font.draw(batch, parStr, centerX - layout.width / 2f, lineY - lineSpacing);
+
+        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+            font.getData().setScale(1.0f);
+            font.setColor(Color.YELLOW);
+            String prompt = session.isFinished()
+                ? "COURSE COMPLETE! [S] Submit Score or [M] Main Menu"
+                : "HOLE COMPLETE! [N] Next Hole";
+            layout.setText(font, prompt);
+            font.draw(batch, prompt, centerX - layout.width / 2f, lineY - lineSpacing * 2.5f);
+        }
+    }
+
     private void renderSplitScoreTable(SpriteBatch batch, BitmapFont font, GameSession session, Viewport viewport, float x, float y) {
         float worldW = viewport.getWorldWidth();
 
@@ -114,8 +146,14 @@ public class VictoryRenderer {
         float colW_Total = worldW * 0.10f;
         float fullColWidth = colW_Hole + colW_Par + colW_Score + colW_Total;
 
-        float gutter = worldW * 0.04f;
+        if (session.getMode() == GameSession.GameMode.DAILY_9) {
+            // Single centred column for 9 holes
+            float singleColX = x - fullColWidth / 2f;
+            drawColumn(batch, font, session, viewport, singleColX, y, 0, 9, colW_Hole, colW_Par, colW_Score, colW_Total);
+            return;
+        }
 
+        float gutter = worldW * 0.04f;
         float leftColX = x - fullColWidth - (gutter / 2f);
         float rightColX = x + (gutter / 2f);
 

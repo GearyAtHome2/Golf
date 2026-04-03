@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :core:test --tests \"org.example.*\")",
+      "Bash(./gradlew :core:test)",
+      "Bash(cmd /c \"dir /s /b %USERPROFILE%\\\\.gradle\\\\caches\\\\modules-2\\\\files-2.1\\\\com.badlogicgames.gdx\\\\gdx\\\\1.12.1\\\\*.jar 2>nul\")",
+      "Bash(cmd /c \"dir /s /b C:\\\\Users\\\\mgear\\\\.gradle\\\\caches\\\\modules-2\\\\files-2.1\\\\com.badlogicgames.gdx 2>nul\")",
+      "Bash(cmd /c \"dir /s /b \\\\\"C:\\\\Users\\\\mgear\\\\.gradle\\\\\"\")",
+      "Bash(./gradlew :core:test --info)",
+      "Bash(./gradlew :core:test --rerun-tasks)",
+      "Bash(ls core/build/test-results/test/*.xml)",
+      "Bash(python3 -c ':*)",
+      "Bash(bc)"
+    ]
+  }
+}

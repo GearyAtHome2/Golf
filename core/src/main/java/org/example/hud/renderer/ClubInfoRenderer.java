@@ -67,7 +67,7 @@ public class ClubInfoRenderer {
         float padding = width * 0.06f;
 
         if (isAndroid) {
-            font.getData().setScale(1.1f);
+            font.getData().setScale(0.98f);
             float lineSpacing = height * 0.28f;
             float startY = y + height - (height * 0.18f);
 
