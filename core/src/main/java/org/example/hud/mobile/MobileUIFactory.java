@@ -146,11 +146,11 @@ public class MobileUIFactory {
 
         table.setSize(620f, screenH);
         table.setPosition(0, 0);
-        table.top().left().padLeft(20f).padTop(screenH * 0.25f);
+        table.top().left().padLeft(20f).padTop(screenH * 0.18f);
 
         float bW = 580f;
-        float bH = 85f;
-        float spacing = 12f;
+        float bH = screenH * 0.10f;
+        float spacing = screenH * 0.015f;
 
         for (int i = 0; i < options.length; i++) {
             final int index = i;
@@ -220,7 +220,13 @@ public class MobileUIFactory {
             case MAIN -> new String[]{"QUICK PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "CLIPBOARD SEED"};
             case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY 1-HOLE", "BACK"};
             case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
-            case DIFFICULTY_SELECT -> GameConfig.Difficulty.getNames();
+            case DIFFICULTY_SELECT -> {
+                String[] diffs = GameConfig.Difficulty.getNames();
+                String[] withBack = new String[diffs.length + 1];
+                System.arraycopy(diffs, 0, withBack, 0, diffs.length);
+                withBack[diffs.length] = "BACK";
+                yield withBack;
+            }
         };
     }
 
