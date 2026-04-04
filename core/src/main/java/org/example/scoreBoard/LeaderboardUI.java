@@ -15,6 +15,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 import org.example.GameConfig;
+import org.example.hud.UIUtils;
 
 public class LeaderboardUI extends Table {
     private final HighscoreService service;
@@ -34,9 +35,7 @@ public class LeaderboardUI extends Table {
         this.right();
         this.scoreTable.top().left();
 
-        if (skin.has("white", com.badlogic.gdx.scenes.scene2d.utils.Drawable.class)) {
-            this.setBackground(skin.newDrawable("white", new Color(0, 0, 0, 0.85f)));
-        }
+        this.setBackground(UIUtils.createGoldBorderedPanel(new Color(0, 0, 0, 0.88f), 4));
 
         rebuild(1.0f);
         refresh();

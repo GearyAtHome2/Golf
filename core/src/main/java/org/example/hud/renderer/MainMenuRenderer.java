@@ -32,7 +32,7 @@ public class MainMenuRenderer {
 
         String title = "GEARY GOLF";
         float baseTitleScale = isAndroid ? screenH * 0.0035f : screenH * 0.0043f;
-        float titleY = screenH * 0.92f;
+        float titleY = screenH * 0.95f;
 
         float pulse = baseTitleScale + MathUtils.sin(pulseTimer * 2f) * (baseTitleScale * 0.03f);
         font.getData().setScale(pulse);

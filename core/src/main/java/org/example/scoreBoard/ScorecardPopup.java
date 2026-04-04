@@ -3,17 +3,14 @@ package org.example.scoreBoard;
 import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Pixmap;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
-import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
+import org.example.hud.UIUtils;
 
 public class ScorecardPopup {
 
@@ -24,7 +21,6 @@ public class ScorecardPopup {
 
     private final Table dimLayer;
     private final Table card;
-    private final Texture cardBgTexture;
 
     public ScorecardPopup(Stage stage, Skin skin, HighscoreService.HighscoreEntry entry) {
         boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
@@ -42,15 +38,7 @@ public class ScorecardPopup {
         card.setTouchable(Touchable.enabled);
         // Empty ClickListener ensures the card area swallows touches so they don't reach dimLayer
         card.addListener(new ClickListener() {});
-        // Use a plain solid Pixmap texture — bypasses skin NinePatch filtering/tinting artifacts
-        Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        pm.setBlending(Pixmap.Blending.None);
-        pm.setColor(0.08f, 0.08f, 0.08f, 1f);
-        pm.fill();
-        cardBgTexture = new Texture(pm);
-        cardBgTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pm.dispose();
-        card.setBackground(new TextureRegionDrawable(new TextureRegion(cardBgTexture)));
+        card.setBackground(UIUtils.createGoldBorderedPanel(new Color(0.08f, 0.08f, 0.08f, 1f), 4));
 
         float stageW = stage.getWidth();
         float stageH = stage.getHeight();
@@ -175,6 +163,5 @@ public class ScorecardPopup {
     public void dismiss(Stage stage) {
         dimLayer.remove();
         card.remove();
-        cardBgTexture.dispose();
     }
 }

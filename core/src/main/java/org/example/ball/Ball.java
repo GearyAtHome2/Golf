@@ -191,7 +191,7 @@ public class Ball {
                     .scl(delta));
 
             if (!handleAirCollisions(terrain)) applyAirMovement(delta, terrain);
-            if (velocity.len() > 0.1f) spin.scl(1.0f - ((0.05f + (velocity.len2() * 0.0002f)) * delta));
+            if (velocity.len() > 0.1f) spin.scl(Math.max(0f, 1.0f - ((0.05f + (velocity.len2() * 0.0002f)) * delta)));
         }
     }
 

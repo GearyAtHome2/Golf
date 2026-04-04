@@ -176,4 +176,32 @@ public class UIUtils {
             skin.add("default", ws);
         }
     }
+
+    /**
+     * NinePatch panel background: goldWidth px gold border → 1 px dark bevel → stretchy dark centre.
+     * Corners stay crisp at any panel size.
+     */
+    public static NinePatchDrawable createGoldBorderedPanel(Color bgColor, int goldWidth) {
+        int bevel  = 1;
+        int border = goldWidth + bevel;
+        int size   = border * 2 + 1;
+
+        Pixmap pm = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.None);
+
+        pm.setColor(1.0f, 0.80f, 0.15f, 1f);
+        pm.fill();
+
+        pm.setColor(0.28f, 0.18f, 0.02f, 1f);
+        pm.fillRectangle(goldWidth, goldWidth, size - goldWidth * 2, size - goldWidth * 2);
+
+        pm.setColor(bgColor);
+        pm.fillRectangle(border, border, 1, 1);
+
+        Texture tex = new Texture(pm);
+        pm.dispose();
+
+        NinePatch np = new NinePatch(tex, border, border, border, border);
+        return new NinePatchDrawable(np);
+    }
 }

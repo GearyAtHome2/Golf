@@ -90,12 +90,27 @@ public class VictoryRenderer {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0, 0, 0, 0.8f);
 
         float boxWidth  = viewport.getWorldWidth()  * 0.92f;
         float boxHeight = viewport.getWorldHeight() * 0.68f;
+        float bx = centerX - boxWidth  / 2f;
+        float by = centerY - boxHeight / 2f;
+        float gold  = viewport.getWorldWidth() * 0.005f;  // ~6px on 1280-wide viewport
+        float bevel = viewport.getWorldWidth() * 0.0016f; // ~2px
 
-        shapeRenderer.rect(centerX - (boxWidth / 2f), centerY - (boxHeight / 2f), boxWidth, boxHeight);
+        // Drop shadow
+        shapeRenderer.setColor(0f, 0f, 0f, 0.35f);
+        shapeRenderer.rect(bx + gold * 0.8f, by - gold * 0.8f, boxWidth, boxHeight);
+        // Gold border
+        shapeRenderer.setColor(1.0f, 0.80f, 0.15f, 1f);
+        shapeRenderer.rect(bx - gold - bevel, by - gold - bevel, boxWidth + 2*(gold+bevel), boxHeight + 2*(gold+bevel));
+        // Dark amber inner bevel
+        shapeRenderer.setColor(0.28f, 0.18f, 0.02f, 1f);
+        shapeRenderer.rect(bx - bevel, by - bevel, boxWidth + 2*bevel, boxHeight + 2*bevel);
+        // Dark background
+        shapeRenderer.setColor(0f, 0f, 0f, 0.88f);
+        shapeRenderer.rect(bx, by, boxWidth, boxHeight);
+
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
