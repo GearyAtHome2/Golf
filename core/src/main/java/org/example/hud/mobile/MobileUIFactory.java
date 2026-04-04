@@ -39,6 +39,9 @@ public static class MobileUIPackage {
         public Label clubLabel;
         public Skin skin;
         public TextButton nextLevelBtn, submitScoreBtn, mainMenuBtn;
+        public Table arrowContainer;
+        // Debug: hit/max buttons exposed so style can be cycled at runtime
+        public TextButton hitBtn, maxHitBtn;
     }
 
     public static MobileUIPackage create(Viewport viewport, SpriteBatch batch, BitmapFont font, GameConfig config, MobileInputProcessor input, SpinIndicator spinIndicator, PreShotDebugActor debugActor) {
@@ -99,14 +102,16 @@ public static class MobileUIPackage {
         rightStack.top().right();
 
         TextButton.TextButtonStyle maxStyle = new TextButton.TextButtonStyle(style);
-        maxStyle.up = ui.skin.getDrawable("maxHitUp");
-        maxStyle.down = ui.skin.getDrawable("maxHitDown");
-        rightStack.add(createTriggerButton(maxStyle, "MAX", input, GameInputProcessor.Action.MAX_POWER_SHOT, globalFontScale)).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
+        maxStyle.up   = UIUtils.createEmbossedButtonDrawable(COLOR_MAX_UP, RADIUS_HIT, 5);
+        maxStyle.down = UIUtils.createInsetButtonDrawable(COLOR_MAX_DOWN, RADIUS_HIT, 5);
+        ui.maxHitBtn = createTriggerButton(maxStyle, "MAX", input, GameInputProcessor.Action.MAX_POWER_SHOT, globalFontScale);
+        rightStack.add(ui.maxHitBtn).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
 
         TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
-        hitStyle.up = ui.skin.getDrawable("hitUp");
-        hitStyle.down = ui.skin.getDrawable("hitDown");
-        rightStack.add(createTriggerButton(hitStyle, "HIT", input, GameInputProcessor.Action.CHARGE_SHOT, FONT_SCALE_GAMEPLAY * 0.75f)).width(hitW).height(hitH).right().padBottom(spacing).row();
+        hitStyle.up   = UIUtils.createEmbossedButtonDrawable(COLOR_HIT_UP, RADIUS_HIT, 5);
+        hitStyle.down = UIUtils.createInsetButtonDrawable(COLOR_HIT_DOWN, RADIUS_HIT, 5);
+        ui.hitBtn = createTriggerButton(hitStyle, "HIT", input, GameInputProcessor.Action.CHARGE_SHOT, FONT_SCALE_GAMEPLAY * 0.75f);
+        rightStack.add(ui.hitBtn).width(hitW).height(hitH).right().padBottom(spacing).row();
 
         Drawable holdFill = createRoundedRectDrawable(new Color(0.95f, 0.60f, 0.10f, 0.70f), RADIUS_STD);
         ui.resetBallBtn = new HoldButton("RESET BALL", style, GameInputProcessor.Action.RESET_BALL, input, holdFill);
@@ -311,7 +316,8 @@ public static class MobileUIPackage {
     }
 
     private static void setupClubSelection(MobileUIPackage ui, MobileInputProcessor input, TextButton.TextButtonStyle style, Viewport viewport) {
-        Table arrowContainer = new Table();
+        ui.arrowContainer = new Table();
+        Table arrowContainer = ui.arrowContainer;
         ui.stage.addActor(arrowContainer);
         arrowContainer.setFillParent(true);
         arrowContainer.bottom().right().padBottom(viewport.getWorldHeight() * CLUB_ARROW_Y).padRight(getEdgePad(viewport) * 0.5f);
@@ -418,11 +424,11 @@ public static class MobileUIPackage {
 
     private static void setupVictoryMenu(MobileUIPackage ui, MobileInputProcessor input, TextButton.TextButtonStyle style, Viewport viewport) {
         ui.victoryTable.clearChildren();
-        ui.victoryTable.bottom().padBottom(viewport.getWorldHeight() * 0.04f);
+        ui.victoryTable.bottom().padBottom(viewport.getWorldHeight() * 0.01f);
 
         float btnW = viewport.getWorldWidth() * 0.28f;
-        float btnH = viewport.getWorldHeight() * 0.12f;
-        float fontScale = FONT_SCALE_GAMEPLAY * 0.6f;
+        float btnH = viewport.getWorldHeight() * 0.1f;
+        float fontScale = FONT_SCALE_GAMEPLAY * 0.8f;
 
         TextButton.TextButtonStyle primaryStyle = new TextButton.TextButtonStyle(style);
         primaryStyle.up = ui.skin.getDrawable("hitUp");
@@ -461,7 +467,7 @@ public static class MobileUIPackage {
         buttonTable.add().expandX();
         buttonTable.add(ui.mainMenuBtn).width(btnW).height(btnH).right();
 
-        ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center().padBottom(15);
+        ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center().padBottom(0);
         ui.victoryTable.row();
         ui.victoryTable.add(buttonTable).expandX().fillX().padLeft(30).padRight(30);
     }

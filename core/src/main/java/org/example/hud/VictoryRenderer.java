@@ -24,26 +24,55 @@ public class VictoryRenderer {
         String shout = (shots == 1) ? ScoreShout.HIO.shout : ScoreShout.getShout(shots, par);
         int diff = shots - par;
 
-        Color shoutColor = (shots == 1 || diff <= -2) ? Color.GOLD : (diff == -1 ? Color.CYAN : (diff == 0 ? Color.WHITE : (diff == 1 ? Color.ORANGE : Color.RED)));
+        Color shoutColor;
+        if      (shots == 1 || diff <= -3) shoutColor = new Color(0.75f, 0.2f,  1.0f, 1f); // purple  — HIO / Albatross
+        else if (diff == -2)               shoutColor = new Color(1.0f,  0.4f,  0.85f, 1f); // pink    — Eagle
+        else if (diff == -1)               shoutColor = Color.GREEN;                         // green   — Birdie
+        else if (diff == 0)                shoutColor = Color.WHITE;                         // white   — Par
+        else                               shoutColor = Color.RED;                           // red     — Bogey+
 
-        font.getData().setScale(3.5f);
-        font.setColor(shoutColor);
-        layout.setText(font, shout);
-        font.draw(batch, shout, centerX - (layout.width / 2f), screenH * 0.93f);
-
-        font.getData().setScale(1.2f);
-        font.setColor(Color.WHITE);
         String scoreType = (diff == 0) ? "Even Par" : (diff > 0 ? "+" + diff : "" + diff);
         String subText = "Hole Strokes: " + shots + " (" + scoreType + ")";
-        layout.setText(font, subText);
-        font.draw(batch, subText, centerX - (layout.width / 2f), screenH * 0.82f);
+
+        // hasModal: competitive 18/9-hole screens that render a score table in a dark box.
+        // For these, shout+subtext are drawn INSIDE renderCompetitiveResults, AFTER the modal
+        // background, so they appear in front. For all other cases draw them here.
+        boolean hasModal = (session != null) && (session.getMode() != GameSession.GameMode.DAILY_1);
+
+        if (!hasModal) {
+            // Non-competitive or DAILY_1: text in open screen space (no modal to work around).
+            // DAILY_1 needs the same ~0.17 vertical gap as non-competitive so the large shout
+            // text doesn't overlap the subtext; it just sits higher to leave room for TIME below.
+            float shoutY, subTextY;
+            if (session != null && session.getMode() == GameSession.GameMode.DAILY_1) {
+                shoutY   = screenH * 0.88f;
+                subTextY = screenH * 0.72f; // ~0.16 gap below shout; TIME is at 0.65
+            } else if (session == null) {
+                shoutY   = screenH * 0.72f;
+                subTextY = screenH * 0.55f;
+            } else {
+                // fallback (shouldn't reach for any current mode)
+                shoutY   = screenH * 0.86f;
+                subTextY = screenH * 0.81f;
+            }
+
+            font.getData().setScale(3.5f);
+            font.setColor(shoutColor);
+            layout.setText(font, shout);
+            font.draw(batch, shout, centerX - (layout.width / 2f), shoutY);
+
+            font.getData().setScale(1.2f);
+            font.setColor(Color.WHITE);
+            layout.setText(font, subText);
+            font.draw(batch, subText, centerX - (layout.width / 2f), subTextY);
+        }
 
         if (session != null) {
             if (session.getMode() == GameSession.GameMode.DAILY_1) {
                 renderDaily1Results(batch, font, viewport, session, centerX, screenH);
             } else {
                 batch.end();
-                renderCompetitiveResults(batch, shapeRenderer, font, viewport, session, centerX, screenH * 0.45f);
+                renderCompetitiveResults(batch, shapeRenderer, font, viewport, session, centerX, screenH * 0.45f, shout, shoutColor, subText);
                 batch.begin();
             }
         } else if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
@@ -55,20 +84,41 @@ public class VictoryRenderer {
         }
     }
 
-    private void renderCompetitiveResults(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameSession session, float centerX, float centerY) {
+    private void renderCompetitiveResults(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport,
+                                          GameSession session, float centerX, float centerY,
+                                          String shout, Color shoutColor, String subText) {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(0, 0, 0, 0.8f);
 
-        float boxWidth = viewport.getWorldWidth() * 0.92f;
+        float boxWidth  = viewport.getWorldWidth()  * 0.92f;
         float boxHeight = viewport.getWorldHeight() * 0.68f;
 
         shapeRenderer.rect(centerX - (boxWidth / 2f), centerY - (boxHeight / 2f), boxWidth, boxHeight);
         shapeRenderer.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
+        float worldH   = viewport.getWorldHeight();
+        float modalTop = centerY + boxHeight / 2f;
+
         batch.begin();
+
+        // Shout ("BIRDIE!" etc.): high in the band between modal top and screen top.
+        // Drawn here (after the modal rect) so it renders in front of the dark background.
+        font.getData().setScale(3.5f);
+        font.setColor(shoutColor);
+        layout.setText(font, shout);
+        float shoutY = modalTop + (worldH - modalTop) * 0.75f;
+        font.draw(batch, shout, centerX - (layout.width / 2f), shoutY);
+
+        // Subtext ("Hole Strokes: N (±N)"): just inside the top of the modal, above the table header.
+        font.getData().setScale(1.2f);
+        font.setColor(Color.WHITE);
+        layout.setText(font, subText);
+        float subTextY = modalTop - worldH * 0.02f;
+        font.draw(batch, subText, centerX - (layout.width / 2f), subTextY);
+
         renderSplitScoreTable(batch, font, session, viewport, centerX, centerY + (boxHeight * 0.38f));
 
         float promptY = centerY - (boxHeight * 0.42f);
@@ -87,7 +137,7 @@ public class VictoryRenderer {
             font.setColor(Color.GREEN);
             String totalToPar = "TOTAL TO PAR: " + session.getCompetitiveScore().getToParString();
             layout.setText(font, totalToPar);
-            font.draw(batch, totalToPar, centerX - (layout.width / 2f), promptY + 55);
+            font.draw(batch, totalToPar, centerX - (layout.width / 2f), promptY + 70);
         }
 
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
@@ -120,12 +170,6 @@ public class VictoryRenderer {
         layout.setText(font, timeStr);
         font.draw(batch, timeStr, centerX - layout.width / 2f, lineY);
 
-        int totalDiff = session.getCompetitiveScore().getTotalToPar();
-        String parStr = "VS PAR: " + (totalDiff == 0 ? "Even" : (totalDiff > 0 ? "+" + totalDiff : String.valueOf(totalDiff)));
-        font.setColor(totalDiff < 0 ? Color.CYAN : (totalDiff > 0 ? Color.RED : Color.WHITE));
-        layout.setText(font, parStr);
-        font.draw(batch, parStr, centerX - layout.width / 2f, lineY - lineSpacing);
-
         if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
@@ -133,15 +177,15 @@ public class VictoryRenderer {
                 ? "COURSE COMPLETE! [S] Submit Score or [M] Main Menu"
                 : "HOLE COMPLETE! [N] Next Hole";
             layout.setText(font, prompt);
-            font.draw(batch, prompt, centerX - layout.width / 2f, lineY - lineSpacing * 2.5f);
+            font.draw(batch, prompt, centerX - layout.width / 2f, lineY - lineSpacing);
         }
     }
 
     private void renderSplitScoreTable(SpriteBatch batch, BitmapFont font, GameSession session, Viewport viewport, float x, float y) {
         float worldW = viewport.getWorldWidth();
 
-        float colW_Hole = worldW * 0.08f;
-        float colW_Par  = worldW * 0.08f;
+        float colW_Hole  = worldW * 0.08f;
+        float colW_Par   = worldW * 0.08f;
         float colW_Score = worldW * 0.09f;
         float colW_Total = worldW * 0.10f;
         float fullColWidth = colW_Hole + colW_Par + colW_Score + colW_Total;
@@ -153,27 +197,27 @@ public class VictoryRenderer {
             return;
         }
 
-        float gutter = worldW * 0.04f;
+        float gutter   = worldW * 0.04f;
         float leftColX = x - fullColWidth - (gutter / 2f);
         float rightColX = x + (gutter / 2f);
 
-        drawColumn(batch, font, session, viewport, leftColX, y, 0, 9, colW_Hole, colW_Par, colW_Score, colW_Total);
+        drawColumn(batch, font, session, viewport, leftColX,  y, 0,  9,  colW_Hole, colW_Par, colW_Score, colW_Total);
         drawColumn(batch, font, session, viewport, rightColX, y, 9, 18, colW_Hole, colW_Par, colW_Score, colW_Total);
     }
 
     private void drawColumn(SpriteBatch batch, BitmapFont font, GameSession session, Viewport viewport, float startX, float y, int startHole, int endHole, float cwH, float cwP, float cwS, float cwT) {
         float worldH = viewport.getWorldHeight();
 
-        float xHole = startX;
-        float xPar  = xHole + cwH;
-        float xScore = xPar + cwP;
+        float xHole  = startX;
+        float xPar   = xHole  + cwH;
+        float xScore = xPar   + cwP;
         float xTotal = xScore + cwS;
 
         font.getData().setScale(0.9f);
         font.setColor(Color.LIGHT_GRAY);
 
-        drawCentered(batch, font, "HOLE", xHole, y, cwH);
-        drawCentered(batch, font, "PAR", xPar, y, cwP);
+        drawCentered(batch, font, "HOLE",  xHole,  y, cwH);
+        drawCentered(batch, font, "PAR",   xPar,   y, cwP);
         drawCentered(batch, font, "SCORE", xScore, y, cwS);
         drawCentered(batch, font, "TOTAL", xTotal, y, cwT);
 
@@ -183,27 +227,28 @@ public class VictoryRenderer {
             if (s > 0) runningTotal += s;
         }
 
-        float rowH = worldH * 0.042f;
+        float rowH         = worldH * 0.042f;
         float headerOffset = worldH * 0.05f;
 
         for (int i = startHole; i < endHole; i++) {
-            float rowY = y - headerOffset - ((i - startHole) * rowH);
-            boolean isCurrent = (session != null && i == session.getCurrentHoleIndex());
+            float rowY      = y - headerOffset - ((i - startHole) * rowH);
+            // getCurrentHoleIndex() points to the next hole to play; highlight the one just completed.
+            boolean isCurrent = (i == session.getCurrentHoleIndex() - 1);
 
             int holeScore = session.getCompetitiveScore().getScoreForHole(i);
-            int holePar = session.getCompetitiveScore().getParForHole(i);
+            int holePar   = session.getCompetitiveScore().getParForHole(i);
 
             font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
             font.getData().setScale(0.9f);
 
             drawCentered(batch, font, String.format("%02d", i + 1), xHole, rowY, cwH);
-            drawCentered(batch, font, String.valueOf(holePar), xPar, rowY, cwP);
+            drawCentered(batch, font, String.valueOf(holePar),       xPar,  rowY, cwP);
 
             if (holeScore > 0) {
                 runningTotal += holeScore;
                 int diff = holeScore - holePar;
                 font.setColor(diff < 0 ? Color.CYAN : (diff > 0 ? Color.RED : Color.WHITE));
-                drawCentered(batch, font, String.valueOf(holeScore), xScore, rowY, cwS);
+                drawCentered(batch, font, String.valueOf(holeScore),     xScore, rowY, cwS);
 
                 font.setColor(isCurrent ? Color.YELLOW : Color.WHITE);
                 drawCentered(batch, font, String.valueOf(runningTotal), xTotal, rowY, cwT);

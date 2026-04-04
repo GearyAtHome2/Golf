@@ -84,8 +84,8 @@ public class UIUtils {
     }
 
     /**
-     * Embossed style: bright highlight strip on top/left edges, dark shadow on bottom/right.
-     * Gives a coin/chip raised look — more subtle than createRaisedButtonDrawable.
+     * Embossed style: bright highlight on top/left, dark shadow on bottom/right.
+     * Uses 3 rounded-rect layers so all four corners curve naturally — no straight-edge artifacts.
      */
     public static Drawable createEmbossedButtonDrawable(Color base, int radius, int bevelSize) {
         int size = 64;
@@ -94,19 +94,55 @@ public class UIUtils {
         pixmap.setColor(0, 0, 0, 0);
         pixmap.fill();
 
-        // Base fill
-        pixmap.setColor(base);
+        Color shadow    = new Color(base.r * 0.32f, base.g * 0.32f, base.b * 0.32f, base.a);
+        Color highlight = new Color(Math.min(1f, base.r + 0.45f), Math.min(1f, base.g + 0.45f), Math.min(1f, base.b + 0.45f), base.a);
+
+        // Layer 1 — full area in highlight (shows at top/left bevel edges)
+        pixmap.setColor(highlight);
         fillRoundedRect(pixmap, 0, 0, size, size, radius);
 
-        // Dark strips on bottom and right edges (shadow)
-        pixmap.setColor(new Color(base.r * 0.32f, base.g * 0.32f, base.b * 0.32f, base.a));
-        pixmap.fillRectangle(radius, size - bevelSize, size - 2 * radius, bevelSize);
-        pixmap.fillRectangle(size - bevelSize, radius, bevelSize, size - 2 * radius);
+        // Layer 2 — inset from top-left, in shadow: its rounded corners sit at the
+        // actual bottom-right of the button, so no highlight bleeds through there
+        pixmap.setColor(shadow);
+        fillRoundedRect(pixmap, bevelSize, bevelSize, size - bevelSize, size - bevelSize, radius);
 
-        // Light strips on top and left edges (highlight)
-        pixmap.setColor(new Color(Math.min(1f, base.r + 0.45f), Math.min(1f, base.g + 0.45f), Math.min(1f, base.b + 0.45f), base.a));
-        pixmap.fillRectangle(radius, 0, size - 2 * radius, bevelSize);
-        pixmap.fillRectangle(0, radius, bevelSize, size - 2 * radius);
+        // Layer 3 — main face, inset from all sides
+        pixmap.setColor(base);
+        fillRoundedRect(pixmap, bevelSize, bevelSize, size - 2 * bevelSize, size - 2 * bevelSize, Math.max(radius - bevelSize, 2));
+
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        return new NinePatchDrawable(new NinePatch(new TextureRegion(texture), radius, radius, radius, radius));
+    }
+
+    /**
+     * Inset/pressed style: dark shadow on top/left, bright highlight on bottom/right.
+     * Opposite of embossed — looks sunken. 3-layer rounded-rect approach for natural corners.
+     */
+    public static Drawable createInsetButtonDrawable(Color base, int radius, int bevelSize) {
+        int size = 64;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+        pixmap.setColor(0, 0, 0, 0);
+        pixmap.fill();
+
+        Color shadow    = new Color(base.r * 0.28f, base.g * 0.28f, base.b * 0.28f, base.a);
+        Color highlight = new Color(Math.min(1f, base.r + 0.35f), Math.min(1f, base.g + 0.35f), Math.min(1f, base.b + 0.35f), base.a);
+        Color pressed   = new Color(base.r * 0.78f, base.g * 0.78f, base.b * 0.78f, base.a);
+
+        // Layer 1 — full area in shadow (shows at top/left bevel edges)
+        pixmap.setColor(shadow);
+        fillRoundedRect(pixmap, 0, 0, size, size, radius);
+
+        // Layer 2 — inset from top-left, in highlight: its rounded corners sit at the
+        // bottom-right of the button, so no shadow bleeds through there
+        pixmap.setColor(highlight);
+        fillRoundedRect(pixmap, bevelSize, bevelSize, size - bevelSize, size - bevelSize, radius);
+
+        // Layer 3 — main face, inset from all sides
+        pixmap.setColor(pressed);
+        fillRoundedRect(pixmap, bevelSize, bevelSize, size - 2 * bevelSize, size - 2 * bevelSize, Math.max(radius - bevelSize, 2));
 
         Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);

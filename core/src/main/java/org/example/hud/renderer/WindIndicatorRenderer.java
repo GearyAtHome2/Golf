@@ -14,7 +14,6 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 public class WindIndicatorRenderer {
     private static final float ARROW_SHAFT_THICKNESS = 4.5f;
-    private static final float CIRCLE_ALPHA = 0.35f;
 
     private final GlyphLayout layout = new GlyphLayout();
 
@@ -68,10 +67,30 @@ public class WindIndicatorRenderer {
         shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Background Disc
-        shapeRenderer.setColor(0, 0, 0, CIRCLE_ALPHA);
+        float border = radius * 0.18f;
+        float shadowOff = radius * 0.12f;
+
+        // Drop shadow behind the bezel
+        shapeRenderer.setColor(0f, 0f, 0f, 0.45f);
+        shapeRenderer.circle(x + shadowOff, y - shadowOff, radius + border);
+
+        // Gold outer ring
+        shapeRenderer.setColor(1.0f, 0.80f, 0.15f, 1f);
+        shapeRenderer.circle(x, y, radius + border);
+
+        // Dark inner bevel — narrows the visible gold band and adds depth
+        shapeRenderer.setColor(0.38f, 0.26f, 0.04f, 1f);
+        shapeRenderer.circle(x, y, radius + border * 0.42f);
+
+        // Background disc
+        shapeRenderer.setColor(0f, 0f, 0f, 0.72f);
         shapeRenderer.circle(x, y, radius);
 
+        // Arrow shadow
+        shapeRenderer.setColor(0f, 0f, 0f, 0.65f);
+        drawSleekArrow(shapeRenderer, x + 1.5f, y - 1.5f, radius * lengthPct, ARROW_SHAFT_THICKNESS, headWidthMult, headLengthMult, angle);
+
+        // Arrow
         shapeRenderer.setColor(Color.WHITE);
         drawSleekArrow(shapeRenderer, x, y, radius * lengthPct, ARROW_SHAFT_THICKNESS, headWidthMult, headLengthMult, angle);
 

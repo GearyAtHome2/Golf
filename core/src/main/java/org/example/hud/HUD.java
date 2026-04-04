@@ -402,6 +402,7 @@ this.skin = getSkin();
         if (gameplayTable != null) gameplayTable.setVisible(false);
         if (infoToggleBtn != null) infoToggleBtn.setVisible(false);
         if (victoryTable != null) victoryTable.setVisible(true);
+        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null) mobileUIPackage.arrowContainer.setVisible(false);
 
         if (mobileUIPackage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
             boolean isFinished = (session != null && session.isFinished());
@@ -428,6 +429,7 @@ this.skin = getSkin();
     public void reset() {
         if (gameplayTable != null) gameplayTable.setVisible(true);
         if (victoryTable != null) victoryTable.setVisible(false);
+        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null) mobileUIPackage.arrowContainer.setVisible(true);
         showInfoDisplay = false;
         if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
         minigameController.reset();
@@ -508,6 +510,7 @@ this.skin = getSkin();
         batch.dispose();
         shapeRenderer.dispose();
         font.dispose();
+        spinIndicator.dispose();
         if (stage != null) stage.dispose();
         if (startMenuStage != null) startMenuStage.dispose();
         if (pauseMenuStage != null) pauseMenuStage.dispose();

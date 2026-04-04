@@ -94,11 +94,12 @@ public class LevelDataGenerator {
     private static void applyArchetypeTuning(ArchetypeSettings s, LevelData.Archetype type, Random r) {
         switch (type) {
             case RAZORBACK_RIDGE:
-                s.baseDifficultyIndex = 1f; s.teeH = 0f; s.greenH = 15f + r.nextFloat() * 15f;
-                s.windMin = 8f; s.windMax = 18f; s.treeH = 12f; s.treeDensity = 0.18f;
+                s.baseDifficultyIndex = 1f; s.teeH = 0f; s.greenH = 18f + r.nextFloat() * 8f;
+                s.windMin = 5f; s.windMax = 13f; s.treeH = 12f; s.treeDensity = 0.18f;
                 s.foliageR = 5f; s.trunkR = 0.8f; s.hillFreq = 0.02f; s.maxH = 5f;
-                s.maxFairwayWidth = 48f; s.undulation = 1.2f; s.fairwayWiggle = 0.15f + r.nextFloat() * 0.1f;
-                s.distance = Math.round(450 + r.nextFloat() * 100); s.par = 5;
+                s.maxFairwayWidth = 51f; s.undulation = 1.2f; s.fairwayWiggle = 0.22f + r.nextFloat() * 0.08f;
+                s.cohesion = 0.75f;
+                s.distance = Math.round(470 + r.nextFloat() * 110); s.par = 5;
                 break;
             case CRATER_FIELDS:
                 s.baseDifficultyIndex = 2f; s.teeH = 8f; s.greenH = 12f; s.windMin = 5f; s.windMax = 18f;
