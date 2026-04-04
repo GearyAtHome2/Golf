@@ -12,6 +12,8 @@ import java.util.TimeZone;
 
 public class HighscoreService {
 
+    private static final String API_KEY = "AIzaSyAgtF4QdIY1IsxMvYKUHGi8SVT-ZQzLsDI";
+
     public interface HighscoreListener {
         void onSuccess(Array<HighscoreEntry> entries);
         void onFailure(Throwable t);
@@ -23,8 +25,8 @@ public class HighscoreService {
         public String difficulty;
         public String date;
         public float elapsedTime;
-        public int[] pars;   // null for HOLES_1 or pre-scorecard entries
-        public int[] scores; // null for HOLES_1 or pre-scorecard entries
+        public int[] pars;
+        public int[] scores;
 
         public HighscoreEntry(String name, int score, String difficulty, String date) {
             this(name, score, difficulty, date, 0f, null, null);
@@ -47,15 +49,62 @@ public class HighscoreService {
         public boolean hasScorecard() {
             return pars != null && scores != null && pars.length > 0;
         }
-    }
 
-    /** Backward-compatible overload: submits to the 18-hole collection. */
-    public void submitScore(String name, int score, String difficulty) {
-        submitScore(name, score, difficulty, CourseType.HOLES_18, 0f, null, null);
-    }
+        public String getName() {
+            return name;
+        }
 
-    public void submitScore(String name, int score, String difficulty, CourseType courseType, float elapsedTime) {
-        submitScore(name, score, difficulty, courseType, elapsedTime, null, null);
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public int getScore() {
+            return score;
+        }
+
+        public void setScore(int score) {
+            this.score = score;
+        }
+
+        public String getDifficulty() {
+            return difficulty;
+        }
+
+        public void setDifficulty(String difficulty) {
+            this.difficulty = difficulty;
+        }
+
+        public String getDate() {
+            return date;
+        }
+
+        public void setDate(String date) {
+            this.date = date;
+        }
+
+        public float getElapsedTime() {
+            return elapsedTime;
+        }
+
+        public void setElapsedTime(float elapsedTime) {
+            this.elapsedTime = elapsedTime;
+        }
+
+        public int[] getPars() {
+            return pars;
+        }
+
+        public void setPars(int[] pars) {
+            this.pars = pars;
+        }
+
+        public int[] getScores() {
+            return scores;
+        }
+
+        public void setScores(int[] scores) {
+            this.scores = scores;
+        }
     }
 
     public void submitScore(String name, int score, String difficulty, CourseType courseType, float elapsedTime, int[] pars, int[] scores) {
@@ -79,18 +128,25 @@ public class HighscoreService {
         json.append("}}");
 
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
-        request.setUrl(courseType.baseUrl);
+        request.setUrl(courseType.baseUrl + "?key=" + API_KEY);
         request.setContent(json.toString());
         request.setHeader("Content-Type", "application/json");
 
         Gdx.net.sendHttpRequest(request, new Net.HttpResponseListener() {
-            @Override public void handleHttpResponse(Net.HttpResponse r) { Gdx.app.log("Highscore", "POST Status: " + r.getStatus().getStatusCode()); }
+            @Override
+            public void handleHttpResponse(Net.HttpResponse r) {
+                int status = r.getStatus().getStatusCode();
+                if (status != 200) {
+                    Gdx.app.error("Highscore", "POST Error " + status + ": " + r.getResultAsString());
+                } else {
+                    Gdx.app.log("Highscore", "POST Status: " + status);
+                }
+            }
             @Override public void failed(Throwable t) { Gdx.app.error("Highscore", "POST Failed", t); }
             @Override public void cancelled() {}
         });
     }
 
-    /** Serialises an int array to a Firestore arrayValue JSON fragment. Package-private for testing. */
     static String toFirestoreIntArray(int[] arr) {
         StringBuilder sb = new StringBuilder("{\"arrayValue\":{\"values\":[");
         for (int i = 0; i < arr.length; i++) {
@@ -101,7 +157,6 @@ public class HighscoreService {
         return sb.toString();
     }
 
-    /** Parses a Firestore arrayValue JsonValue into an int[]. Package-private for testing. */
     static int[] fromFirestoreIntArray(JsonValue arrayField) {
         JsonValue values = arrayField.get("arrayValue").get("values");
         if (values == null || values.size == 0) return null;
@@ -111,7 +166,6 @@ public class HighscoreService {
         return arr;
     }
 
-    /** Backward-compatible overload: fetches from the 18-hole collection. */
     public void fetchHighscores(String difficulty, final HighscoreListener listener) {
         fetchHighscores(difficulty, CourseType.HOLES_18, listener);
     }
@@ -141,7 +195,7 @@ public class HighscoreService {
         json.append("} }");
 
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
-        request.setUrl(courseType.queryUrl);
+        request.setUrl(courseType.queryUrl + "?key=" + API_KEY);
         request.setContent(json.toString());
         request.setHeader("Content-Type", "application/json");
 
@@ -170,13 +224,13 @@ public class HighscoreService {
                             int[] parsArr = fields.has("pars") ? fromFirestoreIntArray(fields.get("pars")) : null;
                             int[] scoresArr = fields.has("scores") ? fromFirestoreIntArray(fields.get("scores")) : null;
                             entries.add(new HighscoreEntry(
-                                fields.get("playerName").getString("stringValue"),
-                                fields.get("score").getInt("integerValue"),
-                                fields.get("difficulty").getString("stringValue"),
-                                fields.get("submissionTime").getString("timestampValue"),
-                                elapsed,
-                                parsArr,
-                                scoresArr
+                                    fields.get("playerName").getString("stringValue"),
+                                    fields.get("score").getInt("integerValue"),
+                                    fields.get("difficulty").getString("stringValue"),
+                                    fields.get("submissionTime").getString("timestampValue"),
+                                    elapsed,
+                                    parsArr,
+                                    scoresArr
                             ));
                         }
                     }
