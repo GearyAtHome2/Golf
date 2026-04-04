@@ -107,8 +107,7 @@ project(":desktop") {
                 '--main-jar', "desktop-all.jar",
                 '--main-class', application.mainClass.get(),
                 '--module-path', jmodsPath,
-                '--add-modules', 'java.base,java.desktop,jdk.unsupported,java.sql,java.naming',
-                '--vendor', "ExampleCorp"
+                '--add-modules', 'java.base,java.desktop,jdk.unsupported,java.sql,java.naming,jdk.crypto.ec',                '--vendor', "ExampleCorp"
         ]
 
         // Platform specific flags
