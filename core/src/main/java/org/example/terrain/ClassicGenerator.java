@@ -28,6 +28,8 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final VineyardsGenerator vineyardsGenerator;
     private final BunkerGenerator bunkerGenerator;
     private final ClippertonRockGenerator clippertonRockGenerator; // Placeholder for new generator
+    private final DunesValleyGenerator dunesValleyGenerator;
+    private final StoneRunGenerator stoneRunGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
@@ -83,6 +85,8 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.vineyardsGenerator = new VineyardsGenerator();
         this.bunkerGenerator = new BunkerGenerator(rng);
         this.clippertonRockGenerator = new ClippertonRockGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
+        this.dunesValleyGenerator = new DunesValleyGenerator(data);
+        this.stoneRunGenerator = new StoneRunGenerator(data);
     }
 
     public LevelData getData() {
@@ -152,7 +156,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                 }
 
                 float distGreen = Vector3.dst(x, z, 0, gCX, gCZ, 0);
-                float protectedHeight = (flags.isPathDependent && !isElevated) ? currentHeight : getFinalRaw(distGreen, SIZE_Z * 0.22f, currentHeight);
+                float greenRadius = flags.isDunesValley ? SIZE_Z * 0.44f : SIZE_Z * 0.22f;
+                float protectedHeight = (flags.isPathDependent && !isElevated) ? currentHeight : getFinalRaw(distGreen, greenRadius, currentHeight);
 
                 float greenEffectMask = (float) Math.pow(1.0f - MathUtils.clamp(distGreen / 94.0f, 0f, 1f), 4.0f);
                 protectedHeight += (GreenHelper.calculateUndulation(x, z, greenWaveAngles, greenWaveOffsets) * greenEffectMask);
@@ -212,6 +217,12 @@ public class ClassicGenerator implements ITerrainGenerator {
         } else if (flags.isClippertonRock) {
             data.setWaterLevel(0.0f);
             clippertonRockGenerator.generateClippertonRock(map, h, gX, gZ, 0.0f);
+        } else if (flags.isDunesValley) {
+            dunesValleyGenerator.generateDunesValley(map, h);
+        } else if (flags.isDunesValley) {
+            dunesValleyGenerator.generateDunesValley(map, h);
+        } else if (flags.isStoneRun) {
+            stoneRunGenerator.generateStoneRun(map, h);
         }
         PerfLog.log("archetype-specific generator", tArch);
 
@@ -276,6 +287,8 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         if (flags.isVineyards) {
             generateVineyardTrees(map, heights, trees, teeZ, teeX, water, flags.isCliffMap);
+        } else if (flags.isDunesValley) {
+            generateOasisTrees(map, heights, trees, teeZ, teeX, water);
         } else {
             generateRandomTrees(map, heights, trees, teeZ, teeX, water, flags.isCliffMap);
         }
@@ -381,6 +394,51 @@ public class ClassicGenerator implements ITerrainGenerator {
                     rng,
                     mapBaseRotation
             ));
+        }
+    }
+
+    private void generateOasisTrees(Terrain.TerrainType[][] map, float[][] heights, List<Tree> trees, int teeZ, int teeX, float water) {
+        int SIZE_X = map.length, SIZE_Z = map[0].length;
+        float mapBaseRotation = rng.nextFloat() * 360f;
+
+        // Probabilities per tile type — tune treeDensity in the spec to scale both together
+        float roughProb = data.getTreeDensity() * 0.05f;  // grove around oasis shore
+        float sandProb  = data.getTreeDensity() * 0.002f; // occasional scrub on dunes
+
+        for (int tx = 1; tx < SIZE_X - 1; tx++) {
+            for (int tz = 1; tz < SIZE_Z - 1; tz++) {
+                if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
+                if (heights[tx][tz] < water + 0.1f) continue;
+
+                float prob;
+                if (map[tx][tz] == Terrain.TerrainType.ROUGH) {
+                    prob = roughProb;
+                } else if (map[tx][tz] == Terrain.TerrainType.SAND) {
+                    prob = sandProb;
+                } else {
+                    continue;
+                }
+
+                if (rng.nextFloat() > prob) continue;
+
+                float slope = (float) Math.sqrt(
+                    Math.pow(heights[tx + 1][tz] - heights[tx][tz], 2) +
+                    Math.pow(heights[tx][tz + 1] - heights[tx][tz], 2));
+                if (slope > 1.2f) continue;
+
+                float tH = data.getTreeHeight() * (0.8f + rng.nextFloat() * 0.3f);
+                trees.add(new Tree(
+                    (tx * SCALE) - (SIZE_X * SCALE / 2f),
+                    heights[tx][tz],
+                    (tz * SCALE) - (SIZE_Z * SCALE / 2f),
+                    tH,
+                    data.getTrunkRadius(),
+                    data.getFoliageRadius(),
+                    data.getTreeScheme(),
+                    rng,
+                    mapBaseRotation
+                ));
+            }
         }
     }
 
@@ -609,7 +667,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isDunesValley, isStoneRun, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
@@ -622,6 +680,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             isPlungeCenotes = data.getArchetype() == LevelData.Archetype.PLUNGE_CENOTES;
             isVineyards = data.getArchetype() == LevelData.Archetype.BIG_GRAPE_VINEYARDS;
             isClippertonRock = data.getArchetype() == LevelData.Archetype.CLIPPERTON_ROCK;
+            isDunesValley = data.getArchetype() == LevelData.Archetype.DUNES_VALLEY;
+            isStoneRun = data.getArchetype() == LevelData.Archetype.STONE_RUN;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }
