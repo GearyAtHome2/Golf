@@ -197,7 +197,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private void handleInput() {
         if (hud.wasMainMenuRequested()) { exitToMainMenu(); return; }
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) { exitToMainMenu(); return; }
         if (submissionStarted) return;
 
         switch (currentState) {
@@ -258,7 +257,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void handlePauseInput() {
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) {
+            exitToMainMenu();
+        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
             changeState(gameplayState);
         } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) {
             enterInstructions();

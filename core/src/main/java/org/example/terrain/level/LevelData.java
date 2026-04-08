@@ -271,9 +271,9 @@ public class LevelData {
                 .treeH(7f, 1f).trees(0.10f, 3f, 0.5f)
                 .terrain(0.03f, 6f)
                 .fairway(48f, 0f).wiggle(0.12f, 0.08f).islands(0.15f).cohesion(0.9f)
-                .distance(700, 1200)
-                .par45(860)
-                .undulation(0.3f)
+                .distance(650, 1200)
+                .par45(750)
+                .undulation(0.3f)//todo: M key to return to menu works everywhere
         );
 
         private final ArchetypeSpec spec;

@@ -178,20 +178,28 @@ public class HighscoreService {
         StringBuilder json = new StringBuilder();
         json.append("{ \"structuredQuery\": {");
         json.append("\"from\": [{\"collectionId\": \"").append(courseType.collectionId).append("\"}],");
-        json.append("\"where\": { \"compositeFilter\": { \"op\": \"AND\", \"filters\": [");
-        json.append("{ \"fieldFilter\": { \"field\": {\"fieldPath\": \"difficulty\"}, \"op\": \"EQUAL\", \"value\": {\"stringValue\": \"").append(difficulty).append("\"} } },");
-        json.append("{ \"fieldFilter\": { \"field\": {\"fieldPath\": \"submissionTime\"}, \"op\": \"GREATER_THAN_OR_EQUAL\", \"value\": {\"timestampValue\": \"").append(todayStart).append("\"} } }");
-        json.append("] } },");
+        if (courseType == CourseType.HOLES_1) {
+            // No difficulty filter — show all difficulties together
+            json.append("\"where\": { \"fieldFilter\": { \"field\": {\"fieldPath\": \"submissionTime\"}, \"op\": \"GREATER_THAN_OR_EQUAL\", \"value\": {\"timestampValue\": \"").append(todayStart).append("\"} } },");
+        } else {
+            json.append("\"where\": { \"compositeFilter\": { \"op\": \"AND\", \"filters\": [");
+            json.append("{ \"fieldFilter\": { \"field\": {\"fieldPath\": \"difficulty\"}, \"op\": \"EQUAL\", \"value\": {\"stringValue\": \"").append(difficulty).append("\"} } },");
+            json.append("{ \"fieldFilter\": { \"field\": {\"fieldPath\": \"submissionTime\"}, \"op\": \"GREATER_THAN_OR_EQUAL\", \"value\": {\"timestampValue\": \"").append(todayStart).append("\"} } }");
+            json.append("] } },");
+        }
         json.append("\"orderBy\": [");
         if (courseType == CourseType.HOLES_1) {
-            json.append("{ \"field\": {\"fieldPath\": \"score\"}, \"direction\": \"ASCENDING\" },");
-            json.append("{ \"field\": {\"fieldPath\": \"elapsedTime\"}, \"direction\": \"ASCENDING\" },");
+            // Order by submissionTime only — Firestore can handle this without a composite index.
+            // score/elapsedTime sorting is done client-side after fetching.
+            json.append("{ \"field\": {\"fieldPath\": \"submissionTime\"}, \"direction\": \"ASCENDING\" }");
+            json.append("],");
+            json.append("\"limit\": 100");
         } else {
             json.append("{ \"field\": {\"fieldPath\": \"score\"}, \"direction\": \"ASCENDING\" },");
+            json.append("{ \"field\": {\"fieldPath\": \"submissionTime\"}, \"direction\": \"ASCENDING\" }");
+            json.append("],");
+            json.append("\"limit\": 10");
         }
-        json.append("{ \"field\": {\"fieldPath\": \"submissionTime\"}, \"direction\": \"ASCENDING\" }");
-        json.append("],");
-        json.append("\"limit\": 10");
         json.append("} }");
 
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);

@@ -89,7 +89,9 @@ public class LeaderboardUI extends Table {
 
         this.add(title).expandX().fillX().padBottom(10 * uiScale).row();
         this.add(courseTabTable).expandX().fillX().padBottom(6 * uiScale).row();
-        this.add(tabTable).expandX().fillX().padBottom(10 * uiScale).row();
+        if (currentCourseType != CourseType.HOLES_1) {
+            this.add(tabTable).expandX().fillX().padBottom(10 * uiScale).row();
+        }
         this.add(scroll).expand().fill().row();
         this.add(refreshBtn).width(140 * uiScale).height(40 * uiScale).right().padTop(10 * uiScale);
     }
@@ -186,6 +188,13 @@ public class LeaderboardUI extends Table {
         float textScale = uiScale * (isAndroid ? 0.70f : 0.88f);
 
         if (currentCourseType == CourseType.HOLES_1) {
+            if (entries != null) {
+                entries.sort((a, b) -> {
+                    if (a.score != b.score) return Integer.compare(a.score, b.score);
+                    return Float.compare(a.elapsedTime, b.elapsedTime);
+                });
+                while (entries.size > 10) entries.removeIndex(entries.size - 1);
+            }
             updateTableOneHole(entries, uiScale, totalWidth, textScale);
         } else {
             updateTableStandard(entries, uiScale, totalWidth, textScale);
@@ -265,23 +274,24 @@ public class LeaderboardUI extends Table {
     }
 
     private void updateTableOneHole(Array<HighscoreService.HighscoreEntry> entries, float uiScale, float totalWidth, float textScale) {
-        float rkW        = totalWidth * 0.12f;
-        float playerW    = totalWidth * 0.28f;
-        float strokesW   = totalWidth * 0.20f;
+        float rkW        = totalWidth * 0.10f;
+        float playerW    = totalWidth * 0.23f;
+        float diffW      = totalWidth * 0.10f;
+        float strokesW   = totalWidth * 0.17f;
         float timeW      = totalWidth * 0.20f;
         float submittedW = totalWidth * 0.20f;
 
         boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
-        float headerScale = textScale * (isAndroid ? 0.8f : 1.0f);
-        float rowScale    = textScale * (isAndroid ? 0.8f : 1.0f);
+        float scale       = textScale * 0.90f * (isAndroid ? 0.8f : 1.0f);
 
         // Header row
-        Table hdr = buildRowTable5(rkW, playerW, strokesW, timeW, submittedW,
-            makeLabel("RANK",      headerScale, Color.LIGHT_GRAY),
-            makeLabel("PLAYER",    headerScale, Color.LIGHT_GRAY),
-            makeLabel("STROKES",   headerScale, Color.LIGHT_GRAY),
-            makeLabel("TIME",      headerScale, Color.LIGHT_GRAY),
-            makeLabel("SUBMITTED", headerScale, Color.LIGHT_GRAY));
+        Table hdr = buildRowTable6(rkW, playerW, diffW, strokesW, timeW, submittedW,
+            makeLabel("RANK",      scale, Color.LIGHT_GRAY),
+            makeLabel("PLAYER",    scale, Color.LIGHT_GRAY),
+            makeLabel("DIFF",      scale, Color.LIGHT_GRAY),
+            makeLabel("STROKES",   scale, Color.LIGHT_GRAY),
+            makeLabel("TIME",      scale, Color.LIGHT_GRAY),
+            makeLabel("SUBMITTED", scale, Color.LIGHT_GRAY));
         scoreTable.add(hdr).expandX().fillX().row();
         addDivider(1, uiScale);
 
@@ -293,27 +303,30 @@ public class LeaderboardUI extends Table {
         int rank = 1;
         for (HighscoreService.HighscoreEntry entry : entries) {
             Color rc = rankColor(rank);
-            Label nL = makeLabel(entry.name, rowScale, rc);
+            Label nL = makeLabel(entry.name, scale, rc);
             nL.setEllipsis("...");
+            String diffLetter = (entry.difficulty != null && !entry.difficulty.isEmpty())
+                    ? String.valueOf(entry.difficulty.charAt(0)) : "?";
 
-            Table row = buildRowTable5(rkW, playerW, strokesW, timeW, submittedW,
-                makeLabel(rank + ".",                          rowScale, rc),
+            Table row = buildRowTable6(rkW, playerW, diffW, strokesW, timeW, submittedW,
+                makeLabel(rank + ".",                            scale, rc),
                 nL,
-                makeLabel(String.valueOf(entry.score),         rowScale, rc),
-                makeLabel(formatElapsedTime(entry.elapsedTime), rowScale, rc),
-                makeLabel(formatSubmittedTime(entry.date),      rowScale, rc));
+                makeLabel(diffLetter,                            scale, rc),
+                makeLabel(String.valueOf(entry.score),           scale, rc),
+                makeLabel(formatElapsedTime(entry.elapsedTime),  scale, rc),
+                makeLabel(formatSubmittedTime(entry.date),       scale, rc));
 
             scoreTable.add(row).expandX().fillX().padBottom(4 * uiScale).row();
             rank++;
         }
     }
 
-    /** Builds a 5-cell horizontal row Table with given column widths and labels. */
-    private Table buildRowTable5(float rkW, float playerW, float strokesW, float timeW, float submittedW,
-                                 Label rankLbl, Label nameLbl, Label strokesLbl, Label timeLbl, Label submittedLbl) {
+    private Table buildRowTable6(float rkW, float playerW, float diffW, float strokesW, float timeW, float submittedW,
+                                 Label rankLbl, Label nameLbl, Label diffLbl, Label strokesLbl, Label timeLbl, Label submittedLbl) {
         Table row = new Table();
         row.add(rankLbl).width(rkW).left();
         row.add(nameLbl).width(playerW).left();
+        row.add(diffLbl).width(diffW).center();
         row.add(strokesLbl).width(strokesW).center();
         row.add(timeLbl).width(timeW).center();
         row.add(submittedLbl).width(submittedW).right();
