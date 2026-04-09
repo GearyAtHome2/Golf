@@ -273,7 +273,20 @@ public class LevelData {
                 .fairway(48f, 0f).wiggle(0.12f, 0.08f).islands(0.15f).cohesion(0.9f)
                 .distance(650, 1200)
                 .par45(750)
-                .undulation(0.3f)//todo: M key to return to menu works everywhere
+                .undulation(0.3f)
+        ),
+        WOODLAND_EDGE(new ArchetypeSpec()
+                .algo(TerrainAlgorithm.SMOOTH_SINE)
+                .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.BIRCH)
+                .difficulty(6f)
+                .teeH(18f, 2f).greenH(8f, 2f)
+                .wind(5f, 9f)
+                .treeH(16f, 4f).trees(0.78f, 5f, 0.82f)
+                .terrain(0.03f, 6f)
+                .fairway(48f, 0f).wiggle(0.12f, 0.08f).islands(0.15f).cohesion(0.9f)
+                .distance(220, 350)
+                .par(3)
+                .undulation(0.2f)
         );
 
         private final ArchetypeSpec spec;

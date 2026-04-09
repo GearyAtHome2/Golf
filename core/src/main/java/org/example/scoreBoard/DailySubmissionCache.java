@@ -21,7 +21,7 @@ import java.util.TimeZone;
  */
 public class DailySubmissionCache {
 
-    private static final String API_KEY = "AIzaSyAgtF4QdIY1IsxMvYKUHGi8SVT-ZQzLsDI";
+    private static final String API_KEY = org.example.FirebaseConfig.API_KEY;
 
     public interface Callback {
         void onComplete();
@@ -30,6 +30,7 @@ public class DailySubmissionCache {
     private final Set<CourseType> submitted = EnumSet.noneOf(CourseType.class);
     private boolean fetched = false;
     private int pendingRequests = 0;
+    private int fetchGeneration = 0; // incremented each fetch; callbacks from stale fetches are ignored
 
     /** True once all three collection checks have returned (success or failure). */
     public boolean isFetched() { return fetched; }
@@ -60,11 +61,12 @@ public class DailySubmissionCache {
         submitted.clear();
         fetched = false;
         pendingRequests = CourseType.values().length;
+        final int generation = ++fetchGeneration;
 
         String todayStart = todayUtcStart();
 
         for (CourseType type : CourseType.values()) {
-            checkCollection(type, uid, todayStart, onComplete);
+            checkCollection(type, uid, todayStart, generation, onComplete);
         }
     }
 
@@ -82,7 +84,7 @@ public class DailySubmissionCache {
 
     // -------------------------------------------------------------------------
 
-    private void checkCollection(CourseType type, String uid, String todayStart, Callback onComplete) {
+    private void checkCollection(CourseType type, String uid, String todayStart, int generation, Callback onComplete) {
         String body = buildQuery(uid, todayStart);
 
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
@@ -113,6 +115,7 @@ public class DailySubmissionCache {
 
                 final boolean hasEntry = found;
                 Gdx.app.postRunnable(() -> {
+                    if (generation != fetchGeneration) return; // stale fetch — discard
                     if (hasEntry) submitted.add(type);
                     Gdx.app.log("DailySubmissionCache", type + " submitted today: " + hasEntry);
                     pendingRequests--;
@@ -128,6 +131,7 @@ public class DailySubmissionCache {
             public void failed(Throwable t) {
                 Gdx.app.error("DailySubmissionCache", "Network error checking " + type + ": " + t.getMessage());
                 Gdx.app.postRunnable(() -> {
+                    if (generation != fetchGeneration) return;
                     pendingRequests--;
                     if (pendingRequests <= 0) {
                         fetched = true;
@@ -138,6 +142,7 @@ public class DailySubmissionCache {
 
             @Override public void cancelled() {
                 Gdx.app.postRunnable(() -> {
+                    if (generation != fetchGeneration) return;
                     pendingRequests--;
                     if (pendingRequests <= 0) {
                         fetched = true;
@@ -149,11 +154,12 @@ public class DailySubmissionCache {
     }
 
     private static String buildQuery(String uid, String todayStart) {
+        String safeUid = uid.replace("\\", "\\\\").replace("\"", "\\\"");
         return "{ \"structuredQuery\": {"
             + "\"from\": [{\"collectionId\": \"entries\"}],"
             + "\"where\": { \"compositeFilter\": { \"op\": \"AND\", \"filters\": ["
             + "  { \"fieldFilter\": { \"field\": {\"fieldPath\": \"uid\"}, \"op\": \"EQUAL\","
-            + "    \"value\": {\"stringValue\": \"" + uid + "\"} } },"
+            + "    \"value\": {\"stringValue\": \"" + safeUid + "\"} } },"
             + "  { \"fieldFilter\": { \"field\": {\"fieldPath\": \"submissionTime\"}, \"op\": \"GREATER_THAN_OR_EQUAL\","
             + "    \"value\": {\"timestampValue\": \"" + todayStart + "\"} } }"
             + "] } },"

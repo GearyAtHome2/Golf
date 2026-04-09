@@ -29,6 +29,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final BunkerGenerator bunkerGenerator;
     private final ClippertonRockGenerator clippertonRockGenerator; // Placeholder for new generator
     private final DunesValleyGenerator dunesValleyGenerator;
+    private final ForestEdgeGenerator woodlandEdgeGenerator;
     private final StoneRunGenerator stoneRunGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
@@ -86,6 +87,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.bunkerGenerator = new BunkerGenerator(rng);
         this.clippertonRockGenerator = new ClippertonRockGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
         this.dunesValleyGenerator = new DunesValleyGenerator(data);
+        this.woodlandEdgeGenerator = new ForestEdgeGenerator(data);
         this.stoneRunGenerator = new StoneRunGenerator(data);
     }
 
@@ -219,8 +221,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             clippertonRockGenerator.generateClippertonRock(map, h, gX, gZ, 0.0f);
         } else if (flags.isDunesValley) {
             dunesValleyGenerator.generateDunesValley(map, h);
-        } else if (flags.isDunesValley) {
-            dunesValleyGenerator.generateDunesValley(map, h);
+        } else if (flags.isWoodlandEdge) {
+            woodlandEdgeGenerator.generate(map, h, teeP, holeP);
         } else if (flags.isStoneRun) {
             stoneRunGenerator.generateStoneRun(map, h);
         }
@@ -353,10 +355,21 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         float mapBaseRotation = rng.nextFloat() * 360f;
 
+        // Determine if we are in the Woodland Edge archetype
+        boolean isWoodlandEdge = data.getArchetype() == LevelData.Archetype.WOODLAND_EDGE;
+
         for (int i = 0; i < treeCount; i++) {
             int tx = rng.nextInt(SIZE_X - 1), tz = rng.nextInt(SIZE_Z - 1);
             float worldY = heights[tx][tz];
-            if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
+
+            // Apply specific tighter buffer for Woodland Edge
+            if (isWoodlandEdge) {
+                if (tz <= teeZ + 20 && Math.abs(tx - teeX) < 5) continue;
+            } else {
+                // Default legacy buffer
+                if (tz <= teeZ + 40 && Math.abs(tx - teeX) < 30) continue;
+            }
+
             if (worldY < water + 0.1f || (map[tx][tz] != Terrain.TerrainType.ROUGH)) continue;
 
             float slope = (float) Math.sqrt(Math.pow(heights[tx + 1][tz] - worldY, 2) + Math.pow(heights[tx][tz + 1] - worldY, 2));
@@ -667,7 +680,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isDunesValley, isStoneRun, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isDunesValley, isStoneRun, isWoodlandEdge, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
@@ -682,6 +695,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             isClippertonRock = data.getArchetype() == LevelData.Archetype.CLIPPERTON_ROCK;
             isDunesValley = data.getArchetype() == LevelData.Archetype.DUNES_VALLEY;
             isStoneRun = data.getArchetype() == LevelData.Archetype.STONE_RUN;
+            isWoodlandEdge = data.getArchetype() == LevelData.Archetype.WOODLAND_EDGE;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }

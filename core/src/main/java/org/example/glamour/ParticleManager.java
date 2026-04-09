@@ -20,6 +20,13 @@ public class ParticleManager {
     private static final float BOUNCE_RESTITUTION = 0.4f;
     private static final float GROUND_FRICTION = 0.8f;
 
+    private static final Color COLOR_WATER   = new Color(0.85f, 0.92f, 1.0f,  0.6f);
+    private static final Color COLOR_GREEN   = new Color(0.2f,  0.8f,  0.2f,  1f);
+    private static final Color COLOR_FAIRWAY = new Color(0.1f,  0.6f,  0.1f,  1f);
+    private static final Color COLOR_ROUGH   = new Color(0.05f, 0.4f,  0.05f, 1f);
+    private static final Color COLOR_STONE   = new Color(0.85f, 0.85f, 0.85f, 1f);
+    private static final Color COLOR_DIRT    = new Color(0.4f,  0.25f, 0.15f, 1f);
+
     public ParticleManager() {
         ModelBuilder mb = new ModelBuilder();
         boxModel = mb.createBox(PARTICLE_SIZE, PARTICLE_SIZE, PARTICLE_SIZE,
@@ -103,7 +110,7 @@ public class ParticleManager {
         ParticleParams p = new ParticleParams();
         switch (interaction) {
             case WATER -> {
-                p.color = new Color(0.85f, 0.92f, 1.0f, 0.6f);
+                p.color = COLOR_WATER;
                 p.count = (int) (speed * 4);
                 p.forceMult = 0.45f;
                 p.life = 1.4f;
@@ -137,15 +144,15 @@ public class ParticleManager {
 
     private Color getTerrainColor(Terrain.TerrainType type, Ball.State state) {
         if (type == Terrain.TerrainType.SAND) return Color.TAN;
-        Color surfaceGreen = switch (type) {
-            case GREEN -> new Color(0.2f, 0.8f, 0.2f, 1f);
-            case FAIRWAY -> new Color(0.1f, 0.6f, 0.1f, 1f);
-            case ROUGH -> new Color(0.05f, 0.4f, 0.05f, 1f);
-            case STONE -> new Color(0.85f, 0.85f, 0.85f, 1f);
-            default -> Color.GREEN;
+        Color surfaceColor = switch (type) {
+            case GREEN   -> COLOR_GREEN;
+            case FAIRWAY -> COLOR_FAIRWAY;
+            case ROUGH   -> COLOR_ROUGH;
+            case STONE   -> COLOR_STONE;
+            default      -> Color.GREEN;
         };
-        if (state == Ball.State.ROLLING) return surfaceGreen;
-        return (MathUtils.random() < 0.8f) ? surfaceGreen : new Color(0.4f, 0.25f, 0.15f, 1f);
+        if (state == Ball.State.ROLLING) return surfaceColor;
+        return (MathUtils.random() < 0.8f) ? surfaceColor : COLOR_DIRT;
     }
 
     public void update(float delta, Terrain terrain) {

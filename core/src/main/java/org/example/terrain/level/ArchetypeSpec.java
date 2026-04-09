@@ -65,6 +65,8 @@ public class ArchetypeSpec {
     /** If true, longer holes are penalised in the shotIndex difficulty calculation. */
     public boolean distancePenalty  = false;
 
+    public boolean isActive = true;
+
     // ── Fluent builder methods ────────────────────────────────────────────────
 
     public ArchetypeSpec algo(LevelData.TerrainAlgorithm a)    { algo = a;          return this; }
@@ -109,4 +111,6 @@ public class ArchetypeSpec {
 
     public ArchetypeSpec difficulty(float d)        { baseDifficultyIndex = d; return this; }
     public ArchetypeSpec distancePenalty()          { distancePenalty = true; return this; }
+
+    public ArchetypeSpec isActive(boolean d)        { isActive = d; return this; }
 }

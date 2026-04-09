@@ -137,9 +137,9 @@ public class ScoreSubmissionHandler {
 
     private String buildDialogTitle() {
         return switch (courseType) {
-            case HOLES_1 -> "DAILY 1-HOLE SUBMISSION";
-            case HOLES_9 -> "DAILY 9-HOLE SUBMISSION";
-            default -> "DAILY CHALLENGE SUBMISSION";
+            case HOLES_1  -> "DAILY 1-HOLE SUBMISSION";
+            case HOLES_9  -> "DAILY 9-HOLE SUBMISSION";
+            case HOLES_18 -> "DAILY 18-HOLE SUBMISSION";
         };
     }
 

@@ -121,6 +121,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         loginScreen = new LoginScreen(hud.getSkin(), authService, userSession, r -> {
             Gdx.app.log("Login", "Welcome, " + r.displayName);
             hud.setLoggedInUser(r.displayName);
+            sessionManager.reloadDailySessions(r.uid);
             dailySubmissionCache.fetch(r.uid, null);
             changeState(GameState.START);
         });
@@ -130,6 +131,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 @Override public void onSuccess(AuthService.AuthResult r) {
                     Gdx.app.log("UserSession", "Auto-login OK — " + r.displayName);
                     hud.setLoggedInUser(r.displayName);
+                    sessionManager.reloadDailySessions(r.uid);
                     dailySubmissionCache.fetch(r.uid, null);
                     changeState(GameState.START);
                 }
@@ -787,6 +789,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     public void onLogout() {
         userSession.clear();
         dailySubmissionCache.clear();
+        sessionManager.reloadDailySessions("");
         hud.setLoggedInUser("");
         loginScreen.reset();
         exitToMainMenu();

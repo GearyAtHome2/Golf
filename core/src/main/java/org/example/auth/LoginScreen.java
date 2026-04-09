@@ -237,8 +237,9 @@ public class LoginScreen {
             String name  = nameField.getText().trim();
             String email = emailField.getText().trim();
             String pw    = pwField.getText();
-            if (name.isEmpty())  { showError("Please enter a display name."); return; }
-            if (email.isEmpty()) { showError("Please enter your email."); return; }
+            if (name.isEmpty())       { showError("Please enter a display name."); return; }
+            if (name.length() > 30)   { showError("Display name must be 30 characters or fewer."); return; }
+            if (email.isEmpty())      { showError("Please enter your email."); return; }
             if (pw.length() < 6) { showError("Password must be at least 6 characters."); return; }
             setBusy(true);
             lastEmail = email;
@@ -270,9 +271,16 @@ public class LoginScreen {
         TextButton sendBtn   = makeButton("SEND RESET EMAIL", bs);
         TextButton backBtn   = makeLinkBtn("← Back", ls * 0.82f);
 
+        Label successLbl = new Label("", skin, "default");
+        successLbl.setFontScale(ls * 0.85f);
+        successLbl.setColor(new com.badlogic.gdx.graphics.Color(0.35f, 1f, 0.35f, 1f));
+        successLbl.setWrap(true);
+        successLbl.setAlignment(Align.center);
+
         t.add(makeLabel("Enter your email to reset password.", ls)).left().padBottom(sp).row();
         t.add(emailField).width(fw).height(fh).padBottom(pad).row();
         t.add(sendBtn).width(fw).height(bh).padBottom(sp).row();
+        t.add(successLbl).width(fw).padBottom(sp).row();
         t.add(backBtn).left().row();
 
         Runnable doForgot = () -> {
@@ -280,7 +288,11 @@ public class LoginScreen {
             if (email.isEmpty()) { showError("Please enter your email."); return; }
             setBusy(true);
             authService.sendPasswordReset(email, new AuthService.SimpleCallback() {
-                @Override public void onSuccess() { setBusy(false); showError("Reset link sent."); }
+                @Override public void onSuccess() {
+                    setBusy(false);
+                    sendBtn.setVisible(false);
+                    successLbl.setText("If an account exists for that email, a reset link has been sent — check your inbox (and spam folder).");
+                }
                 @Override public void onFailure(String msg) { setBusy(false); showError(msg); }
             });
         };

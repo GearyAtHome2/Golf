@@ -12,7 +12,7 @@ import java.util.TimeZone;
 
 public class HighscoreService {
 
-    private static final String API_KEY = "AIzaSyAgtF4QdIY1IsxMvYKUHGi8SVT-ZQzLsDI";
+    private static final String API_KEY = org.example.FirebaseConfig.API_KEY;
 
     public interface HighscoreListener {
         void onSuccess(Array<HighscoreEntry> entries);
@@ -121,7 +121,7 @@ public class HighscoreService {
         json.append("{ \"fields\": {");
         json.append("\"playerName\": { \"stringValue\": \"").append(escape(name)).append("\" },");
         if (uid != null && !uid.isEmpty()) {
-            json.append("\"uid\": { \"stringValue\": \"").append(uid).append("\" },");
+            json.append("\"uid\": { \"stringValue\": \"").append(escape(uid)).append("\" },");
         }
         json.append("\"score\": { \"integerValue\": ").append(score).append(" },");
         json.append("\"difficulty\": { \"stringValue\": \"").append(difficulty).append("\" },");
@@ -246,16 +246,18 @@ public class HighscoreService {
                             if (wrapper == null || !wrapper.has("document")) continue;
                             JsonValue fields = wrapper.get("document").get("fields");
                             if (fields == null) continue;
+                            if (!fields.has("playerName") || !fields.has("score") || !fields.has("submissionTime")) continue;
                             float elapsed = 0f;
                             if (fields.has("elapsedTime")) {
                                 elapsed = fields.get("elapsedTime").getFloat("doubleValue");
                             }
                             int[] parsArr = fields.has("pars") ? fromFirestoreIntArray(fields.get("pars")) : null;
                             int[] scoresArr = fields.has("scores") ? fromFirestoreIntArray(fields.get("scores")) : null;
+                            String difficulty = fields.has("difficulty") ? fields.get("difficulty").getString("stringValue") : "NORMAL";
                             entries.add(new HighscoreEntry(
                                     fields.get("playerName").getString("stringValue"),
                                     fields.get("score").getInt("integerValue"),
-                                    fields.get("difficulty").getString("stringValue"),
+                                    difficulty,
                                     fields.get("submissionTime").getString("timestampValue"),
                                     elapsed,
                                     parsArr,

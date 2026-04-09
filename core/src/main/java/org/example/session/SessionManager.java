@@ -13,18 +13,28 @@ public class SessionManager {
     private GameSession daily9Session;
     private GameSession daily1Session;
     private final GameConfig config;
+    private String uid = "";
 
     public SessionManager(GameConfig config) {
         this.config = config;
         this.standardSession = SessionPersistence.loadSession(GameSession.GameMode.STANDARD_18);
-        this.daily18Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_18);
-        this.daily9Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_9);
-        this.daily1Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_1);
+        reloadDailySessions("");
+    }
+
+    /**
+     * Reloads daily sessions for the given uid (empty string = not logged in).
+     * Call this immediately after login or logout so each account sees only its own saves.
+     */
+    public void reloadDailySessions(String uid) {
+        this.uid = uid != null ? uid : "";
+        this.daily18Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_18, this.uid);
+        this.daily9Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_9,  this.uid);
+        this.daily1Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_1,  this.uid);
     }
 
     public void startCompetitiveMatch(long seed, GameSession.GameMode mode) {
         activeSession = new GameSession(seed, config.difficulty, mode, SessionPersistence.getTodayTimestamp());
-        activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession));
+        activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession, uid));
 
         List<LevelData> full18 = LevelDataGenerator.generate18Holes(seed);
         int count = mode.holeCount();
@@ -38,7 +48,7 @@ public class SessionManager {
             case DAILY_1 -> daily1Session = activeSession;
         }
 
-        SessionPersistence.saveSession(activeSession);
+        SessionPersistence.saveSession(activeSession, uid);
     }
 
     public void startDaily18() {
@@ -59,7 +69,7 @@ public class SessionManager {
         long seed = baseSeed;
         for (int attempt = 0; attempt < 100; attempt++) {
             if (LevelDataGenerator.generate18Holes(seed).get(0).getPar() == 3) return seed;
-            seed = baseSeed + attempt + 1;
+            seed++;
         }
         return baseSeed;
     }
@@ -83,7 +93,7 @@ public class SessionManager {
     }
 
     public void saveActive() {
-        if (activeSession != null) SessionPersistence.saveSession(activeSession);
+        if (activeSession != null) SessionPersistence.saveSession(activeSession, uid);
     }
 
     public CompetitiveSessions getCompetitiveSessions() {

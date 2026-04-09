@@ -17,7 +17,7 @@ import com.badlogic.gdx.utils.JsonValue;
  */
 public class AuthService {
 
-    private static final String API_KEY   = "AIzaSyAgtF4QdIY1IsxMvYKUHGi8SVT-ZQzLsDI";
+    private static final String API_KEY   = org.example.FirebaseConfig.API_KEY;
     private static final String AUTH_BASE = "https://identitytoolkit.googleapis.com/v1/accounts:";
     private static final String TOKEN_URL = "https://securetoken.googleapis.com/v1/token?key=" + API_KEY;
 
