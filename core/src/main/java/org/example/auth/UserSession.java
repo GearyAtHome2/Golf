@@ -134,6 +134,8 @@ public class UserSession {
     /** True if a refresh token is stored — does NOT guarantee the token is still valid. */
     public boolean isLoggedIn()       { return !refreshToken.isEmpty(); }
 
+    public String getRefreshToken()   { return refreshToken; }
+
     public String getUid()            { return uid; }
     public String getEmail()          { return email; }
     public String getDisplayName()    { return displayName; }

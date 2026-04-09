@@ -191,11 +191,11 @@ this.skin = getSkin();
         mobileUIInitialized = true;
     }
 
-    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions) {
+    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, org.example.scoreBoard.DailySubmissionCache dailyCache) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), sessions, menuManager.getMapScrollOffset());
+        mainMenuRenderer.render(batch, font, viewport, menuManager.getMenuSelection(), menuManager.getCurrentMenuState(), sessions, menuManager.getMapScrollOffset(), dailyCache);
         batch.end();
 
         if (leaderboardUI == null && startMenuStage != null) {
@@ -208,7 +208,7 @@ this.skin = getSkin();
         if (startMenuStage != null) {
             if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
                 if (lastMobileMenuState != menuManager.getCurrentMenuState()) {
-                    setupMobileStartMenu(menuManager, callback, sessions);
+                    setupMobileStartMenu(menuManager, callback, sessions, dailyCache);
                     lastMobileMenuState = menuManager.getCurrentMenuState();
                 }
             }
@@ -221,10 +221,10 @@ this.skin = getSkin();
         }
     }
 
-    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions) {
+    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, org.example.scoreBoard.DailySubmissionCache dailyCache) {
         if (startMenuTable == null) return;
         startMenuTable.clearChildren();
-        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, viewport, font);
+        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, dailyCache, viewport, font);
     }
 
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput) {

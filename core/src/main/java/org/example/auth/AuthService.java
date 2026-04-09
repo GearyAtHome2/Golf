@@ -97,7 +97,7 @@ public class AuthService {
 
     public void refreshToken(String refreshToken, AuthCallback callback) {
         // Token endpoint uses form-encoded body, not JSON.
-        String body = "grant_type=refresh_token&refresh_token=" + refreshToken;
+        String body = "grant_type=refresh_token&refresh_token=" + urlEncode(refreshToken);
 
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
         request.setUrl(TOKEN_URL);
@@ -219,6 +219,7 @@ public class AuthService {
             switch (code) {
                 case "EMAIL_EXISTS":            return "An account with that email already exists.";
                 case "EMAIL_NOT_FOUND":         return "No account found with that email.";
+                case "INVALID_LOGIN_CREDENTIALS": return "Incorrect email or password.";
                 case "INVALID_PASSWORD":        return "Incorrect password.";
                 case "INVALID_EMAIL":           return "Please enter a valid email address.";
                 case "WEAK_PASSWORD : Password should be at least 6 characters":
@@ -239,5 +240,11 @@ public class AuthService {
     private String escape(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private String urlEncode(String s) {
+        if (s == null) return "";
+        try { return java.net.URLEncoder.encode(s, "UTF-8"); }
+        catch (Exception e) { return s; }
     }
 }

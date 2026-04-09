@@ -3,6 +3,8 @@ package org.example.gameManagers;
 import org.example.GameConfig;
 import org.example.hud.renderer.MainMenuRenderer.MenuState;
 import org.example.input.GameInputProcessor;
+import org.example.scoreBoard.CourseType;
+import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.terrain.level.LevelData;
@@ -17,21 +19,21 @@ public class MenuManager {
     private static final int SCROLL_WINDOW = 8;
     private static final int MAP_SELECT_TOTAL = LevelData.Archetype.values().length + 1; // archetypes + BACK
 
-    public void handleInput(GameInputProcessor input, MenuHandler callback, CompetitiveSessions sessions) {
+    public void handleInput(GameInputProcessor input, MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         int maxSelection = getMaxSelection();
         int oldSelection = menuSelection;
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_UP)) {
             do {
                 menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
-            } while (isSelectionLocked(sessions) && menuSelection != oldSelection);
+            } while (isSelectionLocked(sessions, dailyCache) && menuSelection != oldSelection);
             if (currentMenuState == MenuState.MAP_SELECT) adjustScrollOffset();
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN)) {
             do {
                 menuSelection = (menuSelection + 1) % maxSelection;
-            } while (isSelectionLocked(sessions) && menuSelection != oldSelection);
+            } while (isSelectionLocked(sessions, dailyCache) && menuSelection != oldSelection);
             if (currentMenuState == MenuState.MAP_SELECT) adjustScrollOffset();
         }
 
@@ -41,7 +43,7 @@ public class MenuManager {
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_SELECT)) {
-            processSelection(callback, sessions);
+            processSelection(callback, sessions, dailyCache);
         }
     }
 
@@ -54,13 +56,13 @@ public class MenuManager {
         mapScrollOffset = Math.max(0, Math.min(mapScrollOffset, MAP_SELECT_TOTAL - SCROLL_WINDOW));
     }
 
-    public void handleExternalSelection(int index, MenuHandler callback, CompetitiveSessions sessions) {
+    public void handleExternalSelection(int index, MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         this.menuSelection = index;
-        processSelection(callback, sessions);
+        processSelection(callback, sessions, dailyCache);
     }
 
-    private void processSelection(MenuHandler callback, CompetitiveSessions sessions) {
-        if (isSelectionLocked(sessions)) return;
+    private void processSelection(MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
+        if (isSelectionLocked(sessions, dailyCache)) return;
 
         switch (currentMenuState) {
             case MAIN -> handleMain(callback);
@@ -72,14 +74,18 @@ public class MenuManager {
         }
     }
 
-    private boolean isSelectionLocked(CompetitiveSessions sessions) {
+    private boolean isSelectionLocked(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         if (currentMenuState == MenuState.EIGHTEEN_HOLES) {
             if (menuSelection == 0) return sessions.standard != null && sessions.standard.isFinished();
-            if (menuSelection == 1) return sessions.daily18 != null && sessions.daily18.isFinished();
-            if (menuSelection == 2) return sessions.daily9 != null && sessions.daily9.isFinished();
-            if (menuSelection == 3) return sessions.daily1 != null && sessions.daily1.isFinished();
+            if (menuSelection == 1) return isRemotelySubmitted(CourseType.HOLES_18, dailyCache) || (sessions.daily18 != null && sessions.daily18.isFinished());
+            if (menuSelection == 2) return isRemotelySubmitted(CourseType.HOLES_9,  dailyCache) || (sessions.daily9  != null && sessions.daily9.isFinished());
+            if (menuSelection == 3) return isRemotelySubmitted(CourseType.HOLES_1,  dailyCache) || (sessions.daily1  != null && sessions.daily1.isFinished());
         }
         return false;
+    }
+
+    private static boolean isRemotelySubmitted(CourseType type, DailySubmissionCache cache) {
+        return cache != null && cache.isFetched() && cache.hasSubmitted(type);
     }
 
     public void navigateBack() {

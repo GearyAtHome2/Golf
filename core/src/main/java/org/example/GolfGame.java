@@ -85,6 +85,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private AuthService  authService;
     private UserSession  userSession;
     private LoginScreen  loginScreen;
+    private final org.example.scoreBoard.DailySubmissionCache dailySubmissionCache = new org.example.scoreBoard.DailySubmissionCache();
 
     @Override
     public void create() {
@@ -120,6 +121,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         loginScreen = new LoginScreen(hud.getSkin(), authService, userSession, r -> {
             Gdx.app.log("Login", "Welcome, " + r.displayName);
             hud.setLoggedInUser(r.displayName);
+            dailySubmissionCache.fetch(r.uid, null);
             changeState(GameState.START);
         });
 
@@ -128,6 +130,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 @Override public void onSuccess(AuthService.AuthResult r) {
                     Gdx.app.log("UserSession", "Auto-login OK — " + r.displayName);
                     hud.setLoggedInUser(r.displayName);
+                    dailySubmissionCache.fetch(r.uid, null);
                     changeState(GameState.START);
                 }
                 @Override public void onFailure(String msg) {
@@ -235,7 +238,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         switch (currentState) {
             case LOGIN -> {} // input handled by the login stage via the input multiplexer
             case START -> {
-                menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions());
+                menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
                 // Android: tap the right half of the screen to go back from any sub-menu
                 if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android
                         && menuManager.getCurrentMenuState() != org.example.hud.renderer.MainMenuRenderer.MenuState.MAIN
@@ -352,6 +355,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 sessionManager.getActive(),
                 userSession.getDisplayName(),
                 userSession.getUid(),
+                userSession.getIdToken(),
+                dailySubmissionCache,
+                authService,
+                userSession,
                 () -> {
                     Gdx.app.postRunnable(() -> {
                         Gdx.app.log("GOLF_GAME", "Submission successful, exiting to main menu");
@@ -490,7 +497,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (currentState == GameState.LOGIN) {
             loginScreen.render();
         } else if (currentState == GameState.START) {
-            hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions());
+            hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
@@ -779,6 +786,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     @Override
     public void onLogout() {
         userSession.clear();
+        dailySubmissionCache.clear();
         hud.setLoggedInUser("");
         loginScreen.reset();
         exitToMainMenu();

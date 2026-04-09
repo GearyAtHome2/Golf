@@ -9,6 +9,8 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
+import org.example.auth.AuthService;
+import org.example.auth.UserSession;
 import org.example.session.GameSession;
 
 public class ScoreSubmissionHandler {
@@ -19,8 +21,12 @@ public class ScoreSubmissionHandler {
     private final Runnable onCancel;
     private final String displayName;
     private final String uid;
+    private String currentIdToken;
+    private final DailySubmissionCache dailyCache;
+    private final AuthService authService;
+    private final UserSession userSession;
 
-    public ScoreSubmissionHandler(GameSession session, String displayName, String uid, Runnable onSubmitSuccess, Runnable onCancel) {
+    public ScoreSubmissionHandler(GameSession session, String displayName, String uid, String idToken, DailySubmissionCache dailyCache, AuthService authService, UserSession userSession, Runnable onSubmitSuccess, Runnable onCancel) {
         this.session = session;
         this.courseType = CourseType.fromMode(session.getMode());
         this.onSubmitSuccess = onSubmitSuccess;
@@ -28,9 +34,13 @@ public class ScoreSubmissionHandler {
         this.highscoreService = new HighscoreService();
         this.displayName = displayName != null ? displayName.trim() : "";
         this.uid = uid != null ? uid : "";
+        this.currentIdToken = idToken != null ? idToken : "";
+        this.dailyCache = dailyCache;
+        this.authService = authService;
+        this.userSession = userSession;
     }
 
-    public ScoreSubmissionHandler(GameSession session, CourseType courseType, String displayName, String uid, Runnable onSubmitSuccess, Runnable onCancel) {
+    public ScoreSubmissionHandler(GameSession session, CourseType courseType, String displayName, String uid, String idToken, DailySubmissionCache dailyCache, AuthService authService, UserSession userSession, Runnable onSubmitSuccess, Runnable onCancel) {
         this.session = session;
         this.courseType = courseType;
         this.onSubmitSuccess = onSubmitSuccess;
@@ -38,12 +48,20 @@ public class ScoreSubmissionHandler {
         this.highscoreService = new HighscoreService();
         this.displayName = displayName != null ? displayName.trim() : "";
         this.uid = uid != null ? uid : "";
+        this.currentIdToken = idToken != null ? idToken : "";
+        this.dailyCache = dailyCache;
+        this.authService = authService;
+        this.userSession = userSession;
     }
 
     public void trigger(Stage stage, Skin skin) {
         if (!displayName.isEmpty()) {
-            submit(displayName);
-            if (onSubmitSuccess != null) onSubmitSuccess.run();
+            if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(courseType)) {
+                Gdx.app.error("SCORE_SUBMIT", "Blocked duplicate submission for " + courseType + " (uid: " + uid + ")");
+                if (onCancel != null) onCancel.run();
+                return;
+            }
+            submit(displayName, false);
             return;
         }
 
@@ -66,10 +84,9 @@ public class ScoreSubmissionHandler {
             String text = nameField.getText().trim();
             if (!text.isEmpty()) {
                 Gdx.input.setOnscreenKeyboardVisible(false);
-                submit(text);
                 dialog.hide();
                 dialog.remove();
-                if (onSubmitSuccess != null) onSubmitSuccess.run();
+                submit(text, false);
             }
         };
 
@@ -134,12 +151,41 @@ public class ScoreSubmissionHandler {
         if (onCancel != null) onCancel.run();
     }
 
-    private void submit(String username) {
+    private void submit(String username, boolean isRetry) {
         int finalScore = session.getCompetitiveScore().getTotalStrokes();
         String difficulty = session.getDifficulty().name();
         float elapsedTime = session.getElapsedTimeSeconds();
         int[] pars = session.getCompetitiveScore().getPars();
         int[] scores = session.getCompetitiveScore().getScores();
-        highscoreService.submitScore(username, uid, finalScore, difficulty, courseType, elapsedTime, pars, scores);
+
+        highscoreService.submitScore(username, uid, currentIdToken, finalScore, difficulty, courseType, elapsedTime, pars, scores, new HighscoreService.SubmitCallback() {
+            @Override
+            public void onSuccess() {
+                if (dailyCache != null) dailyCache.markSubmitted(courseType);
+                if (onSubmitSuccess != null) onSubmitSuccess.run();
+            }
+            @Override
+            public void onFailure(int statusCode) {
+                if (statusCode == 403 && !isRetry && authService != null && userSession != null) {
+                    Gdx.app.log("SCORE_SUBMIT", "Token expired (403) — refreshing and retrying");
+                    authService.refreshToken(userSession.getRefreshToken(), new AuthService.AuthCallback() {
+                        @Override
+                        public void onSuccess(AuthService.AuthResult r) {
+                            userSession.updateIdToken(r.idToken, r.refreshToken);
+                            currentIdToken = r.idToken;
+                            submit(username, true);
+                        }
+                        @Override
+                        public void onFailure(String msg) {
+                            Gdx.app.error("SCORE_SUBMIT", "Token refresh failed: " + msg);
+                            if (onCancel != null) onCancel.run();
+                        }
+                    });
+                } else {
+                    Gdx.app.error("SCORE_SUBMIT", "Submission failed (status " + statusCode + ")" + (isRetry ? " after token refresh" : ""));
+                    if (onCancel != null) onCancel.run();
+                }
+            }
+        });
     }
 }

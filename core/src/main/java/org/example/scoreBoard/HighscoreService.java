@@ -107,14 +107,19 @@ public class HighscoreService {
         }
     }
 
-    public void submitScore(String name, String uid, int score, String difficulty, CourseType courseType, float elapsedTime, int[] pars, int[] scores) {
+    public interface SubmitCallback {
+        void onSuccess();
+        void onFailure(int statusCode);
+    }
+
+    public void submitScore(String name, String uid, String idToken, int score, String difficulty, CourseType courseType, float elapsedTime, int[] pars, int[] scores, SubmitCallback callback) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
         String timestamp = sdf.format(new Date());
 
         StringBuilder json = new StringBuilder();
         json.append("{ \"fields\": {");
-        json.append("\"playerName\": { \"stringValue\": \"").append(name).append("\" },");
+        json.append("\"playerName\": { \"stringValue\": \"").append(escape(name)).append("\" },");
         if (uid != null && !uid.isEmpty()) {
             json.append("\"uid\": { \"stringValue\": \"").append(uid).append("\" },");
         }
@@ -134,20 +139,33 @@ public class HighscoreService {
         request.setUrl(courseType.baseUrl + "?key=" + API_KEY);
         request.setContent(json.toString());
         request.setHeader("Content-Type", "application/json");
+        if (idToken != null && !idToken.isEmpty()) {
+            request.setHeader("Authorization", "Bearer " + idToken);
+        }
 
         Gdx.net.sendHttpRequest(request, new Net.HttpResponseListener() {
             @Override
             public void handleHttpResponse(Net.HttpResponse r) {
                 int status = r.getStatus().getStatusCode();
-                if (status != 200) {
-                    Gdx.app.error("Highscore", "POST Error " + status + ": " + r.getResultAsString());
-                } else {
+                if (status == 200 || status == 201) {
                     Gdx.app.log("Highscore", "POST Status: " + status);
+                    Gdx.app.postRunnable(() -> { if (callback != null) callback.onSuccess(); });
+                } else {
+                    Gdx.app.error("Highscore", "POST Error " + status + ": " + r.getResultAsString());
+                    Gdx.app.postRunnable(() -> { if (callback != null) callback.onFailure(status); });
                 }
             }
-            @Override public void failed(Throwable t) { Gdx.app.error("Highscore", "POST Failed", t); }
+            @Override public void failed(Throwable t) {
+                Gdx.app.error("Highscore", "POST Failed", t);
+                Gdx.app.postRunnable(() -> { if (callback != null) callback.onFailure(-1); });
+            }
             @Override public void cancelled() {}
         });
+    }
+
+    private static String escape(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     static String toFirestoreIntArray(int[] arr) {

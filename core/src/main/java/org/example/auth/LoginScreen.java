@@ -9,8 +9,13 @@ import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
+import com.badlogic.gdx.scenes.scene2d.utils.FocusListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import org.example.hud.UIUtils;
@@ -29,17 +34,15 @@ public class LoginScreen {
     private final UserSession    userSession;
     private final Callback       callback;
 
-    // Separate smaller font for text field content — the game font is large by design.
-    // Loaded once and disposed with the screen.
     private final BitmapFont        fieldFont;
     private final TextField.TextFieldStyle fieldStyle;
 
-    private View    currentView     = View.LOGIN;
-    private boolean busy            = false;
-    private String  lastEmail       = "";
-    private Label   activeErrorLabel = null;
-
-    // -------------------------------------------------------------------------
+    private View      currentView        = View.LOGIN;
+    private boolean   busy               = false;
+    private String    lastEmail          = "";
+    private Label     activeErrorLabel   = null;
+    private Table     innerPanel         = null;
+    private final Vector2   tempVec      = new Vector2();
 
     public LoginScreen(Skin skin, AuthService authService, UserSession userSession, Callback callback) {
         this.skin        = skin;
@@ -49,11 +52,9 @@ public class LoginScreen {
         this.lastEmail   = userSession.getEmail();
         this.stage       = new Stage(new ExtendViewport(1280, 720));
 
-        // Build a smaller font for text fields by loading the same font file at a reduced scale.
         this.fieldFont = new BitmapFont(Gdx.files.internal("font/golf.fnt"));
         this.fieldFont.getData().setScale(0.60f);
 
-        // Copy the registered TextField style but swap in the smaller font.
         TextField.TextFieldStyle base = skin.get(TextField.TextFieldStyle.class);
         this.fieldStyle = new TextField.TextFieldStyle();
         fieldStyle.font             = fieldFont;
@@ -69,7 +70,6 @@ public class LoginScreen {
 
     public Stage getStage() { return stage; }
 
-    /** Resets to the default login view with cleared fields. Call this on logout. */
     public void reset() {
         currentView = View.LOGIN;
         lastEmail = "";
@@ -88,10 +88,6 @@ public class LoginScreen {
         fieldFont.dispose();
     }
 
-    // -------------------------------------------------------------------------
-    // UI construction — rebuilt on every view switch
-    // -------------------------------------------------------------------------
-
     private void buildUI() {
         stage.clear();
         activeErrorLabel = null;
@@ -100,7 +96,7 @@ public class LoginScreen {
         boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
         float panelW     = isAndroid ? 560f  : 460f;
         float fieldW     = panelW - 60f;
-        float fieldH     = isAndroid ? 75f   : 62f;   // taller than buttons so field font fits well
+        float fieldH     = isAndroid ? 75f   : 62f;
         float btnH       = isAndroid ? 68f   : 54f;
         float pad        = 24f;
         float sp         = 10f;
@@ -108,21 +104,20 @@ public class LoginScreen {
         float btnScale   = isAndroid ? 0.88f : 0.95f;
         float titleScale = isAndroid ? 1.20f : 1.35f;
 
-        // Full-screen dim overlay
         Table root = new Table();
         root.setFillParent(true);
+        root.setTouchable(Touchable.enabled);
         root.setBackground(UIUtils.createRoundedRectDrawable(new Color(0f, 0f, 0f, 0.65f), 0));
 
-        // Centred panel
-        Table panel = new Table();
-        panel.setBackground(UIUtils.createGoldBorderedPanel(new Color(0.05f, 0.05f, 0.05f, 0.97f), 3));
-        panel.pad(pad);
+        this.innerPanel = new Table();
+        innerPanel.setBackground(UIUtils.createGoldBorderedPanel(new Color(0.05f, 0.05f, 0.05f, 0.97f), 3));
+        innerPanel.pad(pad);
 
         Label title = new Label("GEARY GOLF", skin, "default");
         title.setFontScale(titleScale);
         title.setColor(Color.GOLD);
         title.setAlignment(Align.center);
-        panel.add(title).expandX().fillX().padBottom(sp).row();
+        innerPanel.add(title).expandX().fillX().padBottom(sp).row();
 
         String heading = switch (currentView) {
             case LOGIN           -> "SIGN IN";
@@ -133,7 +128,7 @@ public class LoginScreen {
         subLbl.setFontScale(labelScale * 0.88f);
         subLbl.setColor(Color.LIGHT_GRAY);
         subLbl.setAlignment(Align.center);
-        panel.add(subLbl).expandX().fillX().padBottom(pad).row();
+        innerPanel.add(subLbl).expandX().fillX().padBottom(pad).row();
 
         Table content = new Table();
         switch (currentView) {
@@ -141,26 +136,35 @@ public class LoginScreen {
             case REGISTER        -> buildRegisterView(content, fieldW, fieldH, btnH, pad, sp, labelScale, btnScale);
             case FORGOT_PASSWORD -> buildForgotView  (content, fieldW, fieldH, btnH, pad, sp, labelScale, btnScale);
         }
-        panel.add(content).width(fieldW + 40f).row();
+        innerPanel.add(content).width(fieldW + 40f).row();
 
         Label errorLbl = new Label("", skin, "default");
         errorLbl.setFontScale(labelScale * 0.82f);
         errorLbl.setColor(new Color(1f, 0.35f, 0.35f, 1f));
         errorLbl.setAlignment(Align.center);
         errorLbl.setWrap(true);
-        panel.add(errorLbl).width(fieldW + 40f).padTop(sp).row();
+        innerPanel.add(errorLbl).width(fieldW + 40f).padTop(sp).row();
         activeErrorLabel = errorLbl;
 
-        root.add(panel).width(panelW);
+        root.add(innerPanel).width(panelW).expand().center();
         stage.addActor(root);
+
+        root.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                if (!(event.getTarget() instanceof TextField)) {
+                    stage.setKeyboardFocus(null);
+                    Gdx.input.setOnscreenKeyboardVisible(false);
+                    shiftPanelToActor(null); // Explicitly move back when background is tapped
+                }
+                return true;
+            }
+        });
+
+        stage.setKeyboardFocus(null);
     }
 
-    // -------------------------------------------------------------------------
-    // Login view
-    // -------------------------------------------------------------------------
-
-    private void buildLoginView(Table t, float fw, float fh, float bh, float pad, float sp,
-                                float ls, float bs) {
+    private void buildLoginView(Table t, float fw, float fh, float bh, float pad, float sp, float ls, float bs) {
         TextField emailField = makeField(lastEmail, "email@example.com", false);
         TextField pwField    = makeField("", "password", true);
 
@@ -172,12 +176,12 @@ public class LoginScreen {
         t.add(emailField).width(fw).height(fh).padBottom(sp).row();
         t.add(makeLabel("Password", ls)).left().padBottom(3).row();
         t.add(pwField).width(fw).height(fh).padBottom(pad).row();
-        t.add(loginBtn).width(fw).height(bh).padBottom(sp).row();
+        t.add(loginBtn).width(fw).height(bh).row();
 
         Table links = new Table();
         links.add(registerBtn).expandX().left();
         links.add(forgotBtn).expandX().right();
-        t.add(links).width(fw).padBottom(sp).row();
+        t.add(links).width(fw).padTop(sp).row();
 
         Runnable doLogin = () -> {
             String email = emailField.getText().trim();
@@ -194,12 +198,9 @@ public class LoginScreen {
             });
         };
 
-        pwField.addListener(new InputListener() {
-            @Override public boolean keyDown(InputEvent e, int key) {
-                if (key == Input.Keys.ENTER) { doLogin.run(); return true; }
-                return false;
-            }
-        });
+        emailField.addListener(makeEnterListener(pwField, null));
+        pwField.addListener(makeEnterListener(null, doLogin));
+
         loginBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) { if (!busy) doLogin.run(); }
         });
@@ -213,16 +214,9 @@ public class LoginScreen {
                 if (!busy) { currentView = View.FORGOT_PASSWORD; buildUI(); }
             }
         });
-
-        stage.setKeyboardFocus(emailField.getText().isEmpty() ? emailField : pwField);
     }
 
-    // -------------------------------------------------------------------------
-    // Register view
-    // -------------------------------------------------------------------------
-
-    private void buildRegisterView(Table t, float fw, float fh, float bh, float pad, float sp,
-                                   float ls, float bs) {
+    private void buildRegisterView(Table t, float fw, float fh, float bh, float pad, float sp, float ls, float bs) {
         TextField nameField  = makeField("", "your name", false);
         TextField emailField = makeField(lastEmail, "email@example.com", false);
         TextField pwField    = makeField("", "password", true);
@@ -257,6 +251,10 @@ public class LoginScreen {
             });
         };
 
+        nameField.addListener(makeEnterListener(emailField, null));
+        emailField.addListener(makeEnterListener(pwField, null));
+        pwField.addListener(makeEnterListener(null, doRegister));
+
         createBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) { if (!busy) doRegister.run(); }
         });
@@ -265,70 +263,116 @@ public class LoginScreen {
                 if (!busy) { currentView = View.LOGIN; buildUI(); }
             }
         });
-
-        stage.setKeyboardFocus(nameField);
     }
 
-    // -------------------------------------------------------------------------
-    // Forgot password view
-    // -------------------------------------------------------------------------
-
-    private void buildForgotView(Table t, float fw, float fh, float bh, float pad, float sp,
-                                 float ls, float bs) {
-        Label info = makeLabel("Enter your email and we'll send a reset link.", ls * 0.85f);
-        info.setWrap(true);
-        info.setColor(Color.LIGHT_GRAY);
-
+    private void buildForgotView(Table t, float fw, float fh, float bh, float pad, float sp, float ls, float bs) {
         TextField emailField = makeField(lastEmail, "email@example.com", false);
         TextButton sendBtn   = makeButton("SEND RESET EMAIL", bs);
         TextButton backBtn   = makeLinkBtn("← Back", ls * 0.82f);
 
-        Label successLbl = makeLabel("", ls * 0.85f);
-        successLbl.setColor(new Color(0.35f, 1f, 0.35f, 1f));
-        successLbl.setWrap(true);
-        successLbl.setAlignment(Align.center);
-
-        t.add(info).width(fw).padBottom(pad).row();
-        t.add(emailField).width(fw).height(fh).padBottom(sp).row();
+        t.add(makeLabel("Enter your email to reset password.", ls)).left().padBottom(sp).row();
+        t.add(emailField).width(fw).height(fh).padBottom(pad).row();
         t.add(sendBtn).width(fw).height(bh).padBottom(sp).row();
-        t.add(successLbl).width(fw).padBottom(sp).row();
         t.add(backBtn).left().row();
 
+        Runnable doForgot = () -> {
+            String email = emailField.getText().trim();
+            if (email.isEmpty()) { showError("Please enter your email."); return; }
+            setBusy(true);
+            authService.sendPasswordReset(email, new AuthService.SimpleCallback() {
+                @Override public void onSuccess() { setBusy(false); showError("Reset link sent."); }
+                @Override public void onFailure(String msg) { setBusy(false); showError(msg); }
+            });
+        };
+
+        emailField.addListener(makeEnterListener(null, doForgot));
         sendBtn.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent e, Actor a) {
-                if (busy) return;
-                String email = emailField.getText().trim();
-                if (email.isEmpty()) { showError("Please enter your email."); return; }
-                setBusy(true);
-                lastEmail = email;
-                authService.sendPasswordReset(email, new AuthService.SimpleCallback() {
-                    @Override public void onSuccess() {
-                        setBusy(false);
-                        successLbl.setText("If an account exists for that email, a reset link has been sent — check your inbox (and spam folder).");
-                        sendBtn.setVisible(false);
-                    }
-                    @Override public void onFailure(String msg) { setBusy(false); showError(msg); }
-                });
-            }
+            @Override public void changed(ChangeEvent e, Actor a) { doForgot.run(); }
         });
         backBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (!busy) { currentView = View.LOGIN; buildUI(); }
             }
         });
-
-        stage.setKeyboardFocus(emailField);
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
+    private void shiftPanelToActor(Actor target) {
+        if (innerPanel == null) return;
+        innerPanel.clearActions();
+
+        if (target == null) {
+            innerPanel.addAction(Actions.moveToAligned(stage.getWidth() / 2f, stage.getHeight() / 2f, Align.center, 0.25f, Interpolation.sineOut));
+            return;
+        }
+
+        float targetHeight = stage.getHeight() * 0.80f;
+        tempVec.set(target.getWidth() / 2f, target.getHeight() / 2f);
+        target.localToStageCoordinates(tempVec);
+
+        float dy = targetHeight - tempVec.y;
+        innerPanel.addAction(Actions.moveBy(0, dy, 0.25f, Interpolation.sineOut));
+    }
 
     private void showError(String msg) {
         if (activeErrorLabel != null) activeErrorLabel.setText(msg);
     }
 
-    private void setBusy(boolean b) { this.busy = b; }
+    private void setBusy(boolean b) {
+        this.busy = b;
+        if (b) {
+            stage.setKeyboardFocus(null);
+            Gdx.input.setOnscreenKeyboardVisible(false);
+            shiftPanelToActor(null);
+        }
+    }
+
+    private InputListener makeEnterListener(final TextField next, final Runnable action) {
+        return new InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (keycode == Input.Keys.ENTER) {
+                    if (next != null) {
+                        stage.setKeyboardFocus(next);
+                    } else if (action != null) {
+                        stage.setKeyboardFocus(null);
+                        Gdx.input.setOnscreenKeyboardVisible(false);
+                        shiftPanelToActor(null);
+                        action.run();
+                    }
+                    return true;
+                }
+                return false;
+            }
+        };
+    }
+
+    private TextField makeField(String text, String placeholder, boolean password) {
+        TextField field = new TextField(text, fieldStyle);
+        field.setMessageText(placeholder);
+
+        field.addListener(new FocusListener() {
+            @Override
+            public void keyboardFocusChanged(FocusEvent event, Actor actor, boolean focused) {
+                if (focused) {
+                    Gdx.input.setOnscreenKeyboardVisible(true);
+                    shiftPanelToActor(actor);
+                } else {
+                    // Check if anything else is focused. If not, reset panel position.
+                    Gdx.app.postRunnable(() -> {
+                        if (!(stage.getKeyboardFocus() instanceof TextField)) {
+                            shiftPanelToActor(null);
+                        }
+                    });
+                }
+            }
+        });
+
+        if (password) {
+            field.setPasswordMode(true);
+            field.setPasswordCharacter('*');
+        }
+        return field;
+    }
 
     private Label makeLabel(String text, float scale) {
         Label lbl = new Label(text, skin, "default");
@@ -351,15 +395,5 @@ public class LoginScreen {
         TextButton btn = new TextButton(text, style);
         btn.getLabel().setFontScale(scale);
         return btn;
-    }
-
-    private TextField makeField(String text, String placeholder, boolean password) {
-        TextField field = new TextField(text, fieldStyle);
-        field.setMessageText(placeholder);
-        if (password) {
-            field.setPasswordMode(true);
-            field.setPasswordCharacter('*');
-        }
-        return field;
     }
 }

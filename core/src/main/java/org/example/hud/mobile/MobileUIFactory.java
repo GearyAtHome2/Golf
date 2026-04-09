@@ -24,6 +24,8 @@ import org.example.hud.SpinIndicator;
 import org.example.hud.renderer.MainMenuRenderer;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
+import org.example.scoreBoard.CourseType;
+import org.example.scoreBoard.DailySubmissionCache;
 
 import org.example.hud.UIUtils;
 import static org.example.hud.UIUtils.createRoundedRectDrawable;
@@ -145,7 +147,7 @@ public static class MobileUIPackage {
         return table.add(btn).width(w).height(h);
     }
 
-    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, Viewport viewport, BitmapFont font) {
+    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache, Viewport viewport, BitmapFont font) {
         table.clearChildren();
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
         MainMenuRenderer.MenuState state = menuManager.getCurrentMenuState();
@@ -178,7 +180,7 @@ public static class MobileUIPackage {
                 btn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
-                        menuManager.handleExternalSelection(index, callback, sessions);
+                        menuManager.handleExternalSelection(index, callback, sessions, dailyCache);
                     }
                 });
                 innerTable.add(btn).width(bW).height(bH).padBottom(spacing).left().row();
@@ -211,31 +213,46 @@ public static class MobileUIPackage {
             if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
                 if (i == 0 && sessions.standard != null && !sessions.standard.isFinished()) {
                     text = "RESUME 18 (" + (sessions.standard.getCurrentHoleIndex() + 1) + "/18)";
-                } else if (i == 1 && sessions.daily18 != null) {
-                    if (sessions.daily18.isFinished()) {
-                        text = "DAILY 18 [COMPLETE]";
+                } else if (i == 1) {
+                    if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(CourseType.HOLES_18)) {
+                        text = "DAILY 18 (SUBMITTED TODAY)";
                         isLocked = true;
-                    } else {
-                        text = "RESUME DAILY 18 (" + (sessions.daily18.getCurrentHoleIndex() + 1) + "/18)";
+                    } else if (sessions.daily18 != null) {
+                        if (sessions.daily18.isFinished()) {
+                            text = "DAILY 18 [COMPLETE]";
+                            isLocked = true;
+                        } else {
+                            text = "RESUME DAILY 18 (" + (sessions.daily18.getCurrentHoleIndex() + 1) + "/18)";
+                        }
                     }
-                } else if (i == 2 && sessions.daily9 != null) {
-                    if (sessions.daily9.isFinished()) {
-                        text = "DAILY 9 [COMPLETE]";
+                } else if (i == 2) {
+                    if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(CourseType.HOLES_9)) {
+                        text = "DAILY 9 (SUBMITTED TODAY)";
                         isLocked = true;
-                    } else {
-                        text = "RESUME DAILY 9 (" + (sessions.daily9.getCurrentHoleIndex() + 1) + "/9)";
+                    } else if (sessions.daily9 != null) {
+                        if (sessions.daily9.isFinished()) {
+                            text = "DAILY 9 [COMPLETE]";
+                            isLocked = true;
+                        } else {
+                            text = "RESUME DAILY 9 (" + (sessions.daily9.getCurrentHoleIndex() + 1) + "/9)";
+                        }
                     }
-                } else if (i == 3 && sessions.daily1 != null) {
-                    if (sessions.daily1.isFinished()) {
-                        text = "DAILY 1-HOLE [COMPLETE]";
+                } else if (i == 3) {
+                    if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(CourseType.HOLES_1)) {
+                        text = "DAILY 1-HOLE (SUBMITTED TODAY)";
                         isLocked = true;
-                    } else {
-                        text = "RESUME DAILY 1-HOLE";
+                    } else if (sessions.daily1 != null) {
+                        if (sessions.daily1.isFinished()) {
+                            text = "DAILY 1-HOLE [COMPLETE]";
+                            isLocked = true;
+                        } else {
+                            text = "RESUME DAILY 1-HOLE";
+                        }
                     }
                 }
             }
 
-            boolean doSparkle = !isLocked && shouldSparkle(state, i, sessions);
+            boolean doSparkle = !isLocked && shouldSparkle(state, i, sessions, dailyCache);
             TextButton btn = doSparkle ? new SparkleButton(text, menuStyle) : new TextButton(text, menuStyle);
             if (doSparkle) ((SparkleButton) btn).setSparkleEnabled(true);
 
@@ -261,7 +278,7 @@ public static class MobileUIPackage {
                 btn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
-                        menuManager.handleExternalSelection(index, callback, sessions);
+                        menuManager.handleExternalSelection(index, callback, sessions, dailyCache);
                     }
                 });
             }
@@ -274,7 +291,7 @@ public static class MobileUIPackage {
         return s == null || !s.isFinished();
     }
 
-    private static boolean shouldSparkle(MainMenuRenderer.MenuState state, int i, CompetitiveSessions sessions) {
+    private static boolean shouldSparkle(MainMenuRenderer.MenuState state, int i, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         if (state == MainMenuRenderer.MenuState.MAIN) {
             return i == 1 && (sessions == null || isSessionUnfinished(sessions.standard)
                     || isSessionUnfinished(sessions.daily18) || isSessionUnfinished(sessions.daily9)
@@ -283,16 +300,16 @@ public static class MobileUIPackage {
         if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
             if (sessions == null) return i >= 1 && i <= 3;
             if (i == 0) return false; // standard 18 never sparkles — focus users on daily rounds
-            if (i == 1) return isSessionUnfinished(sessions.daily18);
-            if (i == 2) return isSessionUnfinished(sessions.daily9);
-            if (i == 3) return isSessionUnfinished(sessions.daily1);
+            if (i == 1) return isSessionUnfinished(sessions.daily18) && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(CourseType.HOLES_18));
+            if (i == 2) return isSessionUnfinished(sessions.daily9) && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(CourseType.HOLES_9));
+            if (i == 3) return isSessionUnfinished(sessions.daily1) && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(CourseType.HOLES_1));
         }
         return false;
     }
 
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
-            case MAIN -> new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE"};
+            case MAIN -> new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"};
             case PLAY_OPTIONS -> new String[]{"RANDOM MAP", "SELECT MAP", "PLAY SEED", "BACK"};
             case MAP_SELECT -> {
                 LevelData.Archetype[] archetypes = LevelData.Archetype.values();
