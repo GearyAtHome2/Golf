@@ -22,6 +22,7 @@ public class MainMenuRenderer {
     private float pulseTimer = 0;
     private final GlyphLayout layout = new GlyphLayout();
     private float maxMenuTextWidth = Float.MAX_VALUE;
+    private String loggedInUser = "";
 
     public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, int selection, MenuState state, CompetitiveSessions sessions, int mapScrollOffset) {
         pulseTimer += Gdx.graphics.getDeltaTime();
@@ -77,12 +78,36 @@ public class MainMenuRenderer {
 
     }
 
+    public void setLoggedInUser(String name) {
+        this.loggedInUser = name != null ? name : "";
+    }
+
     private void renderMainMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, CompetitiveSessions sessions) {
         boolean competitiveSparkle = anyCompetitiveUnfinished(sessions);
         drawOption(batch, font, selection == 0, true, "PLAY >", x, y);
         drawSparkleOption(batch, font, selection == 1, true, competitiveSparkle, true, "COMPETITIVE >", x, y - s);
         drawOption(batch, font, selection == 2, true, "INSTRUCTIONS", x, y - (s * 2));
         drawOption(batch, font, selection == 3, true, "PRACTICE >", x, y - (s * 3));
+
+        float savedScale = font.getScaleX();
+
+        // Username display (small, above LOG OUT)
+        if (!loggedInUser.isEmpty()) {
+            font.getData().setScale(savedScale * 0.52f);
+            font.setColor(0.6f, 0.6f, 0.6f, 1f);
+            font.draw(batch, "Signed in as: " + loggedInUser, x, y - (s * 4.4f));
+            font.getData().setScale(savedScale);
+        }
+
+        // LOG OUT option — amber/red tint to distinguish it
+        String logoutText = (selection == 4) ? "> LOG OUT" : "LOG OUT";
+        Color logoutColor = (selection == 4) ? new Color(1f, 0.55f, 0.2f, 1f) : new Color(0.85f, 0.4f, 0.2f, 0.9f);
+        layout.setText(font, logoutText);
+        font.setColor(0, 0, 0, 0.5f);
+        font.draw(batch, logoutText, x + 1, y - (s * 5f) - 1);
+        font.setColor(logoutColor);
+        font.draw(batch, logoutText, x, y - (s * 5f));
+        font.getData().setScale(savedScale);
     }
 
     private void renderPlayOptionsMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {

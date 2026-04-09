@@ -31,6 +31,9 @@ import org.example.input.DesktopInputProcessor;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 import org.example.performance.PhysicsProfiler;
+import org.example.auth.AuthService;
+import org.example.auth.LoginScreen;
+import org.example.auth.UserSession;
 import org.example.scoreBoard.ScoreSubmissionHandler;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
@@ -44,9 +47,9 @@ import org.example.terrain.level.LevelFactory;
 
 public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHandler, HazardManager.HazardListener {
 
-    private enum GameState {START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
+    private enum GameState {LOGIN, START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
 
-    private GameState currentState = GameState.START;
+    private GameState currentState = GameState.LOGIN;
     private GameState previousState = GameState.START;
     private GameState gameplayState = GameState.PLAYING;
     private LevelData.Archetype selectedArchetype = null;
@@ -79,6 +82,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
     private final Vector3 tempV3 = new Vector3();
     private final Vector2 stageTouch = new Vector2();
+    private AuthService  authService;
+    private UserSession  userSession;
+    private LoginScreen  loginScreen;
 
     @Override
     public void create() {
@@ -95,17 +101,41 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private void initCoreSystems() {
         setupCamera();
         setupEnvironment();
-        modelBatch = new ModelBatch();
-        hud = new HUD(config);
-        levelManager = new LevelManager();
-        levelFactory = new LevelFactory();
-        ghostManager = new GhostManager(8);
-        menuManager = new MenuManager();
-        hazardManager = new HazardManager();
+        modelBatch     = new ModelBatch();
+        hud            = new HUD(config);
+        levelManager   = new LevelManager();
+        levelFactory   = new LevelFactory();
+        ghostManager   = new GhostManager(8);
+        menuManager    = new MenuManager();
+        hazardManager  = new HazardManager();
         shotController = new ShotController();
         particleManager = new ParticleManager();
-        windManager = new WindManager();
+        windManager    = new WindManager();
         sessionManager = new SessionManager(config);
+
+        authService = new AuthService();
+        userSession = new UserSession();
+        userSession.load();
+
+        loginScreen = new LoginScreen(hud.getSkin(), authService, userSession, r -> {
+            Gdx.app.log("Login", "Welcome, " + r.displayName);
+            hud.setLoggedInUser(r.displayName);
+            changeState(GameState.START);
+        });
+
+        if (userSession.isLoggedIn()) {
+            userSession.tryAutoLogin(authService, new AuthService.AuthCallback() {
+                @Override public void onSuccess(AuthService.AuthResult r) {
+                    Gdx.app.log("UserSession", "Auto-login OK — " + r.displayName);
+                    hud.setLoggedInUser(r.displayName);
+                    changeState(GameState.START);
+                }
+                @Override public void onFailure(String msg) {
+                    Gdx.app.log("UserSession", "Auto-login failed — showing login screen.");
+                    // currentState stays LOGIN; loginScreen is already visible.
+                }
+            });
+        }
     }
 
     private void initInputSystems() {
@@ -143,7 +173,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
 
         com.badlogic.gdx.scenes.scene2d.Stage activeStage;
-        if (currentState == GameState.START) {
+        if (currentState == GameState.LOGIN) {
+            activeStage = loginScreen.getStage();
+        } else if (currentState == GameState.START) {
             activeStage = hud.getStartMenuStage();
         } else if (currentState == GameState.PAUSED) {
             activeStage = hud.getPauseMenuStage();
@@ -177,6 +209,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         this.currentState = newState;
 
         switch (newState) {
+            case LOGIN:
             case START:
             case PAUSED:
             case INSTRUCTIONS:
@@ -200,6 +233,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (submissionStarted) return;
 
         switch (currentState) {
+            case LOGIN -> {} // input handled by the login stage via the input multiplexer
             case START -> {
                 menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions());
                 // Android: tap the right half of the screen to go back from any sub-menu
@@ -257,6 +291,30 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void handlePauseInput() {
+        // TODO Phase 2 test — remove after verification. Press T on pause screen to test auth + session.
+        if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.T)) {
+            Gdx.app.log("AuthTest", "Session state — loggedIn: " + userSession.isLoggedIn()
+                + ", name: " + userSession.getDisplayName()
+                + ", idToken empty: " + userSession.getIdToken().isEmpty());
+
+            AuthService.AuthCallback saveAndLog = new AuthService.AuthCallback() {
+                @Override public void onSuccess(AuthService.AuthResult r) {
+                    userSession.save(r);
+                    Gdx.app.log("AuthTest", "Auth OK — UID: " + r.uid + ", name: " + r.displayName
+                        + " | Session saved. Restart the game to verify auto-login.");
+                }
+                @Override public void onFailure(String msg) {
+                    Gdx.app.error("AuthTest", "Auth failed: " + msg);
+                }
+            };
+
+            authService.signIn("test@geary-golf.com", "test1234", new AuthService.AuthCallback() {
+                @Override public void onSuccess(AuthService.AuthResult r) { saveAndLog.onSuccess(r); }
+                @Override public void onFailure(String msg) {
+                    Gdx.app.error("AuthTest", "Sign-in failed: " + msg);
+                }
+            });
+        }
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) {
             exitToMainMenu();
         } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
@@ -282,7 +340,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void handleNewLevelInput() {
-        if (isOverlayState(currentState) || currentState == GameState.START || currentState == GameState.PAUSED) return;
+        if (isOverlayState(currentState) || currentState == GameState.LOGIN || currentState == GameState.START || currentState == GameState.PAUSED) return;
 
         if (gameplayState == GameState.COMPETITIVE) {
             GameSession active = sessionManager.getActive();
@@ -451,7 +509,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         gameViewport.apply();
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
-        if (currentState == GameState.START) {
+        if (currentState == GameState.LOGIN) {
+            loginScreen.render();
+        } else if (currentState == GameState.START) {
             hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions());
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
@@ -738,6 +798,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         initLevel();
     }
 
+    @Override
+    public void onLogout() {
+        userSession.clear();
+        hud.setLoggedInUser("");
+        loginScreen.reset();
+        exitToMainMenu();
+        changeState(GameState.LOGIN);
+    }
+
     private boolean isVictoryCourseComplete() {
         GameSession active = sessionManager.getActive();
         return isVictory && gameplayState == GameState.COMPETITIVE && active != null && active.isFinished();
@@ -760,12 +829,14 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     public void resize(int width, int height) {
         gameViewport.update(width, height, true);
         hud.resize(width, height);
+        if (loginScreen != null) loginScreen.resize(width, height);
     }
 
     @Override
     public void dispose() {
         modelBatch.dispose();
         hud.dispose();
+        if (loginScreen != null) loginScreen.dispose();
         shotController.dispose();
         levelManager.dispose();
         ghostManager.dispose();

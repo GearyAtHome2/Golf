@@ -101,6 +101,7 @@ public class MenuManager {
             case 1 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
             case 2 -> callback.onShowInstructions();
             case 3 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
+            case 4 -> callback.onLogout();
         }
     }
 
@@ -153,7 +154,7 @@ public class MenuManager {
 
     private int getMaxSelection() {
         return switch (currentMenuState) {
-            case MAIN -> 4;
+            case MAIN -> 5;
             case PLAY_OPTIONS -> 4;
             case MAP_SELECT -> MAP_SELECT_TOTAL;
             case EIGHTEEN_HOLES -> 5;
@@ -183,5 +184,6 @@ public class MenuManager {
         void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode);
         void onStartPracticeRange();
         void onStartPuttingGreen();
+        void onLogout();
     }
 }
