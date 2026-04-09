@@ -17,24 +17,36 @@ public class ScoreSubmissionHandler {
     private final HighscoreService highscoreService;
     private final Runnable onSubmitSuccess;
     private final Runnable onCancel;
+    private final String displayName;
+    private final String uid;
 
-    public ScoreSubmissionHandler(GameSession session, Runnable onSubmitSuccess, Runnable onCancel) {
+    public ScoreSubmissionHandler(GameSession session, String displayName, String uid, Runnable onSubmitSuccess, Runnable onCancel) {
         this.session = session;
         this.courseType = CourseType.fromMode(session.getMode());
         this.onSubmitSuccess = onSubmitSuccess;
         this.onCancel = onCancel;
         this.highscoreService = new HighscoreService();
+        this.displayName = displayName != null ? displayName.trim() : "";
+        this.uid = uid != null ? uid : "";
     }
 
-    public ScoreSubmissionHandler(GameSession session, CourseType courseType, Runnable onSubmitSuccess, Runnable onCancel) {
+    public ScoreSubmissionHandler(GameSession session, CourseType courseType, String displayName, String uid, Runnable onSubmitSuccess, Runnable onCancel) {
         this.session = session;
         this.courseType = courseType;
         this.onSubmitSuccess = onSubmitSuccess;
         this.onCancel = onCancel;
         this.highscoreService = new HighscoreService();
+        this.displayName = displayName != null ? displayName.trim() : "";
+        this.uid = uid != null ? uid : "";
     }
 
     public void trigger(Stage stage, Skin skin) {
+        if (!displayName.isEmpty()) {
+            submit(displayName);
+            if (onSubmitSuccess != null) onSubmitSuccess.run();
+            return;
+        }
+
         Gdx.app.log("SCORE_SUBMIT", "Triggered ScoreSubmissionHandler");
 
         if (Gdx.app.getType() == Application.ApplicationType.Desktop) {
@@ -128,6 +140,6 @@ public class ScoreSubmissionHandler {
         float elapsedTime = session.getElapsedTimeSeconds();
         int[] pars = session.getCompetitiveScore().getPars();
         int[] scores = session.getCompetitiveScore().getScores();
-        highscoreService.submitScore(username, finalScore, difficulty, courseType, elapsedTime, pars, scores);
+        highscoreService.submitScore(username, uid, finalScore, difficulty, courseType, elapsedTime, pars, scores);
     }
 }

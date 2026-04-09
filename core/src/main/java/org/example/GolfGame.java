@@ -291,30 +291,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void handlePauseInput() {
-        // TODO Phase 2 test — remove after verification. Press T on pause screen to test auth + session.
-        if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.T)) {
-            Gdx.app.log("AuthTest", "Session state — loggedIn: " + userSession.isLoggedIn()
-                + ", name: " + userSession.getDisplayName()
-                + ", idToken empty: " + userSession.getIdToken().isEmpty());
-
-            AuthService.AuthCallback saveAndLog = new AuthService.AuthCallback() {
-                @Override public void onSuccess(AuthService.AuthResult r) {
-                    userSession.save(r);
-                    Gdx.app.log("AuthTest", "Auth OK — UID: " + r.uid + ", name: " + r.displayName
-                        + " | Session saved. Restart the game to verify auto-login.");
-                }
-                @Override public void onFailure(String msg) {
-                    Gdx.app.error("AuthTest", "Auth failed: " + msg);
-                }
-            };
-
-            authService.signIn("test@geary-golf.com", "test1234", new AuthService.AuthCallback() {
-                @Override public void onSuccess(AuthService.AuthResult r) { saveAndLog.onSuccess(r); }
-                @Override public void onFailure(String msg) {
-                    Gdx.app.error("AuthTest", "Sign-in failed: " + msg);
-                }
-            });
-        }
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) {
             exitToMainMenu();
         } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
@@ -374,6 +350,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         new ScoreSubmissionHandler(
                 sessionManager.getActive(),
+                userSession.getDisplayName(),
+                userSession.getUid(),
                 () -> {
                     Gdx.app.postRunnable(() -> {
                         Gdx.app.log("GOLF_GAME", "Submission successful, exiting to main menu");

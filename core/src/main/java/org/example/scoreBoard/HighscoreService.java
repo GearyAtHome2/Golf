@@ -107,7 +107,7 @@ public class HighscoreService {
         }
     }
 
-    public void submitScore(String name, int score, String difficulty, CourseType courseType, float elapsedTime, int[] pars, int[] scores) {
+    public void submitScore(String name, String uid, int score, String difficulty, CourseType courseType, float elapsedTime, int[] pars, int[] scores) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
         String timestamp = sdf.format(new Date());
@@ -115,6 +115,9 @@ public class HighscoreService {
         StringBuilder json = new StringBuilder();
         json.append("{ \"fields\": {");
         json.append("\"playerName\": { \"stringValue\": \"").append(name).append("\" },");
+        if (uid != null && !uid.isEmpty()) {
+            json.append("\"uid\": { \"stringValue\": \"").append(uid).append("\" },");
+        }
         json.append("\"score\": { \"integerValue\": ").append(score).append(" },");
         json.append("\"difficulty\": { \"stringValue\": \"").append(difficulty).append("\" },");
         json.append("\"submissionTime\": { \"timestampValue\": \"").append(timestamp).append("\" }");
