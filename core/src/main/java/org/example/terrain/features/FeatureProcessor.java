@@ -4,6 +4,7 @@ import com.badlogic.gdx.math.MathUtils;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 
+import java.util.Arrays;
 import java.util.Random;
 
 public class FeatureProcessor {
@@ -15,8 +16,12 @@ public class FeatureProcessor {
     private final int SMOOTH_RADIUS = 2;
     private final float SMOOTH_FAIRWAY_BUFFER = 6.0f;
     private final float SMOOTH_STRENGTH = 0.9f;
-    private final float MOGUL_BASE_DAMPING = 0.3f;
+    private final float MOGUL_BASE_DAMPING = 0.15f;
     private final float MOGUL_FADE_DISTANCE = 18.0f;
+
+    private float[] cachedDistMap = null;
+    private int cachedSX = 0;
+    private int cachedSZ = 0;
 
     public FeatureProcessor(LevelData data, Random rng, float off1, float off2,
                             float[] waveAngles, float[] waveFreqs, float[] waveAmps, float[] waveOffsets) {
@@ -30,23 +35,77 @@ public class FeatureProcessor {
         this.waveOffsets = waveOffsets;
     }
 
-    /* --- NOISE & SMOOTHING --- */
+    public void buildDistanceCache(Terrain.TerrainType[][] map) {
+        cachedSX = map.length;
+        cachedSZ = map[0].length;
+        int total = cachedSX * cachedSZ;
+        if (cachedDistMap == null || cachedDistMap.length != total) {
+            cachedDistMap = new float[total];
+        }
 
-    public float calculateMogulNoise(int x, int z, float scale, float o1, float o2, float freq, float und, float maxH, boolean[][] pathMask) {
+        float maxDist = MOGUL_FADE_DISTANCE + 1.0f;
+        Arrays.fill(cachedDistMap, maxDist);
+
+        for (int x = 0; x < cachedSX; x++) {
+            for (int z = 0; z < cachedSZ; z++) {
+                Terrain.TerrainType t = map[x][z];
+                if (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE) {
+                    cachedDistMap[x * cachedSZ + z] = 0;
+                } else if (z > 0) {
+                    cachedDistMap[x * cachedSZ + z] = Math.min(cachedDistMap[x * cachedSZ + z], cachedDistMap[x * cachedSZ + (z - 1)] + 1);
+                }
+            }
+            for (int z = cachedSZ - 2; z >= 0; z--) {
+                cachedDistMap[x * cachedSZ + z] = Math.min(cachedDistMap[x * cachedSZ + z], cachedDistMap[x * cachedSZ + (z + 1)] + 1);
+            }
+        }
+
+        float[] rowResults = new float[cachedSX];
+        for (int z = 0; z < cachedSZ; z++) {
+            for (int x = 0; x < cachedSX; x++) {
+                float minVal = maxDist;
+                int searchR = (int) maxDist;
+                for (int dx = -searchR; dx <= searchR; dx++) {
+                    int nx = x + dx;
+                    if (nx >= 0 && nx < cachedSX) {
+                        float vDist = cachedDistMap[nx * cachedSZ + z];
+                        float hDist = Math.abs(dx);
+                        float totalD = (float) Math.sqrt(vDist * vDist + hDist * hDist);
+                        if (totalD < minVal) minVal = totalD;
+                    }
+                }
+                rowResults[x] = minVal;
+            }
+            for (int x = 0; x < cachedSX; x++) {
+                cachedDistMap[x * cachedSZ + z] = rowResults[x];
+            }
+        }
+    }
+
+    public float calculateMogulNoise(int x, int z, float scale, float o1, float o2, float freq, float und, float maxH) {
         float rawMogul = (float) Math.pow(Math.abs(generateMultiWaveNoise(x * scale + o1, z * scale + o2, freq)), 1.2f) * und * maxH * 6.0f;
-        float t = MathUtils.clamp(getDistanceToPath(x, z, pathMask, MOGUL_FADE_DISTANCE) / MOGUL_FADE_DISTANCE, 0f, 1f);
+        if (cachedDistMap == null || cachedSX == 0) return rawMogul;
+        float dist = cachedDistMap[x * cachedSZ + z];
+        float t = MathUtils.clamp(dist / MOGUL_FADE_DISTANCE, 0f, 1f);
         return rawMogul * MathUtils.lerp(MOGUL_BASE_DAMPING, 1.0f, t * t * (3 - 2 * t));
     }
 
     public void applyFairwayGaussianSmoothing(Terrain.TerrainType[][] map, float[][] heights) {
         int SX = map.length, SZ = map[0].length;
         float[][] smoothed = new float[SX][SZ];
-        boolean[][] pathMask = getPathMask(map);
-        float[][] k = {{1 / 256f, 4 / 256f, 6 / 256f, 4 / 256f, 1 / 256f}, {4 / 256f, 16 / 256f, 24 / 256f, 16 / 256f, 4 / 256f}, {6 / 256f, 24 / 256f, 36 / 256f, 24 / 256f, 6 / 256f}, {4 / 256f, 16 / 256f, 24 / 256f, 16 / 256f, 4 / 256f}, {1 / 256f, 4 / 256f, 6 / 256f, 4 / 256f, 1 / 256f}};
+        float[][] k = {
+                {1 / 256f, 4 / 256f, 6 / 256f, 4 / 256f, 1 / 256f},
+                {4 / 256f, 16 / 256f, 24 / 256f, 16 / 256f, 4 / 256f},
+                {6 / 256f, 24 / 256f, 36 / 256f, 24 / 256f, 6 / 256f},
+                {4 / 256f, 16 / 256f, 24 / 256f, 16 / 256f, 4 / 256f},
+                {1 / 256f, 4 / 256f, 6 / 256f, 4 / 256f, 1 / 256f}
+        };
+
+//        buildDistanceCache(map);
 
         for (int x = 0; x < SX; x++) {
             for (int z = 0; z < SZ; z++) {
-                float dist = getDistanceToPath(x, z, pathMask, SMOOTH_FAIRWAY_BUFFER);
+                float dist = cachedDistMap[x * cachedSZ + z];
                 if (dist < SMOOTH_FAIRWAY_BUFFER) {
                     float wSum = 0, hSum = 0;
                     for (int dx = -SMOOTH_RADIUS; dx <= SMOOTH_RADIUS; dx++) {
@@ -61,13 +120,13 @@ public class FeatureProcessor {
                     }
                     float falloff = MathUtils.clamp(1.0f - (dist / SMOOTH_FAIRWAY_BUFFER), 0, 1);
                     smoothed[x][z] = MathUtils.lerp(heights[x][z], hSum / wSum, SMOOTH_STRENGTH * falloff);
-                } else smoothed[x][z] = heights[x][z];
+                } else {
+                    smoothed[x][z] = heights[x][z];
+                }
             }
         }
         for (int x = 0; x < SX; x++) System.arraycopy(smoothed[x], 0, heights[x], 0, SZ);
     }
-
-    /* --- FAIRWAY GENERATION --- */
 
     public void generateSegmentedFairway(Terrain.TerrainType[][] map, int gX, int gZ, float fWidth) {
         float breakT = 0.2f - (data.getFairwayCohesion() * 1.5f) + (data.getFairwayWiggle() * 0.2f);
@@ -76,9 +135,11 @@ public class FeatureProcessor {
             float cX = MathUtils.lerp(map.length / 2f, (float) gX, zN) + (MathUtils.sin(z * bF + off1) + MathUtils.sin(z * bF * 2.1f + off2) * 0.5f) * ((map.length * 0.05f) + (data.getFairwayWiggle() * map.length * 0.12f));
             float wN = (MathUtils.sin(z * 0.05f + off2 * 0.5f) + MathUtils.sin(z * 0.09f + off1 * 0.3f) * 0.5f);
             float fW = fWidth * (float) Math.sqrt(1.0f - Math.pow(1.0f - MathUtils.clamp((wN - breakT) * 0.4f, 0, 1), 2));
-            if (fW > 1.0f) for (int x = (int) (cX - fW / 2); x <= (int) (cX + fW / 2); x++) {
-                if (x >= 0 && x < map.length && Math.pow((x - cX) / (fW / 2), 2) < 0.95f && map[x][z] == Terrain.TerrainType.ROUGH)
-                    map[x][z] = Terrain.TerrainType.FAIRWAY;
+            if (fW > 1.0f) {
+                for (int x = (int) (cX - fW / 2); x <= (int) (cX + fW / 2); x++) {
+                    if (x >= 0 && x < map.length && Math.pow((x - cX) / (fW / 2), 2) < 0.95f && map[x][z] == Terrain.TerrainType.ROUGH)
+                        map[x][z] = Terrain.TerrainType.FAIRWAY;
+                }
             }
         }
     }
@@ -107,14 +168,13 @@ public class FeatureProcessor {
             } else cls[z] = tC;
             ws[z] = fW;
         }
-        for (int z = 0; z < map[0].length; z++)
+        for (int z = 0; z < map[0].length; z++) {
             for (int x = 0; x < map.length; x++) {
                 if (map[x][z] == Terrain.TerrainType.ROUGH && ws[z] > 0 && Math.abs(x - cls[z]) < ws[z] / 2f)
                     map[x][z] = Terrain.TerrainType.FAIRWAY;
             }
+        }
     }
-
-    /* --- UTILS --- */
 
     public float generateMultiWaveNoise(float x, float z, float bF) {
         float total = 0, totalA = 0;
@@ -124,31 +184,6 @@ public class FeatureProcessor {
             totalA += waveAmps[i];
         }
         return total / totalA;
-    }
-
-
-    private boolean[][] getPathMask(Terrain.TerrainType[][] map) {
-        boolean[][] m = new boolean[map.length][map[0].length];
-        for (int x = 0; x < map.length; x++)
-            for (int z = 0; z < map[0].length; z++) {
-                Terrain.TerrainType t = map[x][z];
-                m[x][z] = (t == Terrain.TerrainType.FAIRWAY || t == Terrain.TerrainType.GREEN || t == Terrain.TerrainType.TEE);
-            }
-        return m;
-    }
-
-    private float getDistanceToPath(int x, int z, boolean[][] m, float max) {
-        float minSq = max * max;
-        int r = (int) max + 1;
-        for (int ix = Math.max(0, x - r); ix <= Math.min(m.length - 1, x + r); ix++) {
-            for (int iz = Math.max(0, z - r); iz <= Math.min(m[0].length - 1, z + r); iz++) {
-                if (m[ix][iz]) {
-                    float dSq = (x - ix) * (x - ix) + (z - iz) * (z - iz);
-                    if (dSq < minSq) minSq = dSq;
-                }
-            }
-        }
-        return (float) Math.sqrt(minSq);
     }
 
     public LevelData getData() {

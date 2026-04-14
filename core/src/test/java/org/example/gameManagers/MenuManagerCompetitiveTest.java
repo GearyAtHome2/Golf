@@ -3,6 +3,7 @@ package org.example.gameManagers;
 import org.example.GameConfig;
 import org.example.hud.renderer.MainMenuRenderer;
 import org.example.input.GameInputProcessor;
+import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ public class MenuManagerCompetitiveTest {
     private MenuManager menuManager;
     private TrackingMenuHandler handler;
     private CompetitiveSessions noSessions;
+    private DailySubmissionCache noCache;
 
     /** Minimal handler that records which callback was called. */
     private static class TrackingMenuHandler implements MenuManager.MenuHandler {
@@ -29,6 +31,8 @@ public class MenuManagerCompetitiveTest {
         @Override public void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode) { lastCalled = "difficulty:" + mode; }
         @Override public void onStartPracticeRange() { lastCalled = "practiceRange"; }
         @Override public void onStartPuttingGreen() { lastCalled = "puttingGreen"; }
+        @Override public void onLogout() { lastCalled = "logout"; }
+        @Override public void onStartWithArchetype(org.example.terrain.level.LevelData.Archetype archetype) { lastCalled = "archetype"; }
     }
 
     @BeforeEach
@@ -36,47 +40,48 @@ public class MenuManagerCompetitiveTest {
         menuManager = new MenuManager();
         handler = new TrackingMenuHandler();
         noSessions = new CompetitiveSessions(null, null, null, null);
+        noCache = null;
     }
 
     @Test
     public void testNavigateToCompetitiveMenuFromMain() {
         // Select index 1 from MAIN to enter EIGHTEEN_HOLES
-        menuManager.handleExternalSelection(1, handler, noSessions);
+        menuManager.handleExternalSelection(1, handler, noSessions, noCache);
         assertEquals(MainMenuRenderer.MenuState.EIGHTEEN_HOLES, menuManager.getCurrentMenuState());
     }
 
     @Test
     public void testSelectStandard18CallsCorrectCallback() {
         menuManager.setMenuState(MainMenuRenderer.MenuState.EIGHTEEN_HOLES);
-        menuManager.handleExternalSelection(0, handler, noSessions);
+        menuManager.handleExternalSelection(0, handler, noSessions, noCache);
         assertEquals("standard18", handler.lastCalled);
     }
 
     @Test
     public void testSelectDaily18CallsCorrectCallback() {
         menuManager.setMenuState(MainMenuRenderer.MenuState.EIGHTEEN_HOLES);
-        menuManager.handleExternalSelection(1, handler, noSessions);
+        menuManager.handleExternalSelection(1, handler, noSessions, noCache);
         assertEquals("daily18", handler.lastCalled);
     }
 
     @Test
     public void testSelectDaily9CallsCorrectCallback() {
         menuManager.setMenuState(MainMenuRenderer.MenuState.EIGHTEEN_HOLES);
-        menuManager.handleExternalSelection(2, handler, noSessions);
+        menuManager.handleExternalSelection(2, handler, noSessions, noCache);
         assertEquals("daily9", handler.lastCalled);
     }
 
     @Test
     public void testSelectDaily1CallsCorrectCallback() {
         menuManager.setMenuState(MainMenuRenderer.MenuState.EIGHTEEN_HOLES);
-        menuManager.handleExternalSelection(3, handler, noSessions);
+        menuManager.handleExternalSelection(3, handler, noSessions, noCache);
         assertEquals("daily1", handler.lastCalled);
     }
 
     @Test
     public void testBackFromCompetitiveGoesToMain() {
         menuManager.setMenuState(MainMenuRenderer.MenuState.EIGHTEEN_HOLES);
-        menuManager.handleExternalSelection(4, handler, noSessions);
+        menuManager.handleExternalSelection(4, handler, noSessions, noCache);
         assertEquals(MainMenuRenderer.MenuState.MAIN, menuManager.getCurrentMenuState());
     }
 
@@ -87,7 +92,7 @@ public class MenuManagerCompetitiveTest {
         for (int idx : indices) {
             menuManager.setMenuState(MainMenuRenderer.MenuState.EIGHTEEN_HOLES);
             final int capturedIdx = idx;
-            assertDoesNotThrow(() -> menuManager.handleExternalSelection(capturedIdx, handler, noSessions));
+            assertDoesNotThrow(() -> menuManager.handleExternalSelection(capturedIdx, handler, noSessions, noCache));
         }
     }
 }

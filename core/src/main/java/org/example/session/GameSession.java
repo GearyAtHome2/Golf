@@ -32,6 +32,7 @@ public class GameSession implements Json.Serializable {
     private boolean isStarted = false;
     private long timestamp;
     private float elapsedTimeSeconds = 0f;
+    private boolean submitted = false;
     private CompetitiveScore competitiveScore;
 
     private transient List<LevelData> courseLayout = new ArrayList<>();
@@ -113,6 +114,7 @@ public class GameSession implements Json.Serializable {
         json.writeValue("isStarted", isStarted);
         json.writeValue("timestamp", timestamp);
         json.writeValue("elapsedTimeSeconds", elapsedTimeSeconds);
+        json.writeValue("submitted", submitted);
         json.writeValue("competitiveScore", competitiveScore);
     }
 
@@ -125,6 +127,7 @@ public class GameSession implements Json.Serializable {
         this.isStarted = jsonData.getBoolean("isStarted");
         this.timestamp = jsonData.getLong("timestamp");
         this.elapsedTimeSeconds = jsonData.getFloat("elapsedTimeSeconds", 0f);
+        this.submitted = jsonData.getBoolean("submitted", false);
         this.competitiveScore = json.readValue(CompetitiveScore.class, jsonData.get("competitiveScore"));
         rebuildLayout();
     }
@@ -153,4 +156,7 @@ public class GameSession implements Json.Serializable {
     public boolean isStarted() { return isStarted; }
     public void setStarted(boolean started) { this.isStarted = started; }
     public long getTimestamp() { return timestamp; }
+    public boolean isSubmitted() { return submitted; }
+    /** Marks this session as successfully submitted and triggers a save. */
+    public void markSubmitted() { this.submitted = true; notifyStateChanged(); }
 }

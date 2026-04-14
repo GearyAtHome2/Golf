@@ -2,6 +2,7 @@ package org.example.hud;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -33,7 +34,7 @@ public class PreShotDebugActor extends Actor {
     public void draw(Batch batch, float parentAlpha) {
         if (terrain == null || ball == null || camera == null) return;
 
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float screenW = Gdx.graphics.getWidth();
         float screenH = Gdx.graphics.getHeight();
 

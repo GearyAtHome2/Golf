@@ -1,7 +1,7 @@
 package org.example.scoreBoard;
 
-import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
@@ -20,6 +20,7 @@ import org.example.hud.UIUtils;
 public class LeaderboardUI extends Table {
     private final HighscoreService service;
     private final Skin skin;
+    private final BitmapFont font;
     private final Table scoreTable;
     private String currentDifficulty = GameConfig.Difficulty.NOVICE.name();
     private CourseType currentCourseType = CourseType.HOLES_18;
@@ -27,8 +28,9 @@ public class LeaderboardUI extends Table {
     private Stage boundStage;
     private ScorecardPopup currentPopup;
 
-    public LeaderboardUI(Skin skin, HighscoreService service) {
+    public LeaderboardUI(Skin skin, BitmapFont font, HighscoreService service) {
         this.skin = skin;
+        this.font = font;
         this.service = service;
         ensureStylesExist();
         this.scoreTable = new Table();
@@ -49,7 +51,7 @@ public class LeaderboardUI extends Table {
     private void ensureStylesExist() {
         if (!skin.has("default", Label.LabelStyle.class)) {
             Label.LabelStyle labelStyle = new Label.LabelStyle();
-            labelStyle.font = skin.getFont("default-font");
+            labelStyle.font = font;
             labelStyle.fontColor = Color.WHITE;
             skin.add("default", labelStyle);
         }
@@ -99,7 +101,7 @@ public class LeaderboardUI extends Table {
     private Table buildCourseTypeTabs(float uiScale) {
         Table courseTabTable = new Table();
         ButtonGroup<TextButton> courseGroup = new ButtonGroup<>();
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float btnScale = uiScale * (isAndroid ? 0.75f : 1.0f);
         float btnW = (this.getWidth() - 40 * uiScale) / 3f * 0.88f;
 
@@ -131,7 +133,7 @@ public class LeaderboardUI extends Table {
     private Table buildDifficultyTabs(float uiScale) {
         Table tabTable = new Table();
         ButtonGroup<TextButton> group = new ButtonGroup<>();
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float btnScale = uiScale * (isAndroid ? 0.65f : 1.0f);
         int cols = isAndroid ? 2 : 3;
         float btnW = (this.getWidth() - 40 * uiScale) / cols * 0.88f;
@@ -184,7 +186,7 @@ public class LeaderboardUI extends Table {
 
         float tablePadding = scoreTable.getPadLeft() + scoreTable.getPadRight();
         float totalWidth = (this.getWidth() - (this.getPadLeft() + this.getPadRight())) - tablePadding;
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float textScale = uiScale * (isAndroid ? 0.70f : 0.88f);
 
         if (currentCourseType == CourseType.HOLES_1) {
@@ -281,7 +283,7 @@ public class LeaderboardUI extends Table {
         float timeW      = totalWidth * 0.20f;
         float submittedW = totalWidth * 0.20f;
 
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float scale       = textScale * 0.90f * (isAndroid ? 0.8f : 1.0f);
 
         // Header row
@@ -388,7 +390,6 @@ public class LeaderboardUI extends Table {
     /** Returns a font scale that fits {@code text} within {@code maxWidth}, capped at {@code desired}. */
     private float fitBtnScale(String text, float desired, float maxWidth) {
         if (maxWidth <= 0) return desired;
-        BitmapFont font = skin.getFont("default-font");
         GlyphLayout gl = new GlyphLayout();
         gl.setText(font, text);
         float textW = gl.width * desired;

@@ -2,6 +2,7 @@ package org.example.hud;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -50,7 +51,7 @@ public class SpinIndicator extends Actor {
 
     public void updateScaling(Viewport viewport) {
         float screenH = viewport.getWorldHeight();
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         float size;
         if (isAndroid) {
@@ -73,7 +74,7 @@ public class SpinIndicator extends Actor {
         float centerX = getX() + radius;
         float centerY = getY() + radius;
         float baseScale = Gdx.graphics.getHeight() * 0.0013f;
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         batch.end();
         shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());

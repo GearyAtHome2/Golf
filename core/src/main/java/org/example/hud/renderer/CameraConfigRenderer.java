@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
@@ -28,7 +29,7 @@ public class CameraConfigRenderer {
 
         float delta = Gdx.graphics.getDeltaTime();
         float scrollSpeed = 450f * delta;
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) {
             scrollY = Math.max(0, scrollY - scrollSpeed);

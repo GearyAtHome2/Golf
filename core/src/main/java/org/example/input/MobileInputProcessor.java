@@ -1,6 +1,7 @@
 package org.example.input;
 
 import com.badlogic.gdx.math.Vector2;
+import org.example.Platform;
 import org.example.ball.ShotController;
 
 import java.util.EnumMap;
@@ -54,7 +55,7 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     public boolean pan(float x, float y, float deltaX, float deltaY) {
         if (isConsumed) return true;
 
-        if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (Platform.isAndroid()) {
             int currentPointers = 0;
             if (com.badlogic.gdx.Gdx.input.isTouched(0)) currentPointers++;
             if (com.badlogic.gdx.Gdx.input.isTouched(1)) currentPointers++;

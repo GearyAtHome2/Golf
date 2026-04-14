@@ -116,6 +116,11 @@ public class ClassicGenerator implements ITerrainGenerator {
         mapStandardFeatures(map, heights, greenCenterX, greenCenterZ, flags.isIslandMap);
         PerfLog.log("mapStandardFeatures", t1);
 
+        // FIX: Build the distance cache here, after mapStandardFeatures has placed the fairway
+        if (flags.isMogulHighlands) {
+            processor.buildDistanceCache(map);
+        }
+
         long t2 = PerfLog.now();
         boolean[][] isPathMask = getPathMask(map);
         boolean[][] greenBuffer = createGreenBuffer(map);
@@ -140,6 +145,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         float teeSafety = data.getTeeHeight() + 0.2f;
         float teeFlatBufferZ = 0.12f;
 
+        long tCellLoop = PerfLog.now();
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 float zNorm = z / (float) (SIZE_Z - 1);
@@ -168,6 +174,9 @@ public class ClassicGenerator implements ITerrainGenerator {
                 heights[x][z] = MathUtils.lerp(teeSafety, protectedHeight, teeT * teeT * (3 - 2 * teeT));
             }
         }
+        if (flags.isMogulHighlands) {
+            PerfLog.log("generateHeightMap cell loop [" + SIZE_X + "x" + SIZE_Z + "=" + (SIZE_X * SIZE_Z) + " cells, mogul getDistToPath r=18 per cell]", tCellLoop);
+        }
     }
 
     private float calculateBaseElevation(float zNorm, float buffer, float safety, boolean isElevated, ArchetypeFlags flags) {
@@ -189,7 +198,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
     private float calculateNoise(int x, int z, boolean[][] pathMask, ArchetypeFlags flags) {
         if (flags.isMogulHighlands) {
-            return processor.calculateMogulNoise(x, z, SCALE, off1, off2, data.getHillFrequency(), data.getUndulation(), data.getMaxHeight(), pathMask);
+            return processor.calculateMogulNoise(x, z, SCALE, off1, off2, data.getHillFrequency(), data.getUndulation(), data.getMaxHeight());
         }
         return calculateHeightNoise(x, z, data.getHillFrequency(), data.getUndulation(), data.getMaxHeight(), data.getTerrainAlgorithm());
     }
@@ -253,9 +262,9 @@ public class ClassicGenerator implements ITerrainGenerator {
         PerfLog.log("smoothGreenBorders", tSmooth);
 
         if (flags.isMogulHighlands) {
-            long tGauss = PerfLog.now();
-            processor.applyFairwayGaussianSmoothing(map, h);
-            PerfLog.log("applyFairwayGaussianSmoothing", tGauss);
+//            long tGauss = PerfLog.now();
+////            processor.applyFairwayGaussianSmoothing(map, h);
+//            PerfLog.log("applyFairwayGaussianSmoothing", tGauss);
         }
 
         long tCoast = PerfLog.now();

@@ -33,8 +33,9 @@ public class MobileUIValues {
     protected static float getHitBtnWidth(Viewport v) { return v.getWorldHeight() * 0.30f; }
     protected static float getHitBtnHeight(Viewport v) { return v.getWorldHeight() * 0.14f; }
 
-    protected static float getArrowWidth(Viewport v) { return v.getWorldWidth() * 0.08f; }
-    protected static float getArrowHeight(Viewport v) { return v.getWorldHeight() * 0.09f; }
+    protected static float getArrowWidth(Viewport v)      { return v.getWorldWidth() * 0.08f; }
+    protected static float getArrowHeight(Viewport v)     { return v.getWorldHeight() * 0.09f; }
+    protected static float getSmallArrowWidth(Viewport v) { return v.getWorldWidth() * 0.055f; }
     protected static float getSpinSize(Viewport v) { return v.getWorldHeight() * 0.20f; }
     protected static float getDebugWidth(Viewport v) { return v.getWorldHeight() * 0.50f; }
 

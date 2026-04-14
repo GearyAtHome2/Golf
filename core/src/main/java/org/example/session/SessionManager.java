@@ -3,6 +3,7 @@ package org.example.session;
 import com.badlogic.gdx.math.MathUtils;
 import org.example.GameConfig;
 import org.example.terrain.level.LevelDataGenerator;
+import java.util.Collections;
 import java.util.List;
 import org.example.terrain.level.LevelData;
 
@@ -52,39 +53,31 @@ public class SessionManager {
     }
 
     public void startDaily18() {
-        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp()), GameSession.GameMode.DAILY_18);
+        startCompetitiveMatch(scrambleDailySeed(SessionPersistence.getTodayTimestamp()), GameSession.GameMode.DAILY_18);
     }
 
     public void startDaily9() {
-        startCompetitiveMatch(applySecretSauce(SessionPersistence.getTodayTimestamp() * 37L + 1L), GameSession.GameMode.DAILY_9);
+        startCompetitiveMatch(scrambleDailySeed(SessionPersistence.getTodayTimestamp() * 37L + 1L), GameSession.GameMode.DAILY_9);
     }
 
     public void startDaily1() {
-        long baseSeed = applySecretSauce(SessionPersistence.getTodayTimestamp() * 71L + 3L);
-        startCompetitiveMatch(findPar3Seed(baseSeed), GameSession.GameMode.DAILY_1);
-    }
-
-    /** Finds the nearest seed (starting from baseSeed) that produces a par-3 first hole. Package-private for testing. */
-    static long findPar3Seed(long baseSeed) {
-        long seed = baseSeed;
-        for (int attempt = 0; attempt < 100; attempt++) {
-            if (LevelDataGenerator.generate18Holes(seed).get(0).getPar() == 3) return seed;
-            seed++;
-        }
-        return baseSeed;
-    }
-
-    /** @deprecated Use startDaily18() instead. Kept for backward compatibility. */
-    @Deprecated
-    public void startDailyChallenge() {
-        startDaily18();
+        long seed = scrambleDailySeed(SessionPersistence.getTodayTimestamp() * 71L + 3L);
+        activeSession = new GameSession(seed, config.difficulty, GameSession.GameMode.DAILY_1, SessionPersistence.getTodayTimestamp());
+        activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession, uid));
+        activeSession.setCourseLayout(Collections.singletonList(LevelDataGenerator.createPar3Hole(seed)));
+        daily1Session = activeSession;
+        SessionPersistence.saveSession(activeSession, uid);
     }
 
     public void startStandardMatch() {
         startCompetitiveMatch(Math.abs(MathUtils.random.nextLong()), GameSession.GameMode.STANDARD_18);
     }
 
-    private long applySecretSauce(long seed) {
+    // Scrambles a timestamp-derived seed so players can't trivially reverse-engineer
+    // today's daily map by guessing the input (e.g. "20260411"). All players share
+    // the same scrambled seed for a given day. Do NOT change this — doing so would
+    // give every player a different daily map and invalidate historic leaderboard seeds.
+    private long scrambleDailySeed(long seed) {
         for (int i = 0; i < 10; i++) {
             seed = (seed * 13) + 8;
             if (String.valueOf(seed).length() > 9) seed /= 17;
@@ -103,9 +96,6 @@ public class SessionManager {
     public GameSession getActive() { return activeSession; }
     public void setActive(GameSession session) { this.activeSession = session; }
     public GameSession getStandard() { return standardSession; }
-    /** @deprecated Use getDaily18() instead. */
-    @Deprecated
-    public GameSession getDaily() { return daily18Session; }
     public GameSession getDaily18() { return daily18Session; }
     public GameSession getDaily9() { return daily9Session; }
     public GameSession getDaily1() { return daily1Session; }

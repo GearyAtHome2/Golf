@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -18,7 +19,7 @@ public class PauseMenuRenderer {
         float screenH = viewport.getWorldHeight();
         float centerX = screenW / 2f;
 
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         float baseScale = (screenH * 0.0009f) * (isAndroid ? 1.5f : 1.0f);
         float titleScale = baseScale * 2.5f;

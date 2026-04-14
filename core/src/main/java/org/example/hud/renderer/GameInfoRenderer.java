@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -28,7 +29,7 @@ public class GameInfoRenderer {
 
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         float baseScale = (screenH * 0.0015f) * (isAndroid ? 1.5f : 1.0f);
 
@@ -105,7 +106,7 @@ public class GameInfoRenderer {
 
     private void renderDebugInfo(SpriteBatch batch, BitmapFont font, GameConfig config, Ball ball,
                                  Terrain terrain, float rightAnchorX, float speedY, float spinY, float scale) {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) return;
+        if (Platform.isAndroid()) return;
 
         font.getData().setScale(scale);
         String speedStr = String.format("SPEED: %.1fx", config.getGameSpeed());

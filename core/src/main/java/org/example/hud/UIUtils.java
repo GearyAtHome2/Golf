@@ -177,6 +177,14 @@ public class UIUtils {
         }
     }
 
+    public static String getClipboardSeed() {
+        String content = com.badlogic.gdx.Gdx.app.getClipboard().getContents();
+        if (content != null && !content.isEmpty()) {
+            try { return String.valueOf(Long.parseLong(content.trim())); } catch (Exception ignored) {}
+        }
+        return "";
+    }
+
     /**
      * NinePatch panel background: goldWidth px gold border → 1 px dark bevel → stretchy dark centre.
      * Corners stay crisp at any panel size.

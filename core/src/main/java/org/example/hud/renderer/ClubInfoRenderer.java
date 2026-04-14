@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -16,7 +17,7 @@ public class ClubInfoRenderer {
     public void render(SpriteBatch batch, ShapeRenderer shape, BitmapFont font, Viewport viewport,
                        String name, String desc, String dist, String power, String loft) {
 
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         // --- COMPACT SIZING RATIOS ---
         float widthRatio = isAndroid ? 0.22f : 0.25f;

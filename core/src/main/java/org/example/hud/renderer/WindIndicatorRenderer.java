@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -22,7 +23,7 @@ public class WindIndicatorRenderer {
 
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         // --- LAYOUT & SIZING TWEAKABLES ---
         // Pushes the indicator left and up to nestle against the MAX button

@@ -1,7 +1,7 @@
 package org.example.scoreBoard;
 
-import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -23,7 +23,7 @@ public class ScorecardPopup {
     private final Table card;
 
     public ScorecardPopup(Stage stage, Skin skin, HighscoreService.HighscoreEntry entry) {
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         // --- Dim layer: full-screen, tapping outside the card dismisses ---
         dimLayer = new Table();

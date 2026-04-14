@@ -2,15 +2,17 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
-import org.example.scoreBoard.CourseType;
+import org.example.hud.MenuButtonDescriptor;
+import org.example.hud.MenuButtonResolver;
+import org.example.hud.UIUtils;
 import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
-import org.example.session.GameSession;
 import org.example.terrain.level.LevelData;
 
 public class MainMenuRenderer {
@@ -31,7 +33,7 @@ public class MainMenuRenderer {
 
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         String title = "GEARY GOLF";
         float baseTitleScale = isAndroid ? screenH * 0.0035f : screenH * 0.0043f;
@@ -47,6 +49,14 @@ public class MainMenuRenderer {
         font.draw(batch, title, centeredX + 2, titleY - 2);
         font.setColor(Color.WHITE);
         font.draw(batch, title, centeredX, titleY);
+
+        if (isAndroid && !loggedInUser.isEmpty() && state == MenuState.MAIN) {
+            font.getData().setScale(baseTitleScale * 0.22f);
+            font.setColor(0.6f, 0.6f, 0.6f, 1f);
+            String userLine = "Signed in as: " + loggedInUser;
+            layout.setText(font, userLine);
+            font.draw(batch, userLine, (screenW - layout.width) / 2f, titleY - baseTitleScale * 22f);
+        }
 
         if (!isAndroid) {
             renderDesktopMenu(batch, font, screenW, screenH, selection, state, sessions, baseTitleScale, mapScrollOffset, dailyCache);
@@ -85,11 +95,13 @@ public class MainMenuRenderer {
     }
 
     private void renderMainMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
-        boolean competitiveSparkle = anyCompetitiveUnfinished(sessions, dailyCache);
-        drawOption(batch, font, selection == 0, true, "PLAY >", x, y);
-        drawSparkleOption(batch, font, selection == 1, true, competitiveSparkle, true, "COMPETITIVE >", x, y - s);
-        drawOption(batch, font, selection == 2, true, "INSTRUCTIONS", x, y - (s * 2));
-        drawOption(batch, font, selection == 3, true, "PRACTICE >", x, y - (s * 3));
+        java.util.List<MenuButtonDescriptor> descs = MenuButtonResolver.resolve(MenuState.MAIN, sessions, dailyCache);
+        float[] yOffsets = {0, -s, -(s * 2), -(s * 3)};
+        for (int i = 0; i < yOffsets.length; i++) {
+            MenuButtonDescriptor d = descs.get(i);
+            if (d.sparkle) drawSparkleOption(batch, font, selection == i, true, true, true, d.label, x, y + yOffsets[i]);
+            else           drawOption(batch, font, selection == i, true, d.label, x, y + yOffsets[i]);
+        }
 
         float savedScale = font.getScaleX();
 
@@ -116,7 +128,7 @@ public class MainMenuRenderer {
         drawOption(batch, font, selection == 0, true, "RANDOM MAP", x, y);
         drawOption(batch, font, selection == 1, true, "SELECT MAP >", x, y - s);
 
-        String cleanSeed = getClipboardSeed();
+        String cleanSeed = UIUtils.getClipboardSeed();
         boolean hasValidSeed = !cleanSeed.isEmpty();
         String seedText = hasValidSeed ? "PLAY SEED [" + cleanSeed + "]" : "PLAY SEED (CLIPBOARD EMPTY)";
         drawOption(batch, font, selection == 2, hasValidSeed, seedText, x, y - (s * 2));
@@ -158,46 +170,13 @@ public class MainMenuRenderer {
     }
 
     private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
-        GameSession standard = sessions != null ? sessions.standard : null;
-        GameSession daily18 = sessions != null ? sessions.daily18 : null;
-        GameSession daily9 = sessions != null ? sessions.daily9 : null;
-        GameSession daily1 = sessions != null ? sessions.daily1 : null;
-
-        boolean standardFinished = standard != null && standard.isFinished();
-        String play18Text = standardFinished
-            ? "18 HOLES (COMPLETED)"
-            : (standard != null ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)" : "PLAY 18");
-
-        boolean daily18Submitted = isDailySubmitted(CourseType.HOLES_18, dailyCache);
-        boolean daily18Finished  = daily18Submitted || (daily18 != null && daily18.isFinished());
-        String daily18Text = daily18Submitted
-            ? "DAILY 18 (SUBMITTED TODAY)"
-            : (daily18 != null && daily18.isFinished() ? "DAILY 18 (COMPLETED)"
-            : (daily18 != null ? "CONTINUE DAILY 18 (" + (daily18.getCurrentHoleIndex() + 1) + "/18)" : "DAILY 18"));
-
-        boolean daily9Submitted = isDailySubmitted(CourseType.HOLES_9, dailyCache);
-        boolean daily9Finished  = daily9Submitted || (daily9 != null && daily9.isFinished());
-        String daily9Text = daily9Submitted
-            ? "DAILY 9 (SUBMITTED TODAY)"
-            : (daily9 != null && daily9.isFinished() ? "DAILY 9 (COMPLETED)"
-            : (daily9 != null ? "CONTINUE DAILY 9 (" + (daily9.getCurrentHoleIndex() + 1) + "/9)" : "DAILY 9"));
-
-        boolean daily1Submitted = isDailySubmitted(CourseType.HOLES_1, dailyCache);
-        boolean daily1Finished  = daily1Submitted || (daily1 != null && daily1.isFinished());
-        String daily1Text = daily1Submitted
-            ? "DAILY 1-HOLE (SUBMITTED TODAY)"
-            : (daily1 != null && daily1.isFinished() ? "DAILY 1-HOLE (COMPLETED)"
-            : (daily1 != null ? "CONTINUE DAILY 1-HOLE (1/1)" : "DAILY 1-HOLE"));
-
-        drawOption(batch, font, selection == 0, !standardFinished, play18Text, x, y);
-        drawSparkleOption(batch, font, selection == 1, !daily18Finished, !daily18Finished, true, daily18Text, x, y - s);
-        drawSparkleOption(batch, font, selection == 2, !daily9Finished, !daily9Finished, true, daily9Text, x, y - (s * 2));
-        drawSparkleOption(batch, font, selection == 3, !daily1Finished, !daily1Finished, true, daily1Text, x, y - (s * 3));
-        drawOption(batch, font, selection == 4, true, "< BACK TO MAIN", x, y - (s * 4.5f));
-    }
-
-    private static boolean isDailySubmitted(CourseType type, DailySubmissionCache cache) {
-        return cache != null && cache.isFetched() && cache.hasSubmitted(type);
+        java.util.List<MenuButtonDescriptor> descs = MenuButtonResolver.resolve(MenuState.EIGHTEEN_HOLES, sessions, dailyCache);
+        float[] yOffsets = {0, -s, -(s * 2), -(s * 3), -(s * 4.5f)};
+        for (int i = 0; i < descs.size(); i++) {
+            MenuButtonDescriptor d = descs.get(i);
+            if (d.sparkle) drawSparkleOption(batch, font, selection == i, !d.locked, true, true, d.label, x, y + yOffsets[i]);
+            else           drawOption(batch, font, selection == i, !d.locked, d.label, x, y + yOffsets[i]);
+        }
     }
 
     private void renderDifficultyMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {
@@ -284,19 +263,6 @@ public class MainMenuRenderer {
         }
     }
 
-    private static boolean anyCompetitiveUnfinished(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
-        if (sessions == null) return true;
-        return isDailyAvailable(sessions.daily18, CourseType.HOLES_18, dailyCache)
-            || isDailyAvailable(sessions.daily9,  CourseType.HOLES_9,  dailyCache)
-            || isDailyAvailable(sessions.daily1,  CourseType.HOLES_1,  dailyCache);
-    }
-
-    /** A daily is available (and worth sparkling) if it hasn't been remotely submitted today. */
-    private static boolean isDailyAvailable(GameSession s, CourseType type, DailySubmissionCache cache) {
-        if (cache != null && cache.isFetched() && cache.hasSubmitted(type)) return false;
-        return s == null || !s.isFinished();
-    }
-
     /** Formats an archetype enum value into a human-readable display name. */
     public static String archetypeDisplayName(LevelData.Archetype arch) {
         String raw = arch.name().replace('_', ' ');
@@ -311,11 +277,4 @@ public class MainMenuRenderer {
         return sb.toString().trim();
     }
 
-    private String getClipboardSeed() {
-        String content = Gdx.app.getClipboard().getContents();
-        if (content != null && !content.isEmpty()) {
-            try { return String.valueOf(Long.parseLong(content.trim())); } catch (Exception ignored) {}
-        }
-        return "";
-    }
 }

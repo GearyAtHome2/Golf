@@ -1,7 +1,7 @@
 package org.example.auth;
 
-import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
+import org.example.Platform;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -93,7 +93,7 @@ public class LoginScreen {
         activeErrorLabel = null;
         busy = false;
 
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float panelW     = isAndroid ? 560f  : 460f;
         float fieldW     = panelW - 60f;
         float fieldH     = isAndroid ? 75f   : 62f;

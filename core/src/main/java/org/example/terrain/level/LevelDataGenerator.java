@@ -100,6 +100,37 @@ public class LevelDataGenerator {
         return data;
     }
 
+    /**
+     * Creates a single guaranteed par-3 hole for DAILY_1.
+     * Candidates are all archetypes that can ever produce a par-3 (parFixed==3, or
+     * parThreshold34 > 0 meaning distance-based par can reach 3).  One is chosen
+     * deterministically from the seed.  If the chosen archetype has variable par,
+     * generation is retried with successive seeds until par==3 (up to 100 attempts).
+     * Falls back to the first fixed-par-3 archetype if all retries fail.
+     */
+    public static LevelData createPar3Hole(long seed) {
+        LevelData.Archetype[] candidates = Arrays.stream(LevelData.Archetype.values())
+                .filter(a -> a.spec().parFixed == 3 || a.spec().parThreshold34 > 0)
+                .toArray(LevelData.Archetype[]::new);
+        LevelData.Archetype chosen = candidates[new Random(seed).nextInt(candidates.length)];
+
+        if (chosen.spec().parFixed == 3) {
+            return createFixedLevelData(seed, chosen);
+        }
+
+        // Variable-par archetype: retry until distance lands in par-3 range
+        for (int attempt = 0; attempt < 100; attempt++) {
+            LevelData hole = createFixedLevelData(seed + attempt, chosen);
+            if (hole.getPar() == 3) return hole;
+        }
+
+        // Fallback: guaranteed par-3 archetype
+        LevelData.Archetype fallback = Arrays.stream(LevelData.Archetype.values())
+                .filter(a -> a.spec().parFixed == 3)
+                .findFirst().orElseThrow();
+        return createFixedLevelData(seed, fallback);
+    }
+
     public static List<LevelData> generate18Holes(long seed) {
         if (seed < 0) seed = System.nanoTime();
         Random masterR = new Random(seed);

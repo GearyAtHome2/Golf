@@ -4,6 +4,7 @@ import org.example.GameConfig;
 import org.example.hud.renderer.MainMenuRenderer.MenuState;
 import org.example.input.GameInputProcessor;
 import org.example.scoreBoard.CourseType;
+import org.example.scoreBoard.DailyStatusResolver;
 import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
@@ -68,7 +69,7 @@ public class MenuManager {
             case MAIN -> handleMain(callback);
             case PLAY_OPTIONS -> handlePlayOptions(callback);
             case MAP_SELECT -> handleMapSelect(callback);
-            case EIGHTEEN_HOLES -> handleEighteen(callback);
+            case EIGHTEEN_HOLES -> handleEighteen(callback, sessions);
             case DIFFICULTY_SELECT -> handleDifficulty(callback);
             case PRACTICE -> handlePractice(callback);
         }
@@ -77,15 +78,11 @@ public class MenuManager {
     private boolean isSelectionLocked(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         if (currentMenuState == MenuState.EIGHTEEN_HOLES) {
             if (menuSelection == 0) return sessions.standard != null && sessions.standard.isFinished();
-            if (menuSelection == 1) return isRemotelySubmitted(CourseType.HOLES_18, dailyCache) || (sessions.daily18 != null && sessions.daily18.isFinished());
-            if (menuSelection == 2) return isRemotelySubmitted(CourseType.HOLES_9,  dailyCache) || (sessions.daily9  != null && sessions.daily9.isFinished());
-            if (menuSelection == 3) return isRemotelySubmitted(CourseType.HOLES_1,  dailyCache) || (sessions.daily1  != null && sessions.daily1.isFinished());
+            if (menuSelection == 1) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_18, sessions.daily18, dailyCache);
+            if (menuSelection == 2) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_9,  sessions.daily9,  dailyCache);
+            if (menuSelection == 3) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1,  sessions.daily1,  dailyCache);
         }
         return false;
-    }
-
-    private static boolean isRemotelySubmitted(CourseType type, DailySubmissionCache cache) {
-        return cache != null && cache.isFetched() && cache.hasSubmitted(type);
     }
 
     public void navigateBack() {
@@ -131,13 +128,21 @@ public class MenuManager {
         }
     }
 
-    private void handleEighteen(MenuHandler callback) {
+    private void handleEighteen(MenuHandler callback, CompetitiveSessions sessions) {
         switch (menuSelection) {
             case 0 -> callback.onSelectStandard18();
-            case 1 -> callback.onSelectDaily18();
-            case 2 -> callback.onSelectDaily9();
-            case 3 -> callback.onSelectDaily1();
+            case 1 -> handleDailySelect(callback, sessions != null ? sessions.daily18 : null, CourseType.HOLES_18, callback::onSelectDaily18);
+            case 2 -> handleDailySelect(callback, sessions != null ? sessions.daily9  : null, CourseType.HOLES_9,  callback::onSelectDaily9);
+            case 3 -> handleDailySelect(callback, sessions != null ? sessions.daily1  : null, CourseType.HOLES_1,  callback::onSelectDaily1);
             case 4 -> { currentMenuState = MenuState.MAIN; menuSelection = 1; }
+        }
+    }
+
+    private void handleDailySelect(MenuHandler callback, GameSession session, CourseType type, Runnable normalStart) {
+        if (session != null && session.isFinished() && !session.isSubmitted()) {
+            callback.onResubmitDaily(type);
+        } else {
+            normalStart.run();
         }
     }
 
@@ -191,5 +196,7 @@ public class MenuManager {
         void onStartPracticeRange();
         void onStartPuttingGreen();
         void onLogout();
+        /** Called when a completed but unsubmitted daily session is selected from the menu. */
+        default void onResubmitDaily(CourseType type) {}
     }
 }

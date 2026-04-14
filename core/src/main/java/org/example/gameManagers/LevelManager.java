@@ -23,6 +23,10 @@ public class LevelManager implements Disposable {
 
     public void buildLevel(ITerrainGenerator generator, float waterLevel, int distance) {
         disposeCurrentAssets();
+        // Hint the GC to collect the old terrain's Java heap (height maps, terrain type arrays)
+        // before generation starts. On Android, this helps avoid a GC compaction mid-generation
+        // which on some devices causes a 10+ second stop-the-world pause (userfaultfd timeout).
+        System.gc();
 
         terrain = new Terrain(generator, waterLevel, distance);
 

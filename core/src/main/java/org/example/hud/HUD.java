@@ -1,7 +1,7 @@
 package org.example.hud;
 
-import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -14,6 +14,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
@@ -85,7 +86,7 @@ public class HUD {
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
     private boolean showInfoDisplay = false;
     private final Vector3 tempV3 = new Vector3();
-    public static final float UI_SCALE = (Gdx.app.getType() == Application.ApplicationType.Android) ? 2.0f : 1.0f;
+    public static final float UI_SCALE = Platform.isAndroid() ? 2.0f : 1.0f;
 
     public HUD(GameConfig config) {
         this.config = config;
@@ -102,7 +103,7 @@ public class HUD {
         this.startMenuStage = new Stage(viewport, batch);
         this.pauseMenuStage = new Stage(viewport, batch);
 
-this.skin = getSkin();
+        this.skin = initSkin();
         this.spinIndicator = new SpinIndicator(shapeRenderer, font);
         this.preShotDebugActor = new PreShotDebugActor(font);
         this.minigameController.setNotificationManager(this.notificationManager);
@@ -137,7 +138,7 @@ this.skin = getSkin();
     private void updateLeaderboardLayout() {
         if (leaderboardUI == null) return;
 
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float screenW = startMenuStage.getViewport().getWorldWidth();
         float screenH = startMenuStage.getViewport().getWorldHeight();
 
@@ -199,14 +200,14 @@ this.skin = getSkin();
         batch.end();
 
         if (leaderboardUI == null && startMenuStage != null) {
-            leaderboardUI = new LeaderboardUI(getSkin(), highscoreService);
+            leaderboardUI = new LeaderboardUI(getSkin(), font, highscoreService);
             startMenuStage.addActor(leaderboardUI);
             leaderboardUI.bindStage(startMenuStage);
             updateLeaderboardLayout();
         }
 
         if (startMenuStage != null) {
-            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+            if (Platform.isAndroid()) {
                 if (lastMobileMenuState != menuManager.getCurrentMenuState()) {
                     setupMobileStartMenu(menuManager, callback, sessions, dailyCache);
                     lastMobileMenuState = menuManager.getCurrentMenuState();
@@ -234,7 +235,7 @@ this.skin = getSkin();
         batch.begin();
         pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer, session);
         batch.end();
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && pauseMenuStage != null) {
+        if (Platform.isAndroid() && pauseMenuStage != null) {
             pauseMenuStage.act();
             pauseMenuStage.draw();
         }
@@ -258,7 +259,7 @@ this.skin = getSkin();
 
     public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, GameSession session, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
         if (batch.isDrawing()) batch.end();
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float delta = Gdx.graphics.getDeltaTime();
         if (isAndroid) {
             if (!mobileUIInitialized) setupMobileUI((MobileInputProcessor) input);
@@ -317,7 +318,7 @@ this.skin = getSkin();
     }
 
     private void renderOverlays(Club currentClub, Camera gameCamera, Terrain terrain, GameInputProcessor input, float delta, boolean showClubInfo, ShotController shotController) {
-        if (mobileUIInitialized && stage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
+        if (mobileUIInitialized && stage != null && Platform.isAndroid()) {
             stage.act(delta);
             stage.draw();
             if (showInfoDisplay) {
@@ -405,7 +406,7 @@ this.skin = getSkin();
         if (victoryTable != null) victoryTable.setVisible(true);
         if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null) mobileUIPackage.arrowContainer.setVisible(false);
 
-        if (mobileUIPackage != null && Gdx.app.getType() == Application.ApplicationType.Android) {
+        if (mobileUIPackage != null && Platform.isAndroid()) {
             boolean isFinished = (session != null && session.isFinished());
             boolean isDaily = (session != null && isDailyMode(session.getMode()));
             mobileUIPackage.nextLevelBtn.setVisible(!isFinished);
@@ -417,7 +418,7 @@ this.skin = getSkin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session);
         batch.end();
 
-        if (Gdx.app.getType() == Application.ApplicationType.Android && stage != null) {
+        if (Platform.isAndroid() && stage != null) {
             stage.act();
             stage.draw();
         }
@@ -441,6 +442,34 @@ this.skin = getSkin();
         overlayRenderer.resetScrolls();
     }
 
+    public void renderLoadingScreen() {
+        float screenW = viewport.getWorldWidth();
+        float screenH = viewport.getWorldHeight();
+        viewport.apply();
+
+        float scale = screenH * 0.0035f;
+        font.getData().setScale(scale);
+        layout.setText(font, "LOADING MAP...");
+
+        float padW  = layout.width  * 0.5f;
+        float padH  = layout.height * 1.6f;
+        float panelW = layout.width  + padW * 2f;
+        float panelH = layout.height + padH * 2f;
+        float panelX = (screenW - panelW) / 2f;
+        float panelY = (screenH - panelH) / 2f;
+        float textX  = (screenW - layout.width)  / 2f;
+        float textY  = panelY + (panelH + layout.height) / 2f;
+
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
+        UIUtils.createGoldBorderedPanel(new Color(0.05f, 0.05f, 0.05f, 0.97f), 3)
+              .draw(batch, panelX, panelY, panelW, panelH);
+        font.setColor(Color.WHITE);
+        font.draw(batch, "LOADING MAP...", textX, textY);
+        font.getData().setScale(1.0f);
+        batch.end();
+    }
+
     public void renderInstructions(GameInputProcessor input) {
         overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> {});
     }
@@ -459,7 +488,7 @@ this.skin = getSkin();
     }
 
     public boolean isTouchInsideClubInfo(float x, float y) {
-        boolean isAndroid = Gdx.app.getType() == Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         float width = Math.max(viewport.getWorldWidth() * (isAndroid ? 0.22f : 0.25f), isAndroid ? 220f : 280f);
         float height = Math.max(viewport.getWorldHeight() * (isAndroid ? 0.18f : 0.25f), isAndroid ? 120f : 180f);
         float boxX = viewport.getWorldWidth() - width - 20;
@@ -482,34 +511,65 @@ this.skin = getSkin();
     public Stage getStage() { return stage; }
     public Stage getStartMenuStage() { return startMenuStage; }
     public Stage getPauseMenuStage() { return pauseMenuStage; }
+    /** Forces the mobile start menu buttons to rebuild on next render (e.g. after a resubmit). */
+    public void invalidateMobileMenuState() { lastMobileMenuState = null; }
 
-    public Skin getSkin() {
-        if (skin == null) {
-            try { skin = new Skin(Gdx.files.internal("ui/uiskin.json")); }
-            catch (Exception e) { skin = new Skin(); }
-        }
-        UIUtils.registerDefaultStyles(skin, font);
-        if (!skin.has("default-font", BitmapFont.class)) skin.add("default-font", font);
-        if (!skin.has("default", TextButton.TextButtonStyle.class)) {
+    private Skin initSkin() {
+        Skin s;
+        try { s = new Skin(Gdx.files.internal("ui/uiskin.json")); }
+        catch (Exception e) { s = new Skin(); }
+        UIUtils.registerDefaultStyles(s, font);
+        if (!s.has("default-font", BitmapFont.class)) s.add("default-font", font);
+        if (!s.has("default", TextButton.TextButtonStyle.class)) {
             TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
-            style.font = skin.getFont("default-font");
+            style.font = s.getFont("default-font");
             style.fontColor = Color.WHITE;
             style.downFontColor = Color.GRAY;
-            if (skin.has("default-round", Drawable.class)) {
-                style.up = skin.getDrawable("default-round");
-                style.down = skin.getDrawable("default-round-down");
+            if (s.has("default-round", Drawable.class)) {
+                style.up = s.getDrawable("default-round");
+                style.down = s.getDrawable("default-round-down");
             } else {
                 style.up = UIUtils.createRoundedRectDrawable(Color.DARK_GRAY, 6);
                 style.down = UIUtils.createRoundedRectDrawable(Color.LIGHT_GRAY, 6);
             }
-            skin.add("default", style);
+            s.add("default", style);
         }
-        return skin;
+        return s;
     }
+
+    public Skin getSkin() { return skin; }
 
     /** Records the logged-in user's display name so the main menu can show it. */
     public void setLoggedInUser(String displayName) {
         mainMenuRenderer.setLoggedInUser(displayName);
+    }
+
+    /** Shows a brief toast notification on the start-menu stage (fades in, holds, fades out). */
+    public void showToast(String message) {
+        if (startMenuStage == null) return;
+
+        Label.LabelStyle style = new Label.LabelStyle(font, Color.WHITE);
+        Label label = new Label(message, style);
+        label.setFontScale(0.55f);
+
+        Table box = new Table();
+        box.setBackground(UIUtils.createRoundedRectDrawable(new Color(0f, 0f, 0f, 0.75f), 8));
+        box.add(label).pad(16, 32, 16, 32);
+
+        Table toast = new Table();
+        toast.setFillParent(true);
+        toast.bottom().padBottom(startMenuStage.getViewport().getWorldHeight() * 0.12f);
+        toast.add(box);
+
+        toast.getColor().a = 0f;
+        toast.addAction(Actions.sequence(
+            Actions.fadeIn(0.3f),
+            Actions.delay(2.5f),
+            Actions.fadeOut(0.5f),
+            Actions.removeActor()
+        ));
+
+        startMenuStage.addActor(toast);
     }
 
     public void dispose() {

@@ -2,6 +2,7 @@ package org.example.hud.minigame;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -80,7 +81,7 @@ public class MinigameController {
                               Viewport viewport, GameInputProcessor input,
                               org.example.ball.ShotController shotController) {
         boolean shouldCancel;
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (Platform.isAndroid()) {
             shouldCancel = input.isActionJustPressed(GameInputProcessor.Action.TAP);
         } else {
             shouldCancel = Gdx.input.isButtonJustPressed(Input.Buttons.LEFT);

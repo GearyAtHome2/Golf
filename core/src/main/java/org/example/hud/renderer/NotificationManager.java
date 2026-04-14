@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -70,7 +71,7 @@ public class NotificationManager {
 
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
 
         // Base proportional scale: approx 0.25% of screen height per font unit
         float baseScale = (screenH * 0.0025f) * (isAndroid ? 1.4f : 1.0f);

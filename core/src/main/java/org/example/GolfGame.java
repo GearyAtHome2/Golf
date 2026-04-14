@@ -14,6 +14,8 @@ import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.ball.Ball;
@@ -34,7 +36,8 @@ import org.example.performance.PhysicsProfiler;
 import org.example.auth.AuthService;
 import org.example.auth.LoginScreen;
 import org.example.auth.UserSession;
-import org.example.scoreBoard.ScoreSubmissionHandler;
+import org.example.scoreBoard.CourseType;
+import org.example.scoreBoard.SubmissionCoordinator;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.session.SessionManager;
@@ -47,7 +50,7 @@ import org.example.terrain.level.LevelFactory;
 
 public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHandler, HazardManager.HazardListener {
 
-    private enum GameState {LOGIN, START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
+    private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
 
     private GameState currentState = GameState.LOGIN;
     private GameState previousState = GameState.START;
@@ -76,7 +79,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private WindManager windManager;
     private boolean isVictory = false;
     private boolean showClubInfo = false;
-    private boolean submissionStarted = false;
+    private SubmissionCoordinator submissionCoordinator;
     private Model highlightModel;
     private ModelInstance highlightInstance;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
@@ -118,11 +121,31 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         userSession = new UserSession();
         userSession.load();
 
+        submissionCoordinator = new SubmissionCoordinator(
+            sessionManager, userSession, authService, dailySubmissionCache,
+            new SubmissionCoordinator.Callbacks() {
+                @Override public void onSubmissionStarted() {
+                    if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(true);
+                    setupInputProcessor();
+                }
+                @Override public void onSubmissionEnded() {
+                    if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
+                    setupInputProcessor();
+                }
+                @Override public void onMenuInvalidate() { hud.invalidateMobileMenuState(); }
+                @Override public void onSubmitSuccess() { exitToMainMenu(); }
+                @Override public void onAutoRetrySuccess() { hud.showToast("SCORE SUBMITTED!"); }
+                @Override public Stage getSubmitStage() { return hud.getStage(); }
+                @Override public Stage getMenuStage() { return hud.getStartMenuStage(); }
+                @Override public Skin getSkin() { return hud.getSkin(); }
+            }
+        );
+
         loginScreen = new LoginScreen(hud.getSkin(), authService, userSession, r -> {
             Gdx.app.log("Login", "Welcome, " + r.displayName);
             hud.setLoggedInUser(r.displayName);
             sessionManager.reloadDailySessions(r.uid);
-            dailySubmissionCache.fetch(r.uid, null);
+            dailySubmissionCache.fetch(r.uid, this::tryAutoRetryPending);
             changeState(GameState.START);
         });
 
@@ -132,7 +155,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     Gdx.app.log("UserSession", "Auto-login OK — " + r.displayName);
                     hud.setLoggedInUser(r.displayName);
                     sessionManager.reloadDailySessions(r.uid);
-                    dailySubmissionCache.fetch(r.uid, null);
+                    dailySubmissionCache.fetch(r.uid, GolfGame.this::tryAutoRetryPending);
                     changeState(GameState.START);
                 }
                 @Override public void onFailure(String msg) {
@@ -144,7 +167,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void initInputSystems() {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (Platform.isAndroid()) {
             inputProcessor = new MobileInputProcessor();
             hud.setupMobileUI((MobileInputProcessor) inputProcessor);
         } else {
@@ -195,7 +218,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             multiplexer.addProcessor(activeStage);
         }
 
-        if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (Platform.isAndroid()) {
             multiplexer.addProcessor(new com.badlogic.gdx.input.GestureDetector((com.badlogic.gdx.input.GestureDetector.GestureListener) inputProcessor));
         } else {
             multiplexer.addProcessor((com.badlogic.gdx.InputProcessor) inputProcessor);
@@ -219,11 +242,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             case PAUSED:
             case INSTRUCTIONS:
             case CAMERA_CONFIG:
-                Gdx.app.log("CURSOR_CHECK", "Releasing cursor in changeState for: " + newState);
                 Gdx.input.setCursorCatched(false);
                 break;
             default:
-                Gdx.input.setCursorCatched(!(isVictory || submissionStarted));
+                Gdx.input.setCursorCatched(!(isVictory || submissionCoordinator.isSubmissionInProgress()));
                 break;
         }
 
@@ -234,15 +256,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void handleInput() {
+        if (currentState == GameState.LOADING) return;
         if (hud.wasMainMenuRequested()) { exitToMainMenu(); return; }
-        if (submissionStarted) return;
+        if (submissionCoordinator.isSubmissionInProgress()) return;
 
         switch (currentState) {
             case LOGIN -> {} // input handled by the login stage via the input multiplexer
             case START -> {
                 menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
                 // Android: tap the right half of the screen to go back from any sub-menu
-                if (com.badlogic.gdx.Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android
+                if (Platform.isAndroid()
                         && menuManager.getCurrentMenuState() != org.example.hud.renderer.MainMenuRenderer.MenuState.MAIN
                         && com.badlogic.gdx.Gdx.input.justTouched()) {
                     stageTouch.set(com.badlogic.gdx.Gdx.input.getX(), com.badlogic.gdx.Gdx.input.getY());
@@ -274,7 +297,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 !inputProcessor.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW)) {
 
             int direction = 0;
-            if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Desktop) {
+            if (!Platform.isAndroid()) {
                 float scroll = inputProcessor.getActionValue(GameInputProcessor.Action.SCROLL_Y);
                 if (scroll != 0) direction = scroll > 0 ? 1 : -1;
             } else {
@@ -286,6 +309,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 int index = MathUtils.clamp(currentClub.ordinal() + direction, 0, Club.values().length - 1);
                 currentClub = Club.values()[index];
             }
+
+            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_FIRST))
+                currentClub = Club.values()[0];
+            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_LAST))
+                currentClub = Club.values()[Club.values().length - 1];
         }
 
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) showClubInfo = !showClubInfo;
@@ -310,7 +338,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private void handleOverlayInput() {
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
             changeState(previousState);
-        } else if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+        } else if (Platform.isAndroid() && Gdx.input.justTouched()) {
             tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             hud.getStage().getViewport().unproject(tempV3);
             if ((currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) ||
@@ -327,11 +355,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             GameSession active = sessionManager.getActive();
             if (isVictory && active != null && !active.isFinished()) {
                 sessionManager.saveActive();
-                changeState(GameState.COMPETITIVE);
-                initLevel();
+                startLoadingLevel(GameState.COMPETITIVE, -1);
             }
         } else {
-            initLevel();
+            startLoadingLevel(gameplayState, -1);
         }
     }
 
@@ -349,35 +376,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private void processScoreSubmission() {
         Gdx.app.log("GOLF_GAME", "Starting Score Submission Process");
-        submissionStarted = true;
-        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(true);
+        submissionCoordinator.submitEndOfRound(sessionManager.getActive());
         setupInputProcessor();
+    }
 
-        new ScoreSubmissionHandler(
-                sessionManager.getActive(),
-                userSession.getDisplayName(),
-                userSession.getUid(),
-                userSession.getIdToken(),
-                dailySubmissionCache,
-                authService,
-                userSession,
-                () -> {
-                    Gdx.app.postRunnable(() -> {
-                        Gdx.app.log("GOLF_GAME", "Submission successful, exiting to main menu");
-                        submissionStarted = false;
-                        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
-                        exitToMainMenu();
-                    });
-                },
-                () -> {
-                    Gdx.app.postRunnable(() -> {
-                        Gdx.app.log("GOLF_GAME", "Submission cancelled, resetting flags");
-                        submissionStarted = false;
-                        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
-                        setupInputProcessor();
-                    });
-                }
-        ).trigger(hud.getStage(), hud.getSkin());
+    private void startLoadingLevel(GameState targetState, long seed) {
+        if (isGameplayState(targetState)) gameplayState = targetState;
+        changeState(GameState.LOADING);
+        Gdx.app.postRunnable(() -> {
+            initLevel(seed);
+            changeState(targetState);
+        });
     }
 
     private void initLevel() {
@@ -396,7 +405,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         setupInputProcessor();
 
         isVictory = false;
-        submissionStarted = false;
         hazardManager.resetTimer();
         particleManager.clear();
     }
@@ -504,6 +512,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
             hud.renderCameraConfig(inputProcessor);
+        } else if (currentState == GameState.LOADING) {
+            hud.renderLoadingScreen();
         } else {
             updateLogic(delta);
             renderScene();
@@ -570,13 +580,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (hud.wasMinigameCanceled()) shotController.reset();
 
         PhysicsProfiler.startSection("ShotControllerCharge");
-        if (ball.getState() == Ball.State.STATIONARY || shotController.isCharging()) {
-            if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
-                if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
-                hazardManager.setBallHit(true);
-                shotController.update(0, ball, camera.direction, currentClub, hud, terrain, inputProcessor);
-                sessionManager.saveActive();
-            }
+        if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
+            if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
+            hazardManager.setBallHit(true);
+            sessionManager.saveActive();
         }
         PhysicsProfiler.endSection("ShotControllerCharge");
     }
@@ -607,7 +614,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (isVictory) {
             hud.renderVictory(hud.getShotCount(), currentLevelData, active);
         } else if (currentState == GameState.PAUSED) {
-            hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionStarted);
+            hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionCoordinator.isSubmissionInProgress());
         } else {
             hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), active, inputProcessor, showClubInfo, shotController);
         }
@@ -618,12 +625,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (uiStage != null && currentState != GameState.PAUSED) {
             uiStage.act(Gdx.graphics.getDeltaTime());
             uiStage.draw();
-
-            if (Gdx.input.justTouched()) {
-                stageTouch.set(Gdx.input.getX(), Gdx.input.getY());
-                uiStage.screenToStageCoordinates(stageTouch);
-                Gdx.app.log("STAGE_DEBUG", "Stage Units Touch: x=" + stageTouch.x + ", y=" + stageTouch.y);
-            }
         }
     }
 
@@ -631,7 +632,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         shotController.reset();
         hud.resetShots();
         isVictory = false;
-        submissionStarted = false;
         sessionManager.clearActive();
         menuManager.setMenuState(MenuState.MAIN);
         menuManager.setMenuSelection(0);
@@ -672,8 +672,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     @Override
     public void onStartQuickPlay() {
         selectedArchetype = null;
-        changeState(GameState.PLAYING);
-        initLevel();
+        startLoadingLevel(GameState.PLAYING, -1);
     }
 
     @Override
@@ -690,15 +689,13 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             if (clip != null) seed = Long.parseLong(clip.trim());
         } catch (Exception ignored) {
         }
-        changeState(GameState.PLAYING);
-        initLevel(seed);
+        startLoadingLevel(GameState.PLAYING, seed);
     }
 
     @Override
     public void onStartWithArchetype(LevelData.Archetype archetype) {
         selectedArchetype = archetype;
-        changeState(GameState.PLAYING);
-        initLevel(-1);
+        startLoadingLevel(GameState.PLAYING, -1);
     }
 
     @Override
@@ -706,8 +703,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         GameSession standard = sessionManager.getStandard();
         if (standard != null && !standard.isFinished()) {
             sessionManager.setActive(standard);
-            changeState(GameState.COMPETITIVE);
-            initLevel();
+            startLoadingLevel(GameState.COMPETITIVE, -1);
         } else {
             menuManager.setPendingMatchMode(0);
             menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
@@ -715,43 +711,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
     }
 
-    @Override
-    public void onSelectDaily18() {
-        GameSession daily = sessionManager.getDaily18();
-        if (daily != null && !daily.isFinished()) {
-            sessionManager.setActive(daily);
-            changeState(GameState.COMPETITIVE);
-            initLevel();
-        } else {
-            menuManager.setPendingMatchMode(1);
-            menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
-            menuManager.setMenuSelection(0);
-        }
-    }
+    @Override public void onSelectDaily18() { selectDaily(sessionManager.getDaily18(), 1); }
+    @Override public void onSelectDaily9()  { selectDaily(sessionManager.getDaily9(),  2); }
+    @Override public void onSelectDaily1()  { selectDaily(sessionManager.getDaily1(),  3); }
 
-    @Override
-    public void onSelectDaily9() {
-        GameSession daily = sessionManager.getDaily9();
+    private void selectDaily(GameSession daily, int pendingMatchMode) {
         if (daily != null && !daily.isFinished()) {
             sessionManager.setActive(daily);
-            changeState(GameState.COMPETITIVE);
-            initLevel();
+            startLoadingLevel(GameState.COMPETITIVE, -1);
         } else {
-            menuManager.setPendingMatchMode(2);
-            menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
-            menuManager.setMenuSelection(0);
-        }
-    }
-
-    @Override
-    public void onSelectDaily1() {
-        GameSession daily = sessionManager.getDaily1();
-        if (daily != null && !daily.isFinished()) {
-            sessionManager.setActive(daily);
-            changeState(GameState.COMPETITIVE);
-            initLevel();
-        } else {
-            menuManager.setPendingMatchMode(3);
+            menuManager.setPendingMatchMode(pendingMatchMode);
             menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
             menuManager.setMenuSelection(0);
         }
@@ -769,20 +738,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             case 3 -> sessionManager.startDaily1();
         }
 
-        changeState(GameState.COMPETITIVE);
-        initLevel();
+        startLoadingLevel(GameState.COMPETITIVE, -1);
     }
 
     @Override
     public void onStartPracticeRange() {
-        changeState(GameState.PRACTICE_RANGE);
-        initLevel();
+        startLoadingLevel(GameState.PRACTICE_RANGE, -1);
     }
 
     @Override
     public void onStartPuttingGreen() {
-        changeState(GameState.PUTTING_GREEN);
-        initLevel();
+        startLoadingLevel(GameState.PUTTING_GREEN, -1);
     }
 
     @Override
@@ -794,6 +760,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         loginScreen.reset();
         exitToMainMenu();
         changeState(GameState.LOGIN);
+    }
+
+    @Override
+    public void onResubmitDaily(CourseType type) {
+        submissionCoordinator.resubmitDaily(type);
+    }
+
+    private void tryAutoRetryPending() {
+        submissionCoordinator.tryAutoRetryAll();
     }
 
     private boolean isVictoryCourseComplete() {

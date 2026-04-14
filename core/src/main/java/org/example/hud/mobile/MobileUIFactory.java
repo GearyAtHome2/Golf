@@ -24,9 +24,10 @@ import org.example.hud.SpinIndicator;
 import org.example.hud.renderer.MainMenuRenderer;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
-import org.example.scoreBoard.CourseType;
 import org.example.scoreBoard.DailySubmissionCache;
 
+import org.example.hud.MenuButtonDescriptor;
+import org.example.hud.MenuButtonResolver;
 import org.example.hud.UIUtils;
 import static org.example.hud.UIUtils.createRoundedRectDrawable;
 import static org.example.hud.mobile.MobileUIValues.*;
@@ -195,13 +196,22 @@ public static class MobileUIPackage {
             return;
         }
 
+        // For MAIN and EIGHTEEN_HOLES, descriptors from the resolver drive label/locked/sparkle.
+        java.util.List<MenuButtonDescriptor> descs = MenuButtonResolver.resolve(state, sessions, dailyCache);
+
         for (int i = 0; i < options.length; i++) {
             final int index = i;
             String text = options[i];
             boolean isLocked = false;
+            boolean doSparkle = false;
 
-            if (state == MainMenuRenderer.MenuState.PLAY_OPTIONS && i == 2) {
-                String seed = getClipboardSeed();
+            if (descs != null && i < descs.size()) {
+                MenuButtonDescriptor d = descs.get(i);
+                text = d.label;
+                isLocked = d.locked;
+                doSparkle = d.sparkle;
+            } else if (state == MainMenuRenderer.MenuState.PLAY_OPTIONS && i == 2) {
+                String seed = UIUtils.getClipboardSeed();
                 if (seed.isEmpty()) {
                     text = "PLAY SEED (EMPTY)";
                     isLocked = true;
@@ -210,49 +220,6 @@ public static class MobileUIPackage {
                 }
             }
 
-            if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
-                if (i == 0 && sessions.standard != null && !sessions.standard.isFinished()) {
-                    text = "RESUME 18 (" + (sessions.standard.getCurrentHoleIndex() + 1) + "/18)";
-                } else if (i == 1) {
-                    if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(CourseType.HOLES_18)) {
-                        text = "DAILY 18 (SUBMITTED TODAY)";
-                        isLocked = true;
-                    } else if (sessions.daily18 != null) {
-                        if (sessions.daily18.isFinished()) {
-                            text = "DAILY 18 [COMPLETE]";
-                            isLocked = true;
-                        } else {
-                            text = "RESUME DAILY 18 (" + (sessions.daily18.getCurrentHoleIndex() + 1) + "/18)";
-                        }
-                    }
-                } else if (i == 2) {
-                    if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(CourseType.HOLES_9)) {
-                        text = "DAILY 9 (SUBMITTED TODAY)";
-                        isLocked = true;
-                    } else if (sessions.daily9 != null) {
-                        if (sessions.daily9.isFinished()) {
-                            text = "DAILY 9 [COMPLETE]";
-                            isLocked = true;
-                        } else {
-                            text = "RESUME DAILY 9 (" + (sessions.daily9.getCurrentHoleIndex() + 1) + "/9)";
-                        }
-                    }
-                } else if (i == 3) {
-                    if (dailyCache != null && dailyCache.isFetched() && dailyCache.hasSubmitted(CourseType.HOLES_1)) {
-                        text = "DAILY 1-HOLE (SUBMITTED TODAY)";
-                        isLocked = true;
-                    } else if (sessions.daily1 != null) {
-                        if (sessions.daily1.isFinished()) {
-                            text = "DAILY 1-HOLE [COMPLETE]";
-                            isLocked = true;
-                        } else {
-                            text = "RESUME DAILY 1-HOLE";
-                        }
-                    }
-                }
-            }
-
-            boolean doSparkle = !isLocked && shouldSparkle(state, i, sessions, dailyCache);
             TextButton btn = doSparkle ? new SparkleButton(text, menuStyle) : new TextButton(text, menuStyle);
             if (doSparkle) ((SparkleButton) btn).setSparkleEnabled(true);
 
@@ -287,26 +254,6 @@ public static class MobileUIPackage {
 
     }
 
-    private static boolean isSessionUnfinished(org.example.session.GameSession s) {
-        return s == null || !s.isFinished();
-    }
-
-    private static boolean shouldSparkle(MainMenuRenderer.MenuState state, int i, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
-        if (state == MainMenuRenderer.MenuState.MAIN) {
-            return i == 1 && (sessions == null || isSessionUnfinished(sessions.standard)
-                    || isSessionUnfinished(sessions.daily18) || isSessionUnfinished(sessions.daily9)
-                    || isSessionUnfinished(sessions.daily1));
-        }
-        if (state == MainMenuRenderer.MenuState.EIGHTEEN_HOLES) {
-            if (sessions == null) return i >= 1 && i <= 3;
-            if (i == 0) return false; // standard 18 never sparkles — focus users on daily rounds
-            if (i == 1) return isSessionUnfinished(sessions.daily18) && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(CourseType.HOLES_18));
-            if (i == 2) return isSessionUnfinished(sessions.daily9) && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(CourseType.HOLES_9));
-            if (i == 3) return isSessionUnfinished(sessions.daily1) && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(CourseType.HOLES_1));
-        }
-        return false;
-    }
-
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
             case MAIN -> new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"};
@@ -338,25 +285,25 @@ public static class MobileUIPackage {
         ui.stage.addActor(arrowContainer);
         arrowContainer.setFillParent(true);
         arrowContainer.bottom().right().padBottom(viewport.getWorldHeight() * CLUB_ARROW_Y).padRight(getEdgePad(viewport) * 0.5f);
+
+        float innerW  = getArrowWidth(viewport);
+        float outerW  = getSmallArrowWidth(viewport);
+        float h       = getArrowHeight(viewport);
+        float gapInner = viewport.getWorldWidth() * 0.02f;  // gap between < and >
+        float gapOuter = viewport.getWorldWidth() * 0.01f;  // gap between outer and inner
+
+        float smallFontScale = FONT_SCALE_GAMEPLAY * 0.45f;
+
         Table arrowRow = new Table();
-        addActionButton(arrowRow, "<", style, input, GameInputProcessor.Action.CLUB_UP, getArrowWidth(viewport), getArrowHeight(viewport)).padRight(viewport.getWorldWidth() * 0.02f);
-        addActionButton(arrowRow, ">", style, input, GameInputProcessor.Action.CLUB_DOWN, getArrowWidth(viewport), getArrowHeight(viewport));
+        addActionButton(arrowRow, "<<", style, input, GameInputProcessor.Action.CLUB_FIRST, outerW, h, smallFontScale).padRight(gapOuter);
+        addActionButton(arrowRow, "<",  style, input, GameInputProcessor.Action.CLUB_UP,    innerW, h).padRight(gapInner);
+        addActionButton(arrowRow, ">",  style, input, GameInputProcessor.Action.CLUB_DOWN,  innerW, h).padRight(gapOuter);
+        addActionButton(arrowRow, ">>", style, input, GameInputProcessor.Action.CLUB_LAST,  outerW, h, smallFontScale);
         arrowContainer.add(arrowRow);
     }
 
     private static Cell<TextButton> addActionButton(Table table, String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float w, float h) {
-        TextButton btn = new TextButton(text, style);
-        btn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 0.6f);
-        if (input != null && action != null) {
-            btn.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                    if (action == GameInputProcessor.Action.OVERHEAD_VIEW) input.setActionState(action, btn.isChecked());
-                    else input.triggerAction(action);
-                }
-            });
-        }
-        return table.add(btn).width(w).height(h);
+        return addActionButton(table, text, style, input, action, w, h, FONT_SCALE_GAMEPLAY * 0.6f);
     }
 
     private static TextButton createTriggerButton(TextButton.TextButtonStyle style, String text, MobileInputProcessor input, GameInputProcessor.Action action, float fontScale) {
@@ -371,7 +318,10 @@ public static class MobileUIPackage {
             @Override
             public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
                 input.setActionState(action, false);
-                if (action == GameInputProcessor.Action.CHARGE_SHOT) input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
+                if (action == GameInputProcessor.Action.CHARGE_SHOT) {
+                    boolean releasedOnButton = x >= 0 && x <= btn.getWidth() && y >= 0 && y <= btn.getHeight();
+                    if (releasedOnButton) input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
+                }
             }
         });
         return btn;
@@ -400,6 +350,17 @@ public static class MobileUIPackage {
         ws.titleFontColor = Color.GOLD;
         ws.background = createRoundedRectDrawable(new Color(0.05f, 0.05f, 0.05f, 0.95f), RADIUS_STD);
         skin.add("default", ws);
+        TextButton.TextButtonStyle defaultBtnStyle = new TextButton.TextButtonStyle();
+        defaultBtnStyle.font = font;
+        defaultBtnStyle.fontColor = Color.WHITE;
+        defaultBtnStyle.up   = skin.getDrawable("btnUp");
+        defaultBtnStyle.down = skin.getDrawable("btnDown");
+        skin.add("default", defaultBtnStyle);
+        Label.LabelStyle defaultLabelStyle = new Label.LabelStyle();
+        defaultLabelStyle.font = font;
+        defaultLabelStyle.fontColor = Color.WHITE;
+        skin.add("default", defaultLabelStyle);
+        skin.add("default", new ScrollPane.ScrollPaneStyle());
         return skin;
     }
 
@@ -501,14 +462,6 @@ public static class MobileUIPackage {
             });
         }
         return btn;
-    }
-
-    private static String getClipboardSeed() {
-        String content = com.badlogic.gdx.Gdx.app.getClipboard().getContents();
-        if (content != null && !content.isEmpty()) {
-            try { return String.valueOf(Long.parseLong(content.trim())); } catch (Exception ignored) {}
-        }
-        return "";
     }
 
     private static TextButton.TextButtonStyle createMenuStyle(BitmapFont font) {

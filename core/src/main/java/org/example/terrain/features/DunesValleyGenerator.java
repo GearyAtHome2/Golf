@@ -102,6 +102,7 @@ public class DunesValleyGenerator {
         oasisRadius = baseRadius * (0.9f + rng.nextFloat() * 0.2f);
 
         // ── 3. Raise 1–2 dune mounds away from the oasis ─────────────────────
+        // Clamp to bounding box: exp(-x) < 0.001 when x > 6.9, i.e. dist > duneR * sqrt(6.9) ≈ duneR * 2.63
         int numDunes = 1 + rng.nextInt(2);
         for (int d = 0; d < numDunes; d++) {
             int bumpX = SIZE_X / 2, bumpZ = SIZE_Z / 2;
@@ -117,8 +118,11 @@ public class DunesValleyGenerator {
             float duneH   = 5f + rng.nextFloat() * 4f;
             float duneR   = SIZE_X * (0.07f + rng.nextFloat() * 0.05f);
             float duneRSq = duneR * duneR;
-            for (int x = 0; x < SIZE_X; x++) {
-                for (int z = 0; z < SIZE_Z; z++) {
+            int bbox = (int) (duneR * 2.7f) + 1;
+            int x0 = Math.max(0, bumpX - bbox), x1 = Math.min(SIZE_X - 1, bumpX + bbox);
+            int z0 = Math.max(0, bumpZ - bbox), z1 = Math.min(SIZE_Z - 1, bumpZ + bbox);
+            for (int x = x0; x <= x1; x++) {
+                for (int z = z0; z <= z1; z++) {
                     float dx = x - bumpX, dz = z - bumpZ;
                     heights[x][z] += duneH * (float) Math.exp(-(dx * dx + dz * dz) / duneRSq);
                 }
@@ -150,42 +154,84 @@ public class DunesValleyGenerator {
             }
         }
 
-        // ── 5. Retype shore tiles as ROUGH: distance-to-water + multi-octave wobble ─
-        boolean[][] isWater = new boolean[SIZE_X][SIZE_Z];
-        for (int x = 0; x < SIZE_X; x++)
-            for (int z = 0; z < SIZE_Z; z++)
-                isWater[x][z] = heights[x][z] < waterLevel;
+        // ── 5. Retype shore tiles as ROUGH: BFS distance transform ───────────────
+        // O(N) multi-source BFS from water tiles, same pattern as BeachBluffs/WhistlingIsles.
+        // Stores the nearest water source coords per tile so the final check uses exact
+        // Euclidean distance (preserving the wobble threshold behaviour exactly).
+        //
+        // BFS cutoff: a tile at Euclidean distance D from water has Manhattan distance
+        // ≤ D * sqrt(2). Max threshold = SHORE_BAND + max_wobble ≈ 16.85, so
+        // Manhattan cutoff = ceil(16.85 * 1.415) = 24 guarantees all shore candidates
+        // are reached, with a +1 safety margin → 25.
+        final int BFS_CUTOFF = (int) Math.ceil((SHORE_BAND + 1.0f) * 1.415f) + 1;
 
-        int searchR = (int) SHORE_BAND + 2;
+        int mapSize = SIZE_X * SIZE_Z;
+        int[] srcX = new int[mapSize];   // nearest water source x for each tile (-1 = unvisited)
+        int[] srcZ = new int[mapSize];
+        int[] bfsDist = new int[mapSize]; // BFS (Manhattan) distance from water
+        java.util.Arrays.fill(srcX, -1);
+
+        // Pre-allocated int queue — avoids Integer autoboxing and GC pressure
+        int[] bfsQueue = new int[mapSize];
+        int qHead = 0, qTail = 0;
+
+        // Seed: every water tile is distance 0 from itself
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                if (heights[x][z] < waterLevel) {
+                    int idx = x * SIZE_Z + z;
+                    srcX[idx] = x;
+                    srcZ[idx] = z;
+                    bfsDist[idx] = 0;
+                    bfsQueue[qTail++] = idx;
+                }
+            }
+        }
+
+        // 4-connected BFS — each tile processed at most once
+        while (qHead != qTail) {
+            int idx = bfsQueue[qHead++];
+            int d = bfsDist[idx];
+            if (d >= BFS_CUTOFF) continue;
+            int x = idx / SIZE_Z, z = idx % SIZE_Z;
+            int sx = srcX[idx], sz = srcZ[idx];
+            int nd = d + 1;
+
+            // inline helper: claim neighbour nidx if unvisited
+            if (x > 0) {
+                int n = idx - SIZE_Z;
+                if (srcX[n] < 0) { srcX[n] = sx; srcZ[n] = sz; bfsDist[n] = nd; bfsQueue[qTail++] = n; }
+            }
+            if (x < SIZE_X - 1) {
+                int n = idx + SIZE_Z;
+                if (srcX[n] < 0) { srcX[n] = sx; srcZ[n] = sz; bfsDist[n] = nd; bfsQueue[qTail++] = n; }
+            }
+            if (z > 0) {
+                int n = idx - 1;
+                if (srcX[n] < 0) { srcX[n] = sx; srcZ[n] = sz; bfsDist[n] = nd; bfsQueue[qTail++] = n; }
+            }
+            if (z < SIZE_Z - 1) {
+                int n = idx + 1;
+                if (srcX[n] < 0) { srcX[n] = sx; srcZ[n] = sz; bfsDist[n] = nd; bfsQueue[qTail++] = n; }
+            }
+        }
+
+        // Apply shore typing: only tiles reached by BFS need wobble/sqrt
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
                 if (map[x][z] != Terrain.TerrainType.SAND) continue;
+                int idx = x * SIZE_Z + z;
+                if (srcX[idx] < 0) continue; // too far from water to be shore
 
-                float nearestWater = Float.MAX_VALUE;
-                search:
-                for (int dx = -searchR; dx <= searchR; dx++) {
-                    for (int dz = -searchR; dz <= searchR; dz++) {
-                        int nx = x + dx, nz = z + dz;
-                        if (nx < 0 || nx >= SIZE_X || nz < 0 || nz >= SIZE_Z) continue;
-                        if (isWater[nx][nz]) {
-                            float d = (float) Math.sqrt(dx * dx + dz * dz);
-                            if (d < nearestWater) {
-                                nearestWater = d;
-                                if (nearestWater <= 1f) break search;
-                            }
-                        }
-                    }
-                }
-
-                if (nearestWater == Float.MAX_VALUE) continue;
+                float ddx = x - srcX[idx], ddz = z - srcZ[idx];
+                float exactDist = (float) Math.sqrt(ddx * ddx + ddz * ddz);
 
                 float wobble = (MathUtils.sin(x * 0.30f + p1) * 0.6f
                               + MathUtils.cos(z * 0.37f + p2) * 0.5f
                               + MathUtils.sin(x * 0.71f + p3) * 0.3f
                               + MathUtils.cos(z * 0.63f + p4) * 0.3f) * 0.5f;
-                float threshold = SHORE_BAND + wobble;
 
-                if (nearestWater <= threshold) {
+                if (exactDist <= SHORE_BAND + wobble) {
                     map[x][z] = Terrain.TerrainType.ROUGH;
                 }
             }

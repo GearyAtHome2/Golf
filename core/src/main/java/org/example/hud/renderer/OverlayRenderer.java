@@ -2,6 +2,7 @@ package org.example.hud.renderer;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector3;
@@ -18,7 +19,7 @@ public class OverlayRenderer {
     private final Vector3 touchPoint = new Vector3();
 
     public void renderInstructions(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameInputProcessor input, Runnable onClose) {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+        if (Platform.isAndroid() && Gdx.input.justTouched()) {
             if (isClickOutside(viewport, instructionRenderer::isClickInside)) {
                 onClose.run();
             }
@@ -30,7 +31,7 @@ public class OverlayRenderer {
     }
 
     public void renderCameraConfig(SpriteBatch batch, ShapeRenderer shapeRenderer, BitmapFont font, Viewport viewport, GameConfig config, GameInputProcessor input, Runnable onClose) {
-        if (Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android && Gdx.input.justTouched()) {
+        if (Platform.isAndroid() && Gdx.input.justTouched()) {
             if (isClickOutside(viewport, cameraConfigRenderer::isClickInside)) {
                 onClose.run();
             }

@@ -2,6 +2,7 @@ package org.example.camera;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input.Buttons;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
@@ -90,7 +91,7 @@ public class CameraController {
             overheadZoom = MathUtils.clamp(overheadZoom, 50f, 1200f);
         }
 
-        boolean isAndroid = Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+        boolean isAndroid = Platform.isAndroid();
         boolean isMultiTouch = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION);
 
         boolean shouldPan = isAndroid ? isMultiTouch : Gdx.input.isButtonPressed(Buttons.LEFT);
@@ -147,7 +148,7 @@ public class CameraController {
         if (scrollY != 0) {
             boolean isMod = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) ||
                     input.isActionPressed(GameInputProcessor.Action.OVERHEAD_VIEW) ||
-                    Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android;
+                    Platform.isAndroid();
 
             System.out.println("[DEBUG_LOG] Normal Zoom check: " + scrollY + " | Mods: " + isMod);
 
@@ -159,7 +160,7 @@ public class CameraController {
         }
 
         boolean canRotate = (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !introActive)
-                || (config.controlStyle == GameConfig.CameraConfig.ControlStyle.DRAG && (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.Android));
+                || (config.controlStyle == GameConfig.CameraConfig.ControlStyle.DRAG && (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || Platform.isAndroid()));
 
         if (canRotate) {
             float sens = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) && config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE

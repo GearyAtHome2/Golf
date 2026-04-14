@@ -26,6 +26,8 @@ public interface GameInputProcessor {
         COPY_SEED,
         CLUB_UP,
         CLUB_DOWN,
+        CLUB_FIRST,
+        CLUB_LAST,
         SHOW_RANGE,
         PROJECTION,
         MAX_POWER_SHOT,
