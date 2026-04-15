@@ -46,6 +46,10 @@ public class ArchetypeSpec {
     public int   bunkerMin = 0, bunkerMax = 0;
     public float bunkerDepth = 2f, bunkerDepthVar = 0f;
 
+    // ── Green size ────────────────────────────────────────────────────────────
+    /** Base green tile radius. -1 = use the default (26f). */
+    public float greenRadiusMin = -1f, greenRadiusMax = -1f;
+
     // ── Distance & Par ────────────────────────────────────────────────────────
     /** Hole length in yards: distanceMin + random * (distanceMax - distanceMin). */
     public int distanceMin = 500, distanceMax = 500;
@@ -98,6 +102,8 @@ public class ArchetypeSpec {
     public ArchetypeSpec bunkers(int min, int max, float depth, float dVar) {
         bunkerMin = min; bunkerMax = max; bunkerDepth = depth; bunkerDepthVar = dVar; return this;
     }
+
+    public ArchetypeSpec greenSize(float min, float max) { greenRadiusMin = min; greenRadiusMax = max; return this; }
 
     public ArchetypeSpec distance(int min, int max) { distanceMin = min; distanceMax = max; return this; }
     public ArchetypeSpec mapWidth(int w)            { mapWidthOverride = w; return this; }

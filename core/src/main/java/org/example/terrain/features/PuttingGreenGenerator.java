@@ -67,7 +67,7 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
         // We use the same helper the ClassicGenerator now uses
         for (int x = 0; x < width; x++) {
             for (int z = 0; z < depth; z++) {
-                GreenHelper.applySingleTileGreen(map, x, z, midX, midZ, seedOffset);
+                GreenHelper.applySingleTileGreen(map, x, z, midX, midZ, 26f, seedOffset);
             }
         }
 

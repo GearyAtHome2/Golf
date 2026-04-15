@@ -19,7 +19,7 @@ public class WindManager {
     }
 
     private final List<WindStreak> streaks = new ArrayList<>();
-    private final int MAX_STREAKS = 60; // Increased pool for better density
+    private final int MAX_STREAKS = 80;
     private final float SPAWN_RADIUS = 30f; // Tighter radius to keep them in view
     private final ShapeRenderer shapeRenderer;
 
@@ -83,23 +83,20 @@ public class WindManager {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
 
-        // Increase the multiplier for more streaks, and set a higher minimum (15)
-        int streaksToShow = MathUtils.clamp((int) (trueWindSpeed * 3.0f) + 10, 15, MAX_STREAKS);
+        int streaksToShow = MathUtils.clamp((int) (trueWindSpeed * 3.5f) + 20, 25, MAX_STREAKS);
 
         for (int i = 0; i < streaksToShow; i++) {
             WindStreak s = streaks.get(i);
             float lifePercent = s.life / s.maxLife;
             float fade = MathUtils.sin(lifePercent * MathUtils.PI);
 
-            // Boosted alpha: 0.15 to 0.4 range is much more visible
-            float baseAlpha = MathUtils.map(0f, 30f, 0.15f, 0.40f, trueWindSpeed);
+            float baseAlpha = MathUtils.map(0f, 30f, 0.22f, 0.62f, trueWindSpeed);
             shapeRenderer.setColor(1, 1, 1, baseAlpha * fade);
 
             tempStart.set(s.worldPos);
 
-            // Slightly longer lines
             float visualSpeed = MathUtils.map(0f, 30f, 6.0f, 25.0f, trueWindSpeed);
-            float lengthFactor = visualSpeed * 0.25f;
+            float lengthFactor = visualSpeed * 0.42f;
 
             tempEnd.set(visualWindDir).scl(lengthFactor).add(tempStart);
 

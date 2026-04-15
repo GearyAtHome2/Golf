@@ -316,7 +316,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 currentClub = Club.values()[Club.values().length - 1];
         }
 
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) showClubInfo = !showClubInfo;
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP) && config.difficulty.hasClubInfo()) showClubInfo = !showClubInfo;
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL)) resetBallToLastShot();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) config.adjustGameSpeed(true);
@@ -580,6 +580,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (hud.wasMinigameCanceled()) shotController.reset();
 
         PhysicsProfiler.startSection("ShotControllerCharge");
+        shotController.setGuidelineAvailable(config.difficulty.hasShotProjection());
         if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
             if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
             hazardManager.setBallHit(true);
@@ -616,6 +617,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionCoordinator.isSubmissionInProgress());
         } else {
+            if (!config.difficulty.hasClubInfo()) showClubInfo = false;
             hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, levelManager.getTerrain(), active, inputProcessor, showClubInfo, shotController);
         }
 
@@ -703,6 +705,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         GameSession standard = sessionManager.getStandard();
         if (standard != null && !standard.isFinished()) {
             sessionManager.setActive(standard);
+            config.setDifficulty(standard.getDifficulty());
             startLoadingLevel(GameState.COMPETITIVE, -1);
         } else {
             menuManager.setPendingMatchMode(0);
@@ -718,6 +721,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private void selectDaily(GameSession daily, int pendingMatchMode) {
         if (daily != null && !daily.isFinished()) {
             sessionManager.setActive(daily);
+            config.setDifficulty(daily.getDifficulty());
             startLoadingLevel(GameState.COMPETITIVE, -1);
         } else {
             menuManager.setPendingMatchMode(pendingMatchMode);

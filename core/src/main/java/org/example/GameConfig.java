@@ -24,12 +24,18 @@ public class GameConfig {
     }
 
     public enum Difficulty {
-        NOVICE(0.17f), INTERMEDIATE(0.3f), ADVANCED(0.52f), PRO(0.72f), TOUR_PRO(1f);
+        NOVICE(0.17f), INTERMEDIATE(0.26f), ADVANCED(0.45f), PRO(0.67f), TOUR_PRO(0.88f);
         public final float needleSpeedMult;
 
         Difficulty(float s) {
             this.needleSpeedMult = s;
         }
+
+        // Utility availability: each level above NOVICE removes one aid (in order of utility index)
+        public boolean hasClubInfo()       { return ordinal() < 1; } // NOVICE only
+        public boolean hasShotProjection() { return ordinal() < 2; } // NOVICE, INTERMEDIATE
+        public boolean hasRangeFinder()    { return ordinal() < 3; } // NOVICE, INTERMEDIATE, ADVANCED
+        public boolean hasWindicator()     { return ordinal() < 4; } // all except TOUR_PRO
 
         public static String[] getNames() {
             Difficulty[] values = Difficulty.values();

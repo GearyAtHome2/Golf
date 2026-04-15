@@ -39,6 +39,7 @@ public static class MobileUIPackage {
         public Table gameplayTable, victoryTable, startMenuTable;
         public TextButton infoToggleBtn;
         public HoldButton resetBallBtn, newMapBtn;
+        public TextButton difficultyBtn, projectBtn, distanceBtn;
         public Label clubLabel;
         public Skin skin;
         public TextButton nextLevelBtn, submitScoreBtn, mainMenuBtn;
@@ -94,8 +95,12 @@ public static class MobileUIPackage {
         Table leftStack = new Table();
         leftStack.top().left();
         addActionButton(leftStack, "PAUSE", style, input, GameInputProcessor.Action.PAUSE, btnW, btnH, globalFontScale).left().padBottom(spacing).row();
-        addActionButton(leftStack, "PROJECT", style, input, GameInputProcessor.Action.PROJECTION, btnW, btnH, globalFontScale).left().padBottom(spacing).row();
-        addActionButton(leftStack, "DISTANCE", style, input, GameInputProcessor.Action.SHOW_RANGE, btnW, btnH, globalFontScale).left().padBottom(spacing).row();
+        Cell<TextButton> projCell = addActionButton(leftStack, "PROJECT", style, input, GameInputProcessor.Action.PROJECTION, btnW, btnH, globalFontScale);
+        ui.projectBtn = projCell.getActor();
+        projCell.left().padBottom(spacing).row();
+        Cell<TextButton> distCell = addActionButton(leftStack, "DISTANCE", style, input, GameInputProcessor.Action.SHOW_RANGE, btnW, btnH, globalFontScale);
+        ui.distanceBtn = distCell.getActor();
+        distCell.left().padBottom(spacing).row();
         addActionButton(leftStack, "OVERVIEW", style, input, GameInputProcessor.Action.OVERHEAD_VIEW, btnW, btnH, globalFontScale).left().row();
 
         leftStack.add(debug).width(getDebugWidth(viewport)).height(viewport.getWorldHeight() * 0.18f).left().padTop(spacing).row();
@@ -393,6 +398,19 @@ public static class MobileUIPackage {
             }
         });
         pauseTable.add(animBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+
+        ui.difficultyBtn = new TextButton("DIFFICULTY: " + config.difficulty.name(), menuStyle);
+        ui.difficultyBtn.getLabel().setFontScale(scaledFont * 0.72f);
+        ui.difficultyBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                if (!ui.difficultyBtn.isDisabled()) {
+                    config.cycleDifficulty();
+                    ui.difficultyBtn.setText("DIFFICULTY: " + config.difficulty.name());
+                }
+            }
+        });
+        pauseTable.add(ui.difficultyBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
 
         pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();

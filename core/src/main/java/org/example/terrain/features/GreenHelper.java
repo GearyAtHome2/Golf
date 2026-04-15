@@ -10,10 +10,10 @@ public class GreenHelper {
      * Logic for checking and applying a single tile's type based on green radius.
      * Extracted for ClassicGenerator's mapStandardFeatures loop.
      */
-    public static void applySingleTileGreen(Terrain.TerrainType[][] map, int x, int z, int gX, int gZ, float seedOffset) {
+    public static void applySingleTileGreen(Terrain.TerrainType[][] map, int x, int z, int gX, int gZ, float baseRadius, float seedOffset) {
         float dist = Vector3.dst(x, z, 0, gX, gZ, 0);
         float angle = MathUtils.atan2((z - gZ) + 0.00001f, (x - gX) + 0.00001f);//offset prevents discontinuity at Green Center
-        float dynamicRadius = 26f + (MathUtils.sin(angle * 3 + seedOffset) * 3.1f);
+        float dynamicRadius = baseRadius + (MathUtils.sin(angle * 3 + seedOffset) * 3.1f);
 
         if (dist <= dynamicRadius) {
             map[x][z] = Terrain.TerrainType.GREEN;

@@ -55,7 +55,8 @@ public class MainMenuRenderer {
             font.setColor(0.6f, 0.6f, 0.6f, 1f);
             String userLine = "Signed in as: " + loggedInUser;
             layout.setText(font, userLine);
-            font.draw(batch, userLine, (screenW - layout.width) / 2f, titleY - baseTitleScale * 22f);
+            // Changed from centered/top to bottom-left (screenW * 0.03f, screenH * 0.10f)
+            font.draw(batch, userLine, screenW * 0.03f, screenH * 0.10f);
         }
 
         if (!isAndroid) {
@@ -67,7 +68,7 @@ public class MainMenuRenderer {
 
     private void renderDesktopMenu(SpriteBatch batch, BitmapFont font, float screenW, float screenH, int selection, MenuState state, CompetitiveSessions sessions, float baseScale, int mapScrollOffset, DailySubmissionCache dailyCache) {
         float fixedLeftX = screenW * 0.03f;
-        float menuStartY = screenH * 0.60f;
+        float menuStartY = screenH * 0.65f;
         float spacing = screenH * 0.075f;
         float optionScale = baseScale * 0.32f;
 
@@ -83,11 +84,11 @@ public class MainMenuRenderer {
             case PRACTICE -> renderPracticeMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
         }
 
-        font.getData().setScale(optionScale * 0.6f);
-        font.setColor(Color.GRAY);
-        String hint = state == MenuState.MAIN ? "Use UP/DOWN to select, ENTER to start" : "ESC or BACK to return";
-        font.draw(batch, hint, fixedLeftX, menuStartY - (spacing * 7f));
-
+        if (state == MenuState.MAIN) {
+            font.getData().setScale(optionScale * 0.6f);
+            font.setColor(Color.GRAY);
+            font.draw(batch, "Use UP/DOWN to select, ENTER to start", fixedLeftX, menuStartY - (spacing * 7f));
+        }
     }
 
     public void setLoggedInUser(String name) {
@@ -105,7 +106,6 @@ public class MainMenuRenderer {
 
         float savedScale = font.getScaleX();
 
-        // Username display (small, above LOG OUT)
         if (!loggedInUser.isEmpty()) {
             font.getData().setScale(savedScale * 0.52f);
             font.setColor(0.6f, 0.6f, 0.6f, 1f);
@@ -113,7 +113,6 @@ public class MainMenuRenderer {
             font.getData().setScale(savedScale);
         }
 
-        // LOG OUT option — amber/red tint to distinguish it
         String logoutText = (selection == 4) ? "> LOG OUT" : "LOG OUT";
         Color logoutColor = (selection == 4) ? new Color(1f, 0.55f, 0.2f, 1f) : new Color(0.85f, 0.4f, 0.2f, 0.9f);
         layout.setText(font, logoutText);
@@ -138,7 +137,7 @@ public class MainMenuRenderer {
 
     private void renderMapSelectMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, int scrollOffset) {
         LevelData.Archetype[] archetypes = LevelData.Archetype.values();
-        int totalItems = archetypes.length + 1; // +1 for BACK
+        int totalItems = archetypes.length + 1;
         int visibleCount = Math.min(SCROLL_WINDOW, totalItems);
 
         float savedScale = font.getScaleX();
@@ -223,18 +222,15 @@ public class MainMenuRenderer {
         float textWidth = Math.min(layout.width, maxMenuTextWidth);
         int textLength = text.length();
 
-        // Stars: twinkle and reappear at new positions each cycle
-        float textSeed = (text.hashCode() & 0x7FFF) * 0.001f; // per-option offset
+        float textSeed = (text.hashCode() & 0x7FFF) * 0.001f;
         int starCount = Math.max(5, (int)(textLength * 1.4f));
         font.getData().setScale(savedScale * 0.48f);
         for (int i = 0; i < starCount; i++) {
             float cycleLen = 1.8f + i * 0.11f;
-            // pulseTimer is fine precision-wise (starts at 0); stagger phases per star
             float offsetTime = pulseTimer + i * 0.137f * cycleLen;
             long cycleNumber = (long)(offsetTime / cycleLen);
-            float phase = (offsetTime / cycleLen) - cycleNumber; // precise 0..1
+            float phase = (offsetTime / cycleLen) - cycleNumber;
 
-            // Position re-randomised each cycle, varies per option
             float seed = i * 2.399f + (cycleNumber % 997) * 1.618f + textSeed;
             float relX = MathUtils.sin(seed) * 0.5f + 0.5f;
             float relY = MathUtils.sin(seed * 1.531f + 0.7f) * 0.4f;
@@ -248,7 +244,6 @@ public class MainMenuRenderer {
         }
         font.getData().setScale(savedScale);
 
-        // Text: warm gold when sparkle+warmText, otherwise standard colours
         if (warmText && enabled) {
             layout.setText(font, fullText);
             if (layout.width > maxMenuTextWidth) font.getData().setScale(savedScale * (maxMenuTextWidth / layout.width));
@@ -263,7 +258,6 @@ public class MainMenuRenderer {
         }
     }
 
-    /** Formats an archetype enum value into a human-readable display name. */
     public static String archetypeDisplayName(LevelData.Archetype arch) {
         String raw = arch.name().replace('_', ' ');
         StringBuilder sb = new StringBuilder();
@@ -276,5 +270,4 @@ public class MainMenuRenderer {
         }
         return sb.toString().trim();
     }
-
 }

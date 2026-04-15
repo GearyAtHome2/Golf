@@ -45,6 +45,11 @@ public class LevelDataGenerator {
         int   distance  = spec.distanceMax > spec.distanceMin
                           ? spec.distanceMin + Math.round(r.nextFloat() * (spec.distanceMax - spec.distanceMin))
                           : spec.distanceMin;
+        float greenRadius = spec.greenRadiusMin >= 0
+                          ? (spec.greenRadiusMax > spec.greenRadiusMin
+                              ? spec.greenRadiusMin + r.nextFloat() * (spec.greenRadiusMax - spec.greenRadiusMin)
+                              : spec.greenRadiusMin)
+                          : 26f;
         float windSpeed = spec.windMin + r.nextFloat() * (spec.windMax - spec.windMin);
         float undulation = spec.undulation >= 0 ? spec.undulation : r.nextFloat() * 0.4f + 0.2f;
 
@@ -86,6 +91,7 @@ public class LevelDataGenerator {
         data.setMinFairwayWidth(spec.minFairwayWidth);
         data.setUndulation(undulation);
         data.setHoleSize(0.6f);
+        data.setGreenRadius(greenRadius);
         data.setnBunkers(bunkers);
         data.setBunkerDepth(bDepth);
         data.setDistance(distance);

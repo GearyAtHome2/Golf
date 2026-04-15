@@ -28,7 +28,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final VineyardsGenerator vineyardsGenerator;
     private final BunkerGenerator bunkerGenerator;
     private final ClippertonRockGenerator clippertonRockGenerator; // Placeholder for new generator
-    private final DunesValleyGenerator dunesValleyGenerator;
+    private final OasisDunesGenerator oasisDunesGenerator;
     private final ForestEdgeGenerator woodlandEdgeGenerator;
     private final StoneRunGenerator stoneRunGenerator;
 
@@ -86,7 +86,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.vineyardsGenerator = new VineyardsGenerator();
         this.bunkerGenerator = new BunkerGenerator(rng);
         this.clippertonRockGenerator = new ClippertonRockGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
-        this.dunesValleyGenerator = new DunesValleyGenerator(data);
+        this.oasisDunesGenerator = new OasisDunesGenerator(data);
         this.woodlandEdgeGenerator = new ForestEdgeGenerator(data);
         this.stoneRunGenerator = new StoneRunGenerator(data);
     }
@@ -164,7 +164,7 @@ public class ClassicGenerator implements ITerrainGenerator {
                 }
 
                 float distGreen = Vector3.dst(x, z, 0, gCX, gCZ, 0);
-                float greenRadius = flags.isDunesValley ? SIZE_Z * 0.44f : SIZE_Z * 0.22f;
+                float greenRadius = flags.isOasisDunes ? SIZE_Z * 0.44f : SIZE_Z * 0.22f;
                 float protectedHeight = (flags.isPathDependent && !isElevated) ? currentHeight : getFinalRaw(distGreen, greenRadius, currentHeight);
 
                 float greenEffectMask = (float) Math.pow(1.0f - MathUtils.clamp(distGreen / 94.0f, 0f, 1f), 4.0f);
@@ -228,8 +228,8 @@ public class ClassicGenerator implements ITerrainGenerator {
         } else if (flags.isClippertonRock) {
             data.setWaterLevel(0.0f);
             clippertonRockGenerator.generateClippertonRock(map, h, gX, gZ, 0.0f);
-        } else if (flags.isDunesValley) {
-            dunesValleyGenerator.generateDunesValley(map, h);
+        } else if (flags.isOasisDunes) {
+            oasisDunesGenerator.generateOasisDunes(map, h, gX, gZ);
         } else if (flags.isWoodlandEdge) {
             woodlandEdgeGenerator.generate(map, h, teeP, holeP);
         } else if (flags.isStoneRun) {
@@ -298,7 +298,7 @@ public class ClassicGenerator implements ITerrainGenerator {
 
         if (flags.isVineyards) {
             generateVineyardTrees(map, heights, trees, teeZ, teeX, water, flags.isCliffMap);
-        } else if (flags.isDunesValley) {
+        } else if (flags.isOasisDunes) {
             generateOasisTrees(map, heights, trees, teeZ, teeX, water);
         } else {
             generateRandomTrees(map, heights, trees, teeZ, teeX, water, flags.isCliffMap);
@@ -647,7 +647,7 @@ public class ClassicGenerator implements ITerrainGenerator {
                 map[x][z] = Terrain.TerrainType.ROUGH;
                 if (Math.abs(x - teeCenterX) < 7 && Math.abs(z - teeCenterZ) < 6) map[x][z] = Terrain.TerrainType.TEE;
                 else {
-                    GreenHelper.applySingleTileGreen(map, x, z, gX, gZ, off1);
+                    GreenHelper.applySingleTileGreen(map, x, z, gX, gZ, data.getGreenRadius(), off1);
                 }
             }
         }
@@ -689,7 +689,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isDunesValley, isStoneRun, isWoodlandEdge, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isOasisDunes, isStoneRun, isWoodlandEdge, isPathDependent;
 
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
@@ -702,7 +702,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             isPlungeCenotes = data.getArchetype() == LevelData.Archetype.PLUNGE_CENOTES;
             isVineyards = data.getArchetype() == LevelData.Archetype.BIG_GRAPE_VINEYARDS;
             isClippertonRock = data.getArchetype() == LevelData.Archetype.CLIPPERTON_ROCK;
-            isDunesValley = data.getArchetype() == LevelData.Archetype.DUNES_VALLEY;
+            isOasisDunes = data.getArchetype() == LevelData.Archetype.OASIS_DUNES;
             isStoneRun = data.getArchetype() == LevelData.Archetype.STONE_RUN;
             isWoodlandEdge = data.getArchetype() == LevelData.Archetype.WOODLAND_EDGE;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;

@@ -59,6 +59,7 @@ public class ShotController {
     private final Vector2 lockedSpin = new Vector2();
     private final Vector3 lockedCamDir = new Vector3();
     private boolean showGuideline = false;
+    private boolean guidelineAvailable = true;
 
     public ShotController() {
         ModelBuilder mb = new ModelBuilder();
@@ -87,6 +88,11 @@ public class ShotController {
 
     public void setGuidelineEnabled(boolean enabled) {
         this.showGuideline = enabled;
+    }
+
+    public void setGuidelineAvailable(boolean available) {
+        this.guidelineAvailable = available;
+        if (!available) this.showGuideline = false;
     }
 
     public void toggleGuideline() {
@@ -124,7 +130,7 @@ public class ShotController {
             }
         }
 
-        if (input.isActionJustPressed(GameInputProcessor.Action.PROJECTION)) {
+        if (input.isActionJustPressed(GameInputProcessor.Action.PROJECTION) && guidelineAvailable) {
             toggleGuideline();
         }
 
@@ -144,6 +150,9 @@ public class ShotController {
 
         currentDifficulty = terrain.getShotDifficulty(ball.getPosition().x, ball.getPosition().z, lockedCamDir);
         currentDifficulty.clubDifficulty = MathUtils.clamp(club.powerMult / 20f, 1.0f, 2.0f);
+        if (club == Club.SWEDGE && terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z) == Terrain.TerrainType.SAND) {
+            currentDifficulty.terrainDifficulty *= 0.5f; // Sand wedge specialist: ~4.6 → ~2.3 (comparable to rough)
+        }
         Vector2 spinOffset = hud.getSpinOffset();
         currentDifficulty.swingDifficulty = 1.0f + (spinOffset.len() * 0.75f);
 

@@ -268,7 +268,23 @@ public class HUD {
         if (mobileClubLabel != null) mobileClubLabel.setText(currentClub.name.toUpperCase());
         notificationManager.update(delta);
         updateSpinInput(delta, input);
-        if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
+        if (Platform.isAndroid() && mobileUIPackage != null) {
+            boolean inCompetitive = session != null;
+            mobileUIPackage.newMapBtn.setDisabled(inCompetitive);
+            mobileUIPackage.newMapBtn.getLabel().setColor(inCompetitive ? Color.GRAY : Color.WHITE);
+            mobileUIPackage.newMapBtn.setColor(inCompetitive ? Color.DARK_GRAY : Color.WHITE);
+            if (mobileUIPackage.difficultyBtn != null) {
+                mobileUIPackage.difficultyBtn.setDisabled(inCompetitive);
+                mobileUIPackage.difficultyBtn.getLabel().setColor(inCompetitive ? Color.GRAY : Color.WHITE);
+                mobileUIPackage.difficultyBtn.setColor(inCompetitive ? Color.GRAY : Color.WHITE);
+                mobileUIPackage.difficultyBtn.setText("DIFFICULTY: " + config.difficulty.name());
+            }
+            if (!config.difficulty.hasClubInfo()) showInfoDisplay = false;
+            if (infoToggleBtn != null) infoToggleBtn.setVisible(config.difficulty.hasClubInfo() && !showInfoDisplay);
+            setUtilityButtonState(mobileUIPackage.projectBtn,  config.difficulty.hasShotProjection());
+            setUtilityButtonState(mobileUIPackage.distanceBtn, config.difficulty.hasRangeFinder());
+        }
+        if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE) && config.difficulty.hasRangeFinder()) {
             distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
             distanceDisplayTimer = 3.0f;
         }
@@ -281,7 +297,7 @@ public class HUD {
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         spinIndicator.updateScaling(viewport);
         batch.begin();
-        if (levelData != null) windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
+        if (levelData != null && config.difficulty.hasWindicator()) windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         if (!isAndroid && shouldShowDebug) {
             preShotDebugActor.setBounds(40, 150, 400, 140);
             preShotDebugActor.draw(batch, 1.0f);
@@ -497,6 +513,13 @@ public class HUD {
     }
 
     public void setClubInfoVisible(boolean visible) { if (infoToggleBtn != null) infoToggleBtn.setVisible(!visible); }
+
+    private void setUtilityButtonState(TextButton btn, boolean available) {
+        if (btn == null) return;
+        btn.setDisabled(!available);
+        btn.getLabel().setColor(available ? Color.WHITE : Color.GRAY);
+        btn.setColor(available ? Color.WHITE : Color.DARK_GRAY);
+    }
     public boolean isMinigameComplete() { return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null; }
     public boolean wasMinigameCanceled() { return minigameController.wasCanceled(); }
     public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }

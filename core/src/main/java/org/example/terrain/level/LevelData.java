@@ -37,7 +37,7 @@ public class LevelData {
                 .algo(TerrainAlgorithm.MULTI_WAVE)
                 .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.AUTUMN_MAPLE)
                 .difficulty(8f)
-                .wind(0f, 19f)
+                .wind(2f, 15f)
                 .wiggle(0.05f, 0.15f).islands(0.25f).fairway(49f, 0f).cohesion(1.3f)
                 .bunkers(2, 5, 2.3f)
                 .distance(300, 500)
@@ -49,12 +49,13 @@ public class LevelData {
                 .treeScheme(TreeScheme.AUTUMN_MAPLE)
                 .difficulty(1f)
                 .teeH(0f, 0f).greenH(18f, 8f)
-                .wind(5f, 13f)
+                .wind(8f, 16f)
                 .treeH(12f, 0f).trees(0.18f, 5f, 0.8f)
                 .terrain(0.02f, 5f)
                 .fairway(51f, 0f).undulation(1.2f).wiggle(0.22f, 0.08f).cohesion(0.75f)
-                .distance(470, 110)
+                .distance(470, 580)
                 .par(5)
+                .greenSize(31f, 34f)
         ),
 
         WHISTLING_ISLES(new ArchetypeSpec()
@@ -68,6 +69,7 @@ public class LevelData {
                 .fairway(50f, 28f).undulation(1.4f).wiggle(0.1f, 0.1f).cohesion(1.0f)
                 .distance(600, 100)
                 .par(5)
+                .greenSize(28f, 30f)
         ),
 
         // ── Mid-range ─────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ public class LevelData {
         CRATER_FIELDS(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.SMOOTH_SINE)
                 .treeScheme(TreeScheme.DEAD_GRAY)
-                .difficulty(2f)
+                .difficulty(3f)
                 .teeH(8f, 0f).greenH(12f, 0f)
                 .wind(5f, 18f)
                 .treeH(8f, 0f).trees(0.10f, 3f, 0.6f)
@@ -126,7 +128,7 @@ public class LevelData {
         PLUNGE_CENOTES(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.SMOOTH_SINE)
                 .treeScheme(TreeScheme.BIRCH)
-                .difficulty(2f)
+                .difficulty(3f)
                 .teeH(5f, 5f).greenH(0f, 0f)
                 .wind(6f, 12f)
                 .treeH(4f, 2f).trees(0.13f, 3f, 0.5f)
@@ -206,7 +208,7 @@ public class LevelData {
         WETLANDS(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.DUNES)
                 .treeScheme(TreeScheme.OAK)
-                .difficulty(6f)
+                .difficulty(5f)
                 .teeH(17f, 2f).greenH(13f, 3f)
                 .wind(6f, 12f)
                 .treeH(6f, 2f).trees(0.13f, 3f, 0.5f)
@@ -215,6 +217,7 @@ public class LevelData {
                 .bunkers(1, 1, 3.4f)
                 .distance(250, 80)
                 .par(3)
+                .greenSize(21f, 25f)
         ),
 
         BIG_GRAPE_VINEYARDS(new ArchetypeSpec()
@@ -248,7 +251,7 @@ public class LevelData {
         // ── New archetypes — uses the previously-unused terrain algorithms ─────
         // Swap .algo() between ROLLING_DUNES and PLATEAU to compare them.
 
-        DUNES_VALLEY(new ArchetypeSpec()
+        OASIS_DUNES(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.ROLLING_DUNES)   // ← swap to PLATEAU to compare
                 .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.PALM)
                 .difficulty(3f)
@@ -259,13 +262,14 @@ public class LevelData {
                 .fairway(56f, 0f).wiggle(0.15f, 0.1f).islands(0.2f).cohesion(0.5f)
                 .distance(220, 320)
                 .par(3)
+                .greenSize(20f, 24f)
                 .undulation(1.8f)
         ),
 
         STONE_RUN(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.PLATEAU)          // ← swap to ROLLING_DUNES to compare
                 .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.BIRCH)
-                .difficulty(6f)
+                .difficulty(2f)
                 .teeH(2f, 2f).greenH(64f, 15f)
                 .wind(5f, 9f)
                 .treeH(7f, 1f).trees(0.10f, 3f, 0.5f)
@@ -273,19 +277,21 @@ public class LevelData {
                 .fairway(48f, 0f).wiggle(0.12f, 0.08f).islands(0.15f).cohesion(0.9f)
                 .distance(650, 1200)
                 .par45(750)
+                .greenSize(29f, 32f)
                 .undulation(0.3f)
         ),
         WOODLAND_EDGE(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.SMOOTH_SINE)
                 .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.BIRCH)
-                .difficulty(6f)
-                .teeH(18f, 2f).greenH(8f, 2f)
-                .wind(5f, 9f)
+                .difficulty(4f)
+                .teeH(3f, 1f).greenH(1f, 0.2f)
+                .wind(4f, 8f)
                 .treeH(16f, 4f).trees(0.78f, 5f, 0.82f)
                 .terrain(0.03f, 6f)
                 .fairway(48f, 0f).wiggle(0.12f, 0.08f).islands(0.15f).cohesion(0.9f)
-                .distance(220, 350)
+                .distance(180, 198)
                 .par(3)
+                .greenSize(18f, 22f)
                 .undulation(0.2f)
         );
 
@@ -317,6 +323,7 @@ public class LevelData {
     private float undulation;
     private float waterLevel;
     private float holeSize;
+    private float greenRadius;
     private int nBunkers;
     private float bunkerDepth;
     private Vector3 wind;
@@ -466,6 +473,14 @@ public class LevelData {
 
     public void setHoleSize(float holeSize) {
         this.holeSize = holeSize;
+    }
+
+    public float getGreenRadius() {
+        return greenRadius;
+    }
+
+    public void setGreenRadius(float greenRadius) {
+        this.greenRadius = greenRadius;
     }
 
     public int getnBunkers() {
