@@ -1,13 +1,12 @@
 package org.example.hud.renderer;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
-import org.example.Platform;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import org.example.Platform;
 import org.example.ball.MinigameResult;
 
 public class NotificationManager {
@@ -49,12 +48,11 @@ public class NotificationManager {
     }
 
     private float getScaleForRating(MinigameResult.Rating rating) {
-        // These are now multipliers for the base proportional scale
         return switch (rating) {
-            case PERFECTION -> 1.8f; // Was 5.5 (Now significantly reined in)
-            case SUPER -> 1.55f;      // Was 4.5
-            case GREAT -> 1.35f;      // Was 3.5
-            case GOOD -> 1.2f;       // Was 2.5
+            case PERFECTION -> 1.6f; // Was 5.5 (Now significantly reined in)
+            case SUPER -> 1.45f;      // Was 4.5
+            case GREAT -> 1.28f;      // Was 3.5
+            case GOOD -> 1.15f;       // Was 2.5
             default -> 1.0f;
         };
     }
@@ -93,8 +91,14 @@ public class NotificationManager {
 
         // 2. Draw Subtext
         if (activeNotification.subText != null) {
-            // Subtext is 60% of the main notification size
-            font.getData().setScale(finalScale * 0.6f);
+            //todo: subtext should scale depending on the length of the String
+            String subtext = activeNotification.subText;
+            int len = subtext.length();
+            float shrinkingFactor = len - 15;
+            if (shrinkingFactor < 0) shrinkingFactor = 0;
+            shrinkingFactor *= 0.04f;
+            shrinkingFactor = 1 - shrinkingFactor;
+            font.getData().setScale(finalScale * 0.6f * shrinkingFactor);
             font.setColor(1, 1, 1, alpha * 0.8f);
             layout.setText(font, activeNotification.subText);
 

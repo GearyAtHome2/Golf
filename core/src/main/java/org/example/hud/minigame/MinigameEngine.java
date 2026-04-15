@@ -119,11 +119,11 @@ public class MinigameEngine {
             result.powerMod = 0.95f;
             result.accuracy = side * 0.18f;
         } else if (distFromEdge <= redThreshold) {
-            result.rating = WANK;
+            result.rating = TERRIBLE;
             result.powerMod = 0.85f;
             result.accuracy = side * 0.40f;
         } else {
-            result.rating = SHIT;
+            result.rating = ABYSMAL;
             float missDist = MathUtils.clamp(distFromEdge / (0.5f - greenHalfW), 0, 1);
             result.accuracy = side * missDist;
             result.powerMod = MathUtils.lerp(0.80f, 0.35f, missDist);

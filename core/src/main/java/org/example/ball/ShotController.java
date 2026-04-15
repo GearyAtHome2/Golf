@@ -270,7 +270,7 @@ public class ShotController {
             case PERFECTION -> 1.2f;
             case SUPER -> 1.1f;
             case POOR -> 0.6f;
-            case WANK, SHIT -> 0.3f;
+            case TERRIBLE, ABYSMAL -> 0.3f;
             default -> 1f;
         };
     }

@@ -31,8 +31,8 @@ public class MinigameResultTest {
         assertEquals(MinigameResult.Rating.GREAT,      r[2]);
         assertEquals(MinigameResult.Rating.GOOD,       r[3]);
         assertEquals(MinigameResult.Rating.POOR,       r[4]);
-        assertEquals(MinigameResult.Rating.WANK,       r[5]);
-        assertEquals(MinigameResult.Rating.SHIT,       r[6]);
+        assertEquals(MinigameResult.Rating.TERRIBLE,       r[5]);
+        assertEquals(MinigameResult.Rating.ABYSMAL,       r[6]);
     }
 
     // ── Phrases and weights ────────────────────────────────────────────────────

@@ -119,8 +119,8 @@ public class BallRenderer {
             case GREAT -> activeTrailColor.set(Color.GOLD);
             case GOOD -> activeTrailColor.set(Color.GREEN);
             case POOR -> activeTrailColor.set(Color.GRAY);
-            case WANK -> activeTrailColor.set(Color.ORANGE);
-            case SHIT -> activeTrailColor.set(Color.BROWN);
+            case TERRIBLE -> activeTrailColor.set(Color.ORANGE);
+            case ABYSMAL -> activeTrailColor.set(Color.BROWN);
             default -> activeTrailColor.set(Color.WHITE);
         }
         trailDirty = true;

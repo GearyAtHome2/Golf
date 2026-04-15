@@ -147,7 +147,7 @@ public class MinigameEngineTest {
     public void testWankZone() {
         engine.reset(0f);
         MinigameResult r = engine.calculateResult(0.7f); // distFromEdge = 0.075 > 0.0625, ≤ 0.125
-        assertEquals(WANK, r.rating);
+        assertEquals(TERRIBLE, r.rating);
         assertEquals(0.85f, r.powerMod, 0.001f);
         assertEquals(0.40f, r.accuracy, 0.001f);
     }
@@ -156,7 +156,7 @@ public class MinigameEngineTest {
     public void testWankZoneLeftSide() {
         engine.reset(0f);
         MinigameResult r = engine.calculateResult(0.3f);
-        assertEquals(WANK, r.rating);
+        assertEquals(TERRIBLE, r.rating);
         assertEquals(-0.40f, r.accuracy, 0.001f);
     }
 
@@ -164,7 +164,7 @@ public class MinigameEngineTest {
     public void testShitZone() {
         engine.reset(0f);
         MinigameResult r = engine.calculateResult(0.95f);
-        assertEquals(SHIT, r.rating);
+        assertEquals(ABYSMAL, r.rating);
         assertTrue(r.powerMod <= 0.80f);
         assertTrue(r.powerMod >= 0.35f);
     }
@@ -173,7 +173,7 @@ public class MinigameEngineTest {
     public void testShitZoneLowEnd() {
         engine.reset(0f);
         MinigameResult r = engine.calculateResult(0.05f);
-        assertEquals(SHIT, r.rating);
+        assertEquals(ABYSMAL, r.rating);
     }
 
     // ── calculateResult — sweet spots ─────────────────────────────────────────
