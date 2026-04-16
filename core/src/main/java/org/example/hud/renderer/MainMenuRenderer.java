@@ -14,6 +14,7 @@ import org.example.hud.UIUtils;
 import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
 import org.example.terrain.level.LevelData;
+import org.example.tutorial.TutorialPrefs;
 
 public class MainMenuRenderer {
 
@@ -97,11 +98,14 @@ public class MainMenuRenderer {
 
     private void renderMainMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         java.util.List<MenuButtonDescriptor> descs = MenuButtonResolver.resolve(MenuState.MAIN, sessions, dailyCache);
-        float[] yOffsets = {0, -s, -(s * 2), -(s * 3)};
-        for (int i = 0; i < yOffsets.length; i++) {
+        // Last item is always LOG OUT, rendered separately with special styling.
+        int regularCount = descs.size() - 1;
+        int logoutIdx    = descs.size() - 1;
+
+        for (int i = 0; i < regularCount; i++) {
             MenuButtonDescriptor d = descs.get(i);
-            if (d.sparkle) drawSparkleOption(batch, font, selection == i, true, true, true, d.label, x, y + yOffsets[i]);
-            else           drawOption(batch, font, selection == i, true, d.label, x, y + yOffsets[i]);
+            if (d.sparkle) drawSparkleOption(batch, font, selection == i, true, true, true, d.label, x, y - (s * i));
+            else           drawOption(batch, font, selection == i, true, d.label, x, y - (s * i));
         }
 
         float savedScale = font.getScaleX();
@@ -109,17 +113,16 @@ public class MainMenuRenderer {
         if (!loggedInUser.isEmpty()) {
             font.getData().setScale(savedScale * 0.52f);
             font.setColor(0.6f, 0.6f, 0.6f, 1f);
-            font.draw(batch, "Signed in as: " + loggedInUser, x, y - (s * 4.4f));
+            font.draw(batch, "Signed in as: " + loggedInUser, x, y - (s * (regularCount + 0.4f)));
             font.getData().setScale(savedScale);
         }
 
-        String logoutText = (selection == 4) ? "> LOG OUT" : "LOG OUT";
-        Color logoutColor = (selection == 4) ? new Color(1f, 0.55f, 0.2f, 1f) : new Color(0.85f, 0.4f, 0.2f, 0.9f);
-        layout.setText(font, logoutText);
+        String logoutText = (selection == logoutIdx) ? "> LOG OUT" : "LOG OUT";
+        Color logoutColor = (selection == logoutIdx) ? new Color(1f, 0.55f, 0.2f, 1f) : new Color(0.85f, 0.4f, 0.2f, 0.9f);
         font.setColor(0, 0, 0, 0.5f);
-        font.draw(batch, logoutText, x + 1, y - (s * 5f) - 1);
+        font.draw(batch, logoutText, x + 1, y - (s * (regularCount + 1f)) - 1);
         font.setColor(logoutColor);
-        font.draw(batch, logoutText, x, y - (s * 5f));
+        font.draw(batch, logoutText, x, y - (s * (regularCount + 1f)));
         font.getData().setScale(savedScale);
     }
 
@@ -189,7 +192,12 @@ public class MainMenuRenderer {
     private void renderPracticeMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {
         drawOption(batch, font, selection == 0, true, "PRACTICE RANGE", x, y);
         drawOption(batch, font, selection == 1, true, "PUTTING GREEN", x, y - s);
-        drawOption(batch, font, selection == 2, true, "< BACK TO MAIN", x, y - (s * 2.5f));
+        if (TutorialPrefs.isComplete()) {
+            drawOption(batch, font, selection == 2, true, "TUTORIAL",      x, y - (s * 2));
+            drawOption(batch, font, selection == 3, true, "< BACK TO MAIN", x, y - (s * 3.5f));
+        } else {
+            drawOption(batch, font, selection == 2, true, "< BACK TO MAIN", x, y - (s * 2.5f));
+        }
     }
 
     private void drawOption(SpriteBatch batch, BitmapFont font, boolean selected, boolean enabled, String text, float x, float y) {

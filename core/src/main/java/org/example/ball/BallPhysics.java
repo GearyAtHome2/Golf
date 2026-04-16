@@ -198,6 +198,23 @@ public class BallPhysics {
         return false;
     }
 
+    public static boolean handleFlagPoleCollision(Vector3 pos, Vector3 vel, Vector3 spin,
+                                                   Vector3 poleBase, float poleRadius, float poleHeight) {
+        float dx = pos.x - poleBase.x;
+        float dz = pos.z - poleBase.z;
+        float combinedRadius = BALL_RADIUS + poleRadius;
+        if (dx * dx + dz * dz >= combinedRadius * combinedRadius) return false;
+        if (pos.y < poleBase.y || pos.y > poleBase.y + poleHeight) return false;
+
+        temp.set(dx, 0, dz).nor();
+        if (vel.dot(temp) >= 0) return false; // Already separating
+
+        float overlap = combinedRadius - (float) Math.sqrt(dx * dx + dz * dz);
+        vel.set(calculateBounceWithSpin(vel, temp, spin, 0.28f, 0.15f, 0.0f));
+        pos.add(temp.scl(overlap + 0.01f));
+        return true;
+    }
+
     public static void applyFoliagePhysics(Vector3 vel, Vector3 spin, float delta,
                                            float dragLin, float dragSqu, float deflectChance, float deflectMag, Random deterministicRandom) {
         float speed = vel.len();

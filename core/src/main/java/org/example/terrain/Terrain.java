@@ -48,6 +48,18 @@ public class Terrain {
     private float waterLevel;
     private float greenMinH = Float.MAX_VALUE, greenMaxH = -Float.MAX_VALUE;
 
+    // Flag pole wobble — damped sinusoidal oscillation triggered on ball impact
+    private float wobbleAmplitude = 0f;
+    private long  wobbleStartNanos = 0L;
+    private static final float WOBBLE_FREQUENCY = 12f; // rad/s (~2 Hz)
+    private static final float WOBBLE_DECAY     = 3f;  // e^-3 ≈ 5% after 1 s
+
+    // Flag pole raise — lifts the flag when the ball approaches so it doesn't obstruct the putt
+    private float flagRaiseT = 0f;
+    private static final float FLAG_RAISE_RADIUS = 4f;  // units — raise begins within this distance
+    private static final float FLAG_RAISE_MAX    = 0.5f; // units lifted when fully raised
+    private static final float FLAG_RAISE_SPEED  = 5f;  // lerp speed (reaches ~95% in ~0.6 s)
+
     private final float CELL_SIZE = 10.0f;
     private List<TerrainObject>[][] objectGrid;
     private int gridCols, gridRows;
@@ -361,13 +373,15 @@ public class Terrain {
         mb.part("flag", GL20.GL_TRIANGLES, VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal, flagMat)
                 .rect(0.1f, 1.5f, 0f, 0.1f, 2.5f, 0f, 1.6f, 2.5f, 0f, 1.6f, 1.5f, 0f, 0f, 0f, 1f);
         flagInstance = new ModelInstance(mb.end());
-        updateFlagTransform(pos, 1.0f, 0f);
+        updateFlagTransform(pos, 1.0f, 0f, 0f, 0f);
     }
 
-    private void updateFlagTransform(Vector3 pos, float scale, float rotationY) {
+    private void updateFlagTransform(Vector3 pos, float scale, float rotationY, float wobbleDegrees, float yOffset) {
         if (flagInstance == null) return;
-        flagInstance.transform.setToTranslation(pos);
+        flagInstance.transform.setToTranslation(pos.x, pos.y + yOffset, pos.z);
         flagInstance.transform.rotate(Vector3.Y, rotationY);
+        // Tilt around X pivoting at the pole base — translate(0, 2.5) keeps base grounded
+        flagInstance.transform.rotate(Vector3.X, wobbleDegrees);
         flagInstance.transform.scale(scale, scale, scale);
         flagInstance.transform.translate(0, 2.5f, 0);
     }
@@ -381,7 +395,7 @@ public class Terrain {
         teeInstance.transform.setToTranslation(pos.x, pos.y + 0.075f, pos.z);
     }
 
-    public void updateFlag(Vector3 cameraPosition) {
+    public void updateFlag(Vector3 cameraPosition, Vector3 ballPosition) {
         if (flagInstance == null) return;
         float dist = cameraPosition.dst(holePosition);
         float distFactor = Math.max(0, dist - 50f);
@@ -389,7 +403,21 @@ public class Terrain {
         scale *= org.example.hud.HUD.UI_SCALE;
         Vector3 dir = new Vector3(cameraPosition).sub(holePosition);
         float angle = MathUtils.atan2(dir.x, dir.z) * MathUtils.radiansToDegrees;
-        updateFlagTransform(holePosition, scale, angle);
+
+        float t = (System.nanoTime() - wobbleStartNanos) / 1_000_000_000f;
+        float wobble = wobbleAmplitude * (float) Math.exp(-WOBBLE_DECAY * t) * MathUtils.sin(WOBBLE_FREQUENCY * t);
+
+        float ballDist = ballPosition.dst(holePosition);
+        float raiseTarget = MathUtils.clamp(1f - (ballDist / FLAG_RAISE_RADIUS), 0f, 1f);
+        flagRaiseT = MathUtils.lerp(flagRaiseT, raiseTarget, FLAG_RAISE_SPEED * Gdx.graphics.getDeltaTime());
+
+        updateFlagTransform(holePosition, scale, angle, wobble, flagRaiseT * FLAG_RAISE_MAX);
+    }
+
+    /** Called by ball physics when the ball strikes the flag pole. */
+    public void triggerFlagWobble(float impactSpeed) {
+        wobbleAmplitude = Math.min(impactSpeed * 1.5f, 20f); // degrees, capped at 20
+        wobbleStartNanos = System.nanoTime();
     }
 
     private void createWaterPlane() {
@@ -443,7 +471,7 @@ public class Terrain {
         this.holePosition.set(newPos.x, getSurfaceHeightAt(newPos.x, newPos.z), newPos.z);
         if (physicalHole != null) physicalHole.dispose();
         this.physicalHole = new Hole(holePosition, getNormalAt(holePosition.x, holePosition.z, false), holeSize / 2f);
-        if (flagInstance != null) updateFlagTransform(holePosition, 1.0f, 0f);
+        if (flagInstance != null) updateFlagTransform(holePosition, 1.0f, 0f, 0f, 0f);
     }
 
     public void setTeePosition(Vector3 newPos) {
@@ -492,7 +520,7 @@ public class Terrain {
         FAIRWAY(0.32f, 0.12f, 1.05f, 1.0f, 0.17f, 0.43f, new Color(0.1f, 0.4f, 0.1f, 1f)),
         ROUGH(1.2f, 4.5f, 1.5f, 2.1f, 0.63f, 0.32f, new Color(0.02f, 0.15f, 0.02f, 1f)),
         SAND(1.4f, 12.0f, 2.5f, 4.6f, 0.9f, 0.11f, new Color(0.85f, 0.8f, 0.5f, 1f)),
-        GREEN(0.2f, 0.03f, 1.05f, 0.9f, 0.22f, 0.35f, new Color(0.1f, 0.6f, 0.1f, 1f)),
+        GREEN(0.16f, 0.02f, 1.05f, 0.9f, 0.22f, 0.35f, new Color(0.1f, 0.6f, 0.1f, 1f)),
         STONE(0.1f, 0.02f, 1.05f, 1.5f, 0.01f, 0.7f, new Color(0.18f, 0.18f, 0.2f, 1f));
 
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness, restitution;

@@ -9,6 +9,7 @@ import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.terrain.level.LevelData;
+import org.example.tutorial.TutorialPrefs;
 
 public class MenuManager {
     private MenuState currentMenuState = MenuState.MAIN;
@@ -99,12 +100,25 @@ public class MenuManager {
     }
 
     private void handleMain(MenuHandler callback) {
-        switch (menuSelection) {
-            case 0 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
-            case 1 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
-            case 2 -> callback.onShowInstructions();
-            case 3 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
-            case 4 -> callback.onLogout();
+        if (!TutorialPrefs.isComplete()) {
+            // TUTORIAL(0) PLAY(1) COMPETITIVE(2) INSTRUCTIONS(3) PRACTICE(4) LOG OUT(5)
+            switch (menuSelection) {
+                case 0 -> callback.onStartTutorial();
+                case 1 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
+                case 2 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
+                case 3 -> callback.onShowInstructions();
+                case 4 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
+                case 5 -> callback.onLogout();
+            }
+        } else {
+            // PLAY(0) COMPETITIVE(1) INSTRUCTIONS(2) PRACTICE(3) LOG OUT(4)
+            switch (menuSelection) {
+                case 0 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
+                case 1 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
+                case 2 -> callback.onShowInstructions();
+                case 3 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
+                case 4 -> callback.onLogout();
+            }
         }
     }
 
@@ -156,20 +170,31 @@ public class MenuManager {
     }
 
     private void handlePractice(MenuHandler callback) {
-        switch (menuSelection) {
-            case 0 -> callback.onStartPracticeRange();
-            case 1 -> callback.onStartPuttingGreen();
-            case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
+        if (TutorialPrefs.isComplete()) {
+            // DRIVING RANGE(0) PUTTING GREEN(1) TUTORIAL(2) BACK(3)
+            switch (menuSelection) {
+                case 0 -> callback.onStartPracticeRange();
+                case 1 -> callback.onStartPuttingGreen();
+                case 2 -> callback.onStartTutorial();
+                case 3 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
+            }
+        } else {
+            // DRIVING RANGE(0) PUTTING GREEN(1) BACK(2)
+            switch (menuSelection) {
+                case 0 -> callback.onStartPracticeRange();
+                case 1 -> callback.onStartPuttingGreen();
+                case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 4; }
+            }
         }
     }
 
     private int getMaxSelection() {
         return switch (currentMenuState) {
-            case MAIN -> 5;
+            case MAIN -> TutorialPrefs.isComplete() ? 5 : 6;
             case PLAY_OPTIONS -> 4;
             case MAP_SELECT -> MAP_SELECT_TOTAL;
             case EIGHTEEN_HOLES -> 5;
-            case PRACTICE -> 3;
+            case PRACTICE -> TutorialPrefs.isComplete() ? 4 : 3;
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.values().length + 1;
         };
     }
@@ -198,5 +223,7 @@ public class MenuManager {
         void onLogout();
         /** Called when a completed but unsubmitted daily session is selected from the menu. */
         default void onResubmitDaily(CourseType type) {}
+        /** Launch the tutorial. */
+        default void onStartTutorial() {}
     }
 }

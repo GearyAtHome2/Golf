@@ -1,5 +1,6 @@
 package org.example.ball;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g3d.Environment;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
@@ -154,6 +155,10 @@ public class Ball {
         handleMonolithCollisions(terrain);
         PhysicsProfiler.endSection("MonolithCollision");
 
+        PhysicsProfiler.startSection("FlagPoleCollision");
+        handleFlagPoleCollision(terrain);
+        PhysicsProfiler.endSection("FlagPoleCollision");
+
         float stepYDelta = position.y - preStepY;
         if (Math.abs(stepYDelta) > 2.0f && hitCooldown <= 0f) {
             position.y = preStepY + MathUtils.clamp(stepYDelta, -1f, 1f);
@@ -283,6 +288,23 @@ public class Ball {
                 BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE, random);
                 if (random.nextFloat() < 0.1f) particleManager.spawnRatingBurst(position, Color.FOREST, 1, 0.3f);
             }
+        }
+    }
+
+    private void handleFlagPoleCollision(Terrain terrain) {
+        if (hitCooldown > 0) return;
+        Vector3 holePos = terrain.getHolePosition();
+        float dx = position.x - holePos.x;
+        float dz = position.z - holePos.z;
+        if (dx * dx + dz * dz > 9f) return; // Cull: more than 3 units away
+        float speed = velocity.len();
+        if (BallPhysics.handleFlagPoleCollision(position, velocity, spin, holePos, 0.1f, 5f)) {
+            Gdx.app.log("FlagCollision", String.format("impact=%.2f m/s  post=%.2f m/s", speed, velocity.len()));
+            hitCooldown = 0.05f;
+            lastInteraction = Interaction.TERRAIN;
+            isGoodShot = false;
+            particleManager.spawnRatingBurst(position, Color.WHITE, 3, 0.8f);
+            terrain.triggerFlagWobble(speed);
         }
     }
 

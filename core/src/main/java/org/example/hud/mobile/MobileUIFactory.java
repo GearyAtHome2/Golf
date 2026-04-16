@@ -29,6 +29,7 @@ import org.example.scoreBoard.DailySubmissionCache;
 import org.example.hud.MenuButtonDescriptor;
 import org.example.hud.MenuButtonResolver;
 import org.example.hud.UIUtils;
+import org.example.tutorial.TutorialPrefs;
 import static org.example.hud.UIUtils.createRoundedRectDrawable;
 import static org.example.hud.mobile.MobileUIValues.*;
 
@@ -44,7 +45,7 @@ public static class MobileUIPackage {
         public Skin skin;
         public TextButton nextLevelBtn, submitScoreBtn, mainMenuBtn;
         public Table arrowContainer;
-        // Debug: hit/max buttons exposed so style can be cycled at runtime
+        public Table clubArrowRow;
         public TextButton hitBtn, maxHitBtn;
     }
 
@@ -261,7 +262,9 @@ public static class MobileUIPackage {
 
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
-            case MAIN -> new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"};
+            case MAIN -> TutorialPrefs.isComplete()
+                ? new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"}
+                : new String[]{"TUTORIAL", "PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"};
             case PLAY_OPTIONS -> new String[]{"RANDOM MAP", "SELECT MAP", "PLAY SEED", "BACK"};
             case MAP_SELECT -> {
                 LevelData.Archetype[] archetypes = LevelData.Archetype.values();
@@ -273,7 +276,9 @@ public static class MobileUIPackage {
                 yield result;
             }
             case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY 1-HOLE", "BACK"};
-            case PRACTICE -> new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
+            case PRACTICE -> TutorialPrefs.isComplete()
+                ? new String[]{"DRIVING RANGE", "PUTTING GREEN", "TUTORIAL", "BACK"}
+                : new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
             case DIFFICULTY_SELECT -> {
                 String[] diffs = GameConfig.Difficulty.getNames();
                 String[] withBack = new String[diffs.length + 1];
@@ -305,6 +310,7 @@ public static class MobileUIPackage {
         addActionButton(arrowRow, ">",  style, input, GameInputProcessor.Action.CLUB_DOWN,  innerW, h).padRight(gapOuter);
         addActionButton(arrowRow, ">>", style, input, GameInputProcessor.Action.CLUB_LAST,  outerW, h, smallFontScale);
         arrowContainer.add(arrowRow);
+        ui.clubArrowRow = arrowRow;
     }
 
     private static Cell<TextButton> addActionButton(Table table, String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float w, float h) {

@@ -31,6 +31,7 @@ public class CameraController {
 
     private boolean isOverhead = false;
     private boolean isPaused = false;
+    private boolean skipRotation = true; // discard stale mouse delta on first update after load
 
     public CameraController(PerspectiveCamera camera, float initialDistance, Vector3 startLookAt, GameConfig.CameraConfig config) {
         this.camera = camera;
@@ -162,7 +163,7 @@ public class CameraController {
         boolean canRotate = (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !introActive)
                 || (config.controlStyle == GameConfig.CameraConfig.ControlStyle.DRAG && (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || Platform.isAndroid()));
 
-        if (canRotate) {
+        if (canRotate && !skipRotation) {
             float sens = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) && config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE
                     ? config.mouseSensitivity / config.fineTuneDivider
                     : config.mouseSensitivity;
@@ -173,6 +174,7 @@ public class CameraController {
             yaw += deltaX * sens * config.getXMult();
             targetPitch = MathUtils.clamp(targetPitch + (deltaY * sens * config.getYMult()), -10f, 85f);
         }
+        skipRotation = false;
 
         float radYaw = -MathUtils.degreesToRadians * yaw;
         float radPitch = MathUtils.degreesToRadians * pitch;

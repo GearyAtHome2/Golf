@@ -6,6 +6,7 @@ import org.example.scoreBoard.DailyStatusResolver;
 import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
+import org.example.tutorial.TutorialPrefs;
 
 import java.util.Arrays;
 import java.util.List;
@@ -26,6 +27,7 @@ public final class MenuButtonResolver {
         return switch (state) {
             case MAIN           -> resolveMain(sessions, dailyCache);
             case EIGHTEEN_HOLES -> resolveEighteenHoles(sessions, dailyCache);
+            case PRACTICE       -> resolvePractice();
             default             -> null;
         };
     }
@@ -38,13 +40,27 @@ public final class MenuButtonResolver {
             || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_9,  sessions.daily9,  dailyCache)
             || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_1,  sessions.daily1,  dailyCache);
 
-        return Arrays.asList(
-            MenuButtonDescriptor.enabled("PLAY >"),
-            new MenuButtonDescriptor("COMPETITIVE >", false, competitiveSparkle),
-            MenuButtonDescriptor.enabled("INSTRUCTIONS"),
-            MenuButtonDescriptor.enabled("PRACTICE >"),
-            MenuButtonDescriptor.enabled("LOG OUT")
-        );
+        java.util.List<MenuButtonDescriptor> items = new java.util.ArrayList<>();
+        if (!TutorialPrefs.isComplete()) {
+            items.add(new MenuButtonDescriptor("TUTORIAL", false, true));
+        }
+        items.add(MenuButtonDescriptor.enabled("PLAY >"));
+        items.add(new MenuButtonDescriptor("COMPETITIVE >", false, competitiveSparkle));
+        items.add(MenuButtonDescriptor.enabled("INSTRUCTIONS"));
+        items.add(MenuButtonDescriptor.enabled("PRACTICE >"));
+        items.add(MenuButtonDescriptor.enabled("LOG OUT"));
+        return items;
+    }
+
+    private static List<MenuButtonDescriptor> resolvePractice() {
+        java.util.List<MenuButtonDescriptor> items = new java.util.ArrayList<>();
+        items.add(MenuButtonDescriptor.enabled("DRIVING RANGE"));
+        items.add(MenuButtonDescriptor.enabled("PUTTING GREEN"));
+        if (TutorialPrefs.isComplete()) {
+            items.add(MenuButtonDescriptor.enabled("TUTORIAL"));
+        }
+        items.add(MenuButtonDescriptor.enabled("< BACK TO MAIN"));
+        return items;
     }
 
     private static List<MenuButtonDescriptor> resolveEighteenHoles(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {

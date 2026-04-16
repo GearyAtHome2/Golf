@@ -133,6 +133,29 @@ public class AuthService {
     }
 
     // -------------------------------------------------------------------------
+    // Sign in with Google (exchange a Google ID token for a Firebase session)
+    // -------------------------------------------------------------------------
+
+    public void signInWithGoogle(String googleIdToken, AuthCallback callback) {
+        // Firebase signInWithIdp accepts a Google ID token and returns a full Firebase session.
+        String body = "{\"postBody\":\"id_token=" + escape(googleIdToken) + "&providerId=google.com\","
+                    + "\"requestUri\":\"http://localhost\","
+                    + "\"returnSecureToken\":true,"
+                    + "\"returnIdpCredential\":true}";
+
+        post(AUTH_BASE + "signInWithIdp", body, response -> {
+            AuthResult result = new AuthResult(
+                response.getString("localId",      ""),
+                response.getString("idToken",      ""),
+                response.getString("refreshToken", ""),
+                response.getString("email",        ""),
+                response.getString("displayName",  "")
+            );
+            Gdx.app.postRunnable(() -> callback.onSuccess(result));
+        }, msg -> callback.onFailure(msg));
+    }
+
+    // -------------------------------------------------------------------------
     // Send password reset email
     // -------------------------------------------------------------------------
 

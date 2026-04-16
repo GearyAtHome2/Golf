@@ -18,6 +18,10 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import org.example.auth.AuthService;
+import org.example.auth.GoogleSignInProvider;
+import org.example.auth.LoginScreen;
+import org.example.auth.UserSession;
 import org.example.ball.Ball;
 import org.example.ball.ShotController;
 import org.example.camera.CameraController;
@@ -33,12 +37,8 @@ import org.example.input.DesktopInputProcessor;
 import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 import org.example.performance.PhysicsProfiler;
-import org.example.auth.AuthService;
-import org.example.auth.LoginScreen;
-import org.example.auth.UserSession;
 import org.example.scoreBoard.CourseType;
 import org.example.scoreBoard.SubmissionCoordinator;
-import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.session.SessionManager;
 import org.example.terrain.ClassicGenerator;
@@ -47,8 +47,18 @@ import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
 import org.example.terrain.level.LevelDataGenerator;
 import org.example.terrain.level.LevelFactory;
+import org.example.tutorial.TutorialController;
+import org.example.tutorial.TutorialPrefs;
 
 public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHandler, HazardManager.HazardListener {
+
+    private final GoogleSignInProvider googleSignInProvider;
+
+    public GolfGame() { this(null); }
+
+    public GolfGame(GoogleSignInProvider googleSignInProvider) {
+        this.googleSignInProvider = googleSignInProvider;
+    }
 
     private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG}
 
@@ -79,15 +89,19 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private WindManager windManager;
     private boolean isVictory = false;
     private boolean showClubInfo = false;
+    private boolean inTutorial = false;
+    private TutorialController tutorialController = null;
+    private GameConfig.Difficulty preTutorialDifficulty = null;
+    private float tutorialAimStartYaw = Float.NaN; // yaw when STEP_2_AIM begins
     private SubmissionCoordinator submissionCoordinator;
     private Model highlightModel;
     private ModelInstance highlightInstance;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
     private final Vector3 tempV3 = new Vector3();
     private final Vector2 stageTouch = new Vector2();
-    private AuthService  authService;
-    private UserSession  userSession;
-    private LoginScreen  loginScreen;
+    private AuthService authService;
+    private UserSession userSession;
+    private LoginScreen loginScreen;
     private final org.example.scoreBoard.DailySubmissionCache dailySubmissionCache = new org.example.scoreBoard.DailySubmissionCache();
 
     @Override
@@ -105,16 +119,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private void initCoreSystems() {
         setupCamera();
         setupEnvironment();
-        modelBatch     = new ModelBatch();
-        hud            = new HUD(config);
-        levelManager   = new LevelManager();
-        levelFactory   = new LevelFactory();
-        ghostManager   = new GhostManager(8);
-        menuManager    = new MenuManager();
-        hazardManager  = new HazardManager();
+        modelBatch = new ModelBatch();
+        hud = new HUD(config);
+        levelManager = new LevelManager();
+        levelFactory = new LevelFactory();
+        ghostManager = new GhostManager(8);
+        menuManager = new MenuManager();
+        hazardManager = new HazardManager();
         shotController = new ShotController();
         particleManager = new ParticleManager();
-        windManager    = new WindManager();
+        windManager = new WindManager();
         sessionManager = new SessionManager(config);
 
         authService = new AuthService();
@@ -122,43 +136,74 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         userSession.load();
 
         submissionCoordinator = new SubmissionCoordinator(
-            sessionManager, userSession, authService, dailySubmissionCache,
-            new SubmissionCoordinator.Callbacks() {
-                @Override public void onSubmissionStarted() {
-                    if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(true);
-                    setupInputProcessor();
+                sessionManager, userSession, authService, dailySubmissionCache,
+                new SubmissionCoordinator.Callbacks() {
+                    @Override
+                    public void onSubmissionStarted() {
+                        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(true);
+                        setupInputProcessor();
+                    }
+
+                    @Override
+                    public void onSubmissionEnded() {
+                        if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
+                        setupInputProcessor();
+                    }
+
+                    @Override
+                    public void onMenuInvalidate() {
+                        hud.invalidateMobileMenuState();
+                    }
+
+                    @Override
+                    public void onSubmitSuccess() {
+                        exitToMainMenu();
+                    }
+
+                    @Override
+                    public void onAutoRetrySuccess() {
+                        hud.showToast("SCORE SUBMITTED!");
+                    }
+
+                    @Override
+                    public Stage getSubmitStage() {
+                        return hud.getStage();
+                    }
+
+                    @Override
+                    public Stage getMenuStage() {
+                        return hud.getStartMenuStage();
+                    }
+
+                    @Override
+                    public Skin getSkin() {
+                        return hud.getSkin();
+                    }
                 }
-                @Override public void onSubmissionEnded() {
-                    if (inputProcessor instanceof DesktopInputProcessor dip) dip.setInputBlocked(false);
-                    setupInputProcessor();
-                }
-                @Override public void onMenuInvalidate() { hud.invalidateMobileMenuState(); }
-                @Override public void onSubmitSuccess() { exitToMainMenu(); }
-                @Override public void onAutoRetrySuccess() { hud.showToast("SCORE SUBMITTED!"); }
-                @Override public Stage getSubmitStage() { return hud.getStage(); }
-                @Override public Stage getMenuStage() { return hud.getStartMenuStage(); }
-                @Override public Skin getSkin() { return hud.getSkin(); }
-            }
         );
 
-        loginScreen = new LoginScreen(hud.getSkin(), authService, userSession, r -> {
+        loginScreen = new LoginScreen(hud.getSkin(), authService, userSession, googleSignInProvider, r -> {
             Gdx.app.log("Login", "Welcome, " + r.displayName);
             hud.setLoggedInUser(r.displayName);
             sessionManager.reloadDailySessions(r.uid);
             dailySubmissionCache.fetch(r.uid, this::tryAutoRetryPending);
+            TutorialPrefs.markFirstLoginDone();
             changeState(GameState.START);
         });
 
         if (userSession.isLoggedIn()) {
             userSession.tryAutoLogin(authService, new AuthService.AuthCallback() {
-                @Override public void onSuccess(AuthService.AuthResult r) {
+                @Override
+                public void onSuccess(AuthService.AuthResult r) {
                     Gdx.app.log("UserSession", "Auto-login OK — " + r.displayName);
                     hud.setLoggedInUser(r.displayName);
                     sessionManager.reloadDailySessions(r.uid);
                     dailySubmissionCache.fetch(r.uid, GolfGame.this::tryAutoRetryPending);
                     changeState(GameState.START);
                 }
-                @Override public void onFailure(String msg) {
+
+                @Override
+                public void onFailure(String msg) {
                     Gdx.app.log("UserSession", "Auto-login failed — showing login screen.");
                     // currentState stays LOGIN; loginScreen is already visible.
                 }
@@ -257,11 +302,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private void handleInput() {
         if (currentState == GameState.LOADING) return;
-        if (hud.wasMainMenuRequested()) { exitToMainMenu(); return; }
+        if (hud.wasMainMenuRequested()) {
+            exitToMainMenu();
+            return;
+        }
         if (submissionCoordinator.isSubmissionInProgress()) return;
 
         switch (currentState) {
-            case LOGIN -> {} // input handled by the login stage via the input multiplexer
+            case LOGIN -> {
+            } // input handled by the login stage via the input multiplexer
             case START -> {
                 menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
                 // Android: tap the right half of the screen to go back from any sub-menu
@@ -281,10 +330,76 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
     }
 
+    private void handleTutorialInput() {
+        if (tutorialController == null || !tutorialController.isActive()) return;
+        switch (tutorialController.getCurrentStep()) {
+            case STEP_1_DISTANCE:
+                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
+                    tutorialController.advance(); // → STEP_2_AIM
+                    tutorialAimStartYaw = (cameraController != null) ? cameraController.getYaw() : Float.NaN;
+                }
+                break;
+
+            case STEP_2_AIM:
+                if (cameraController != null && !Float.isNaN(tutorialAimStartYaw)) {
+                    float delta = Math.abs(cameraController.getYaw() - tutorialAimStartYaw);
+                    if (delta > 8f) {
+                        tutorialController.advance(); // → STEP_3_INFO
+                    }
+                }
+                break;
+
+            case STEP_3_INFO:
+                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) {
+                    showClubInfo = !showClubInfo; // allow the club info panel to open normally
+                    tutorialController.advance(); // → STEP_4_CLUB
+                } else if (hud.consumeInfoToggled()) {
+                    tutorialController.advance();
+                }
+                break;
+
+            case STEP_4_CLUB:
+                if (currentClub == Club.IRON_9) {
+                    tutorialController.advance();
+                }
+                break;
+            case STEP_5_POWER:
+                // Advance once the shot controller starts charging (MAX was triggered)
+                if (shotController.isCharging()) {
+                    tutorialController.advance(); // → STEP_6_HIT
+                }
+                break;
+
+            case STEP_8_PUTTER:
+                // Advance once the shot controller starts charging (MAX was triggered)
+                if (currentClub == Club.PUTTER) {
+                    tutorialController.advance();
+                }
+                break;
+
+            case STEP_9_PROJECT:
+                // Advance once the shot controller starts charging (MAX was triggered)
+                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PROJECTION)) {
+                    tutorialController.advance();
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+
     private void handleGameplayInput() {
         if (isVictory) {
             handleVictoryInput();
             return;
+        }
+
+        if (inTutorial && tutorialController != null) {
+            handleTutorialInput();
+            // No early return — club changes and normal input continue.
+            // Mobile: unwanted buttons are blocked via Touchable in applyTutorialButtonBlock().
+            // Desktop: tutorial is hint-only, free input is fine.
         }
 
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
@@ -316,7 +431,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 currentClub = Club.values()[Club.values().length - 1];
         }
 
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP) && config.difficulty.hasClubInfo()) showClubInfo = !showClubInfo;
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP) && config.difficulty.hasClubInfo())
+            showClubInfo = !showClubInfo;
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL)) resetBallToLastShot();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) config.adjustGameSpeed(true);
@@ -349,7 +465,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void handleNewLevelInput() {
-        if (isOverlayState(currentState) || currentState == GameState.LOGIN || currentState == GameState.START || currentState == GameState.PAUSED) return;
+        if (isOverlayState(currentState) || currentState == GameState.LOGIN || currentState == GameState.START || currentState == GameState.PAUSED)
+            return;
 
         if (gameplayState == GameState.COMPETITIVE) {
             GameSession active = sessionManager.getActive();
@@ -418,10 +535,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private LevelFactory.LevelCreationResult generateLevelResult(long manualSeed) {
         LevelFactory.GameMode mode = switch (gameplayState) {
-            case START          -> LevelFactory.GameMode.START;
+            case START -> LevelFactory.GameMode.START;
             case PRACTICE_RANGE -> LevelFactory.GameMode.PRACTICE_RANGE;
-            case PUTTING_GREEN  -> LevelFactory.GameMode.PUTTING_GREEN;
-            default             -> LevelFactory.GameMode.PLAYING;
+            case PUTTING_GREEN -> LevelFactory.GameMode.PUTTING_GREEN;
+            default -> LevelFactory.GameMode.PLAYING;
         };
 
         GameSession active = sessionManager.getActive();
@@ -487,6 +604,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             active.advanceHole();
             sessionManager.saveActive();
         }
+
+        if (inTutorial) {
+//            tutorialController.advance(); // STEP_8_PUTT → DONE (or wherever we are)
+            TutorialPrefs.markComplete();
+        }
     }
 
     private void refreshCameraController(Vector3 lookAtTarget) {
@@ -537,10 +659,22 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         updateDaily1Timer(delta);
 
         terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
-        terrain.updateFlag(camera.position);
+        terrain.updateFlag(camera.position, ball.getPosition());
+
+        // Tutorial: once ball is stationary on the green, prompt the putt
+        if (inTutorial && tutorialController != null
+                && tutorialController.getCurrentStep() == TutorialController.Step.STEP_7_WATCH
+                && ball != null && ball.getState() == org.example.ball.Ball.State.STATIONARY) {
+            if (terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z)
+                    == org.example.terrain.Terrain.TerrainType.GREEN) {
+                tutorialController.advance();
+            }
+        }
     }
 
-    /** Advances the elapsed timer for DAILY_1 mode when gameplay is active. */
+    /**
+     * Advances the elapsed timer for DAILY_1 mode when gameplay is active.
+     */
     private void updateDaily1Timer(float delta) {
         if (gameplayState != GameState.COMPETITIVE || currentState == GameState.PAUSED || isVictory) return;
         GameSession active = sessionManager.getActive();
@@ -585,6 +719,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
             hazardManager.setBallHit(true);
             sessionManager.saveActive();
+            // Tutorial: shot has fired — move to the "watch" step
+            if (inTutorial && tutorialController != null
+                    && (tutorialController.getCurrentStep() == TutorialController.Step.STEP_6_HIT || tutorialController.getCurrentStep() == TutorialController.Step.STEP_10_AIM)) {
+                tutorialController.advance(); // → STEP_7_WATCH
+            }
         }
         PhysicsProfiler.endSection("ShotControllerCharge");
     }
@@ -624,9 +763,18 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         com.badlogic.gdx.scenes.scene2d.Stage uiStage =
                 (currentState == GameState.START) ? hud.getStartMenuStage() : hud.getStage();
 
+        if (inTutorial && tutorialController != null) {
+            hud.applyTutorialButtonBlock(tutorialController.isActive() ? tutorialController.getCurrentStep() : null);
+        }
+
         if (uiStage != null && currentState != GameState.PAUSED) {
             uiStage.act(Gdx.graphics.getDeltaTime());
             uiStage.draw();
+        }
+
+        if (inTutorial && tutorialController != null && tutorialController.getCurrentStep().isOverlayVisible()) {
+            com.badlogic.gdx.math.Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : null;
+            hud.renderTutorialOverlay(tutorialController.getCurrentStep(), wind);
         }
     }
 
@@ -638,6 +786,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         menuManager.setMenuState(MenuState.MAIN);
         menuManager.setMenuSelection(0);
         cameraController = null;
+        if (inTutorial) {
+            if (preTutorialDifficulty != null) config.setDifficulty(preTutorialDifficulty);
+            inTutorial = false;
+            tutorialController = null;
+            preTutorialDifficulty = null;
+            selectedArchetype = null;
+            tutorialAimStartYaw = Float.NaN;
+            hud.clearTutorialBlock();
+        }
         changeState(GameState.START);
     }
 
@@ -714,9 +871,20 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
     }
 
-    @Override public void onSelectDaily18() { selectDaily(sessionManager.getDaily18(), 1); }
-    @Override public void onSelectDaily9()  { selectDaily(sessionManager.getDaily9(),  2); }
-    @Override public void onSelectDaily1()  { selectDaily(sessionManager.getDaily1(),  3); }
+    @Override
+    public void onSelectDaily18() {
+        selectDaily(sessionManager.getDaily18(), 1);
+    }
+
+    @Override
+    public void onSelectDaily9() {
+        selectDaily(sessionManager.getDaily9(), 2);
+    }
+
+    @Override
+    public void onSelectDaily1() {
+        selectDaily(sessionManager.getDaily1(), 3);
+    }
 
     private void selectDaily(GameSession daily, int pendingMatchMode) {
         if (daily != null && !daily.isFinished()) {
@@ -753,6 +921,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     @Override
     public void onStartPuttingGreen() {
         startLoadingLevel(GameState.PUTTING_GREEN, -1);
+    }
+
+    @Override
+    public void onStartTutorial() {
+        config.setDifficulty(GameConfig.Difficulty.NOVICE);
+        preTutorialDifficulty = config.difficulty;
+        inTutorial = true;
+        tutorialController = new TutorialController();
+        selectedArchetype = TutorialController.TUTORIAL_ARCHETYPE;
+        startLoadingLevel(GameState.PLAYING, TutorialController.TUTORIAL_SEED);
     }
 
     @Override

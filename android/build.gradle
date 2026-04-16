@@ -9,6 +9,7 @@ dependencies {
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
 }
 
 android {
@@ -16,7 +17,7 @@ android {
     compileSdk 34
     defaultConfig {
         applicationId "org.example"
-        minSdk 19
+        minSdk 21
         targetSdk 34
         versionCode 1
         versionName "1.0"

@@ -1,7 +1,6 @@
 package org.example.hud;
 
 import com.badlogic.gdx.Gdx;
-import org.example.Platform;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -22,16 +21,14 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
-import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.Club;
 import org.example.GameConfig;
+import org.example.Platform;
 import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
 import org.example.ball.ShotController;
 import org.example.ball.ShotDifficulty;
-import org.example.session.CompetitiveSessions;
-import org.example.session.GameSession;
 import org.example.gameManagers.MenuManager;
 import org.example.hud.minigame.MinigameController;
 import org.example.hud.mobile.MobileUIFactory;
@@ -40,11 +37,19 @@ import org.example.input.GameInputProcessor;
 import org.example.input.MobileInputProcessor;
 import org.example.scoreBoard.HighscoreService;
 import org.example.scoreBoard.LeaderboardUI;
+import org.example.session.CompetitiveSessions;
+import org.example.session.GameSession;
 import org.example.terrain.Terrain;
 import org.example.terrain.level.LevelData;
+import org.example.tutorial.TutorialController;
+import org.example.tutorial.TutorialOverlayRenderer;
+
+import static org.example.tutorial.TutorialController.Step.STEP_11_PUTT;
+import static org.example.tutorial.TutorialController.Step.STEP_7_WATCH;
 
 public class HUD {
     private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
+    private final TutorialOverlayRenderer tutorialOverlayRenderer = new TutorialOverlayRenderer();
     private LeaderboardUI leaderboardUI;
     private final HighscoreService highscoreService = new HighscoreService();
     private final SpriteBatch batch;
@@ -85,6 +90,7 @@ public class HUD {
     private GameSession activeSession;
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
     private boolean showInfoDisplay = false;
+    private boolean infoJustToggled = false;
     private final Vector3 tempV3 = new Vector3();
     public static final float UI_SCALE = Platform.isAndroid() ? 2.0f : 1.0f;
 
@@ -124,8 +130,13 @@ public class HUD {
         }
     }
 
-    public void resetShots() { shotCount = 0; }
-    public int getShotCount() { return shotCount; }
+    public void resetShots() {
+        shotCount = 0;
+    }
+
+    public int getShotCount() {
+        return shotCount;
+    }
 
     public void resize(int width, int height) {
         viewport.update(width, height, true);
@@ -187,6 +198,7 @@ public class HUD {
             public void changed(ChangeEvent event, Actor actor) {
                 showInfoDisplay = !showInfoDisplay;
                 infoToggleBtn.setVisible(!showInfoDisplay);
+                infoJustToggled = true;
             }
         });
         mobileUIInitialized = true;
@@ -281,7 +293,7 @@ public class HUD {
             }
             if (!config.difficulty.hasClubInfo()) showInfoDisplay = false;
             if (infoToggleBtn != null) infoToggleBtn.setVisible(config.difficulty.hasClubInfo() && !showInfoDisplay);
-            setUtilityButtonState(mobileUIPackage.projectBtn,  config.difficulty.hasShotProjection());
+            setUtilityButtonState(mobileUIPackage.projectBtn, config.difficulty.hasShotProjection());
             setUtilityButtonState(mobileUIPackage.distanceBtn, config.difficulty.hasRangeFinder());
         }
         if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE) && config.difficulty.hasRangeFinder()) {
@@ -297,7 +309,8 @@ public class HUD {
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         spinIndicator.updateScaling(viewport);
         batch.begin();
-        if (levelData != null && config.difficulty.hasWindicator()) windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
+        if (levelData != null && config.difficulty.hasWindicator())
+            windRenderer.render(batch, shapeRenderer, font, viewport, levelData.getWind(), gameCamera);
         if (!isAndroid && shouldShowDebug) {
             preShotDebugActor.setBounds(40, 150, 400, 140);
             preShotDebugActor.draw(batch, 1.0f);
@@ -321,10 +334,14 @@ public class HUD {
 
     private void updateSpinInput(float delta, GameInputProcessor input) {
         float SPIN_SPEED = 2.0f;
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP)) spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN)) spinDot.y = MathUtils.clamp(spinDot.y - SPIN_SPEED * delta, -1f, 1f);
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT)) spinDot.x = MathUtils.clamp(spinDot.x - SPIN_SPEED * delta, -1f, 1f);
-        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT)) spinDot.x = MathUtils.clamp(spinDot.x + SPIN_SPEED * delta, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_UP))
+            spinDot.y = MathUtils.clamp(spinDot.y + SPIN_SPEED * delta, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_DOWN))
+            spinDot.y = MathUtils.clamp(spinDot.y - SPIN_SPEED * delta, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_LEFT))
+            spinDot.x = MathUtils.clamp(spinDot.x - SPIN_SPEED * delta, -1f, 1f);
+        if (input.isActionPressed(GameInputProcessor.Action.SPIN_RIGHT))
+            spinDot.x = MathUtils.clamp(spinDot.x + SPIN_SPEED * delta, -1f, 1f);
         if (spinDot.len() > 1f) spinDot.nor();
         spinIndicator.getSpinDot().set(this.spinDot);
     }
@@ -412,15 +429,24 @@ public class HUD {
         minigameController.start(ballPos, club, diff, powerMod, config.animSpeed, config.difficulty);
     }
 
-    public void cancelMinigame() { minigameController.cancel(); }
-    public void showWaterHazard() { notificationManager.showHazard("WATER HAZARD", Color.CYAN, 1.1f); }
-    public void showOutOfBounds() { notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f); }
+    public void cancelMinigame() {
+        minigameController.cancel();
+    }
+
+    public void showWaterHazard() {
+        notificationManager.showHazard("WATER HAZARD", Color.CYAN, 1.1f);
+    }
+
+    public void showOutOfBounds() {
+        notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f);
+    }
 
     public void renderVictory(int shots, LevelData levelData, GameSession session) {
         if (gameplayTable != null) gameplayTable.setVisible(false);
         if (infoToggleBtn != null) infoToggleBtn.setVisible(false);
         if (victoryTable != null) victoryTable.setVisible(true);
-        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null) mobileUIPackage.arrowContainer.setVisible(false);
+        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null)
+            mobileUIPackage.arrowContainer.setVisible(false);
 
         if (mobileUIPackage != null && Platform.isAndroid()) {
             boolean isFinished = (session != null && session.isFinished());
@@ -447,7 +473,8 @@ public class HUD {
     public void reset() {
         if (gameplayTable != null) gameplayTable.setVisible(true);
         if (victoryTable != null) victoryTable.setVisible(false);
-        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null) mobileUIPackage.arrowContainer.setVisible(true);
+        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null)
+            mobileUIPackage.arrowContainer.setVisible(true);
         showInfoDisplay = false;
         if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
         minigameController.reset();
@@ -467,19 +494,19 @@ public class HUD {
         font.getData().setScale(scale);
         layout.setText(font, "LOADING MAP...");
 
-        float padW  = layout.width  * 0.5f;
-        float padH  = layout.height * 1.6f;
-        float panelW = layout.width  + padW * 2f;
+        float padW = layout.width * 0.5f;
+        float padH = layout.height * 1.6f;
+        float panelW = layout.width + padW * 2f;
         float panelH = layout.height + padH * 2f;
         float panelX = (screenW - panelW) / 2f;
         float panelY = (screenH - panelH) / 2f;
-        float textX  = (screenW - layout.width)  / 2f;
-        float textY  = panelY + (panelH + layout.height) / 2f;
+        float textX = (screenW - layout.width) / 2f;
+        float textY = panelY + (panelH + layout.height) / 2f;
 
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         UIUtils.createGoldBorderedPanel(new Color(0.05f, 0.05f, 0.05f, 0.97f), 3)
-              .draw(batch, panelX, panelY, panelW, panelH);
+                .draw(batch, panelX, panelY, panelW, panelH);
         font.setColor(Color.WHITE);
         font.draw(batch, "LOADING MAP...", textX, textY);
         font.getData().setScale(1.0f);
@@ -487,18 +514,27 @@ public class HUD {
     }
 
     public void renderInstructions(GameInputProcessor input) {
-        overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> {});
+        overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> {
+        });
     }
 
     public void renderCameraConfig(GameInputProcessor input) {
-        overlayRenderer.renderCameraConfig(batch, shapeRenderer, font, viewport, config, input, () -> {});
+        overlayRenderer.renderCameraConfig(batch, shapeRenderer, font, viewport, config, input, () -> {
+        });
     }
 
-    public void resetCameraConfigScroll() { overlayRenderer.getCameraConfigRenderer().resetScroll(); }
+    public void resetCameraConfigScroll() {
+        overlayRenderer.getCameraConfigRenderer().resetScroll();
+    }
+
     public boolean isTouchInsideCameraConfig(float x, float y) {
         return overlayRenderer.getCameraConfigRenderer().isClickInside(x, y);
     }
-    public void resetInstructionScroll() { overlayRenderer.getInstructionRenderer().resetScroll(); }
+
+    public void resetInstructionScroll() {
+        overlayRenderer.getInstructionRenderer().resetScroll();
+    }
+
     public boolean isTouchInsideInstructions(float x, float y) {
         return overlayRenderer.getInstructionRenderer().isClickInside(x, y);
     }
@@ -512,7 +548,9 @@ public class HUD {
         return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
     }
 
-    public void setClubInfoVisible(boolean visible) { if (infoToggleBtn != null) infoToggleBtn.setVisible(!visible); }
+    public void setClubInfoVisible(boolean visible) {
+        if (infoToggleBtn != null) infoToggleBtn.setVisible(!visible);
+    }
 
     private void setUtilityButtonState(TextButton btn, boolean available) {
         if (btn == null) return;
@@ -520,27 +558,60 @@ public class HUD {
         btn.getLabel().setColor(available ? Color.WHITE : Color.GRAY);
         btn.setColor(available ? Color.WHITE : Color.DARK_GRAY);
     }
-    public boolean isMinigameComplete() { return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null; }
-    public boolean wasMinigameCanceled() { return minigameController.wasCanceled(); }
-    public boolean wasMainMenuRequested() { boolean m = mainMenuRequested; mainMenuRequested = false; return m; }
-    public MinigameResult getMinigameResult() { return minigameController.getResult(); }
-    public Vector2 getSpinOffset() { return spinDot; }
+
+    public boolean isMinigameComplete() {
+        return !minigameController.isActive() && minigameController.isNeedleStopped() && minigameController.getGlowTimer() <= 0 && minigameController.getResult() != null;
+    }
+
+    public boolean wasMinigameCanceled() {
+        return minigameController.wasCanceled();
+    }
+
+    public boolean wasMainMenuRequested() {
+        boolean m = mainMenuRequested;
+        mainMenuRequested = false;
+        return m;
+    }
+
+    public MinigameResult getMinigameResult() {
+        return minigameController.getResult();
+    }
+
+    public Vector2 getSpinOffset() {
+        return spinDot;
+    }
 
     public void resetSpin() {
         this.spinDot.set(0, 0);
         spinIndicator.reset();
     }
 
-    public Stage getStage() { return stage; }
-    public Stage getStartMenuStage() { return startMenuStage; }
-    public Stage getPauseMenuStage() { return pauseMenuStage; }
-    /** Forces the mobile start menu buttons to rebuild on next render (e.g. after a resubmit). */
-    public void invalidateMobileMenuState() { lastMobileMenuState = null; }
+    public Stage getStage() {
+        return stage;
+    }
+
+    public Stage getStartMenuStage() {
+        return startMenuStage;
+    }
+
+    public Stage getPauseMenuStage() {
+        return pauseMenuStage;
+    }
+
+    /**
+     * Forces the mobile start menu buttons to rebuild on next render (e.g. after a resubmit).
+     */
+    public void invalidateMobileMenuState() {
+        lastMobileMenuState = null;
+    }
 
     private Skin initSkin() {
         Skin s;
-        try { s = new Skin(Gdx.files.internal("ui/uiskin.json")); }
-        catch (Exception e) { s = new Skin(); }
+        try {
+            s = new Skin(Gdx.files.internal("ui/uiskin.json"));
+        } catch (Exception e) {
+            s = new Skin();
+        }
         UIUtils.registerDefaultStyles(s, font);
         if (!s.has("default-font", BitmapFont.class)) s.add("default-font", font);
         if (!s.has("default", TextButton.TextButtonStyle.class)) {
@@ -560,14 +631,20 @@ public class HUD {
         return s;
     }
 
-    public Skin getSkin() { return skin; }
+    public Skin getSkin() {
+        return skin;
+    }
 
-    /** Records the logged-in user's display name so the main menu can show it. */
+    /**
+     * Records the logged-in user's display name so the main menu can show it.
+     */
     public void setLoggedInUser(String displayName) {
         mainMenuRenderer.setLoggedInUser(displayName);
     }
 
-    /** Shows a brief toast notification on the start-menu stage (fades in, holds, fades out). */
+    /**
+     * Shows a brief toast notification on the start-menu stage (fades in, holds, fades out).
+     */
     public void showToast(String message) {
         if (startMenuStage == null) return;
 
@@ -586,13 +663,127 @@ public class HUD {
 
         toast.getColor().a = 0f;
         toast.addAction(Actions.sequence(
-            Actions.fadeIn(0.3f),
-            Actions.delay(2.5f),
-            Actions.fadeOut(0.5f),
-            Actions.removeActor()
+                Actions.fadeIn(0.3f),
+                Actions.delay(2.5f),
+                Actions.fadeOut(0.5f),
+                Actions.removeActor()
         ));
 
         startMenuStage.addActor(toast);
+    }
+
+    /**
+     * Draws the tutorial step overlay on top of the gameplay UI.
+     *
+     * @param wind Current level wind (for aim-hint text), may be null.
+     */
+    public void renderTutorialOverlay(TutorialController.Step step, com.badlogic.gdx.math.Vector3 wind) {
+        com.badlogic.gdx.math.Rectangle bounds = getTutorialHighlightBounds(step);
+        tutorialOverlayRenderer.render(batch, shapeRenderer, font, viewport, step, bounds, wind);
+    }
+
+    /**
+     * Returns the stage-coordinate bounds of the button highlighted for the given tutorial step,
+     * or null if the step has no specific button spotlight.
+     */
+    public com.badlogic.gdx.math.Rectangle getTutorialHighlightBounds(TutorialController.Step step) {
+        if (!Platform.isAndroid() || mobileUIPackage == null || step == null) return null;
+        com.badlogic.gdx.scenes.scene2d.Actor actor = switch (step) {
+            case STEP_1_DISTANCE -> mobileUIPackage.distanceBtn;
+            case STEP_3_INFO -> mobileUIPackage.infoToggleBtn;
+            case STEP_4_CLUB -> mobileUIPackage.clubArrowRow;
+            case STEP_5_POWER -> mobileUIPackage.maxHitBtn;
+            case STEP_6_HIT, STEP_10_AIM -> mobileUIPackage.hitBtn;
+            case STEP_8_PUTTER -> mobileUIPackage.clubArrowRow;
+            case STEP_9_PROJECT -> mobileUIPackage.projectBtn;
+            default -> null;
+        };
+        if (actor == null) return null;
+        com.badlogic.gdx.math.Vector2 pos = new com.badlogic.gdx.math.Vector2(0, 0);
+        actor.localToStageCoordinates(pos);
+        return new com.badlogic.gdx.math.Rectangle(pos.x, pos.y, actor.getWidth(), actor.getHeight());
+    }
+
+    /**
+     * Returns true (once) if the INFO button was tapped on mobile since the last call.
+     */
+    public boolean consumeInfoToggled() {
+        boolean v = infoJustToggled;
+        infoJustToggled = false;
+        return v;
+    }
+
+    /**
+     * Disables all gameplay buttons except the one needed for the current tutorial step.
+     * Pass {@code null} to re-enable all buttons (e.g. when tutorial is inactive).
+     */
+    public void clearTutorialBlock(){
+        if (!Platform.isAndroid() || mobileUIPackage == null) return;
+        setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+    }
+
+    public void applyTutorialButtonBlock(TutorialController.Step step) {
+        if (!Platform.isAndroid() || mobileUIPackage == null) return;
+
+        // IF STEP 7 or 11, TREAT LIKE NORMAL GAMEPLAY AND EXIT.
+        // This prevents the "Disable All" line below from flickering the touch state.
+        if (step == null || step == TutorialController.Step.STEP_7_WATCH || step == TutorialController.Step.STEP_11_PUTT) {
+            setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+            return;
+        }
+
+        // This part ONLY runs for "Restricted" tutorial steps (1-6, 8-10)
+        setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+
+        switch (step) {
+            case STEP_1_DISTANCE:
+                if (mobileUIPackage.distanceBtn != null)
+                    mobileUIPackage.distanceBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+                break;
+            case STEP_3_INFO:
+                if (mobileUIPackage.infoToggleBtn != null)
+                    mobileUIPackage.infoToggleBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+                break;
+            case STEP_4_CLUB:
+            case STEP_8_PUTTER:
+                if (mobileUIPackage.arrowContainer != null)
+                    mobileUIPackage.arrowContainer.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.childrenOnly);
+                break;
+            case STEP_5_POWER:
+                if (mobileUIPackage.maxHitBtn != null)
+                    mobileUIPackage.maxHitBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+                break;
+            case STEP_6_HIT:
+            case STEP_10_AIM:
+                if (mobileUIPackage.hitBtn != null)
+                    mobileUIPackage.hitBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+                break;
+            case STEP_9_PROJECT:
+                if (mobileUIPackage.projectBtn != null)
+                    mobileUIPackage.projectBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+                break;
+        }
+    }
+
+    private void setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable t) {
+        if (mobileUIPackage == null) return;
+        if (mobileUIPackage.hitBtn != null) mobileUIPackage.hitBtn.setTouchable(t);
+        if (mobileUIPackage.maxHitBtn != null) mobileUIPackage.maxHitBtn.setTouchable(t);
+        if (mobileUIPackage.distanceBtn != null) mobileUIPackage.distanceBtn.setTouchable(t);
+        if (mobileUIPackage.infoToggleBtn != null) mobileUIPackage.infoToggleBtn.setTouchable(t);
+        if (mobileUIPackage.projectBtn != null) mobileUIPackage.projectBtn.setTouchable(t);
+        if (mobileUIPackage.resetBallBtn != null) mobileUIPackage.resetBallBtn.setTouchable(t);
+        if (mobileUIPackage.newMapBtn != null) mobileUIPackage.newMapBtn.setTouchable(t);
+        // arrowContainer is fillParent (covers the whole screen). Setting it to Touchable.enabled
+        // would make it intercept all touches as a full-screen absorber, blocking gameplayTable buttons.
+        // Use childrenOnly so only the actual arrow buttons inside it are hittable.
+        if (mobileUIPackage.arrowContainer != null) {
+            mobileUIPackage.arrowContainer.setTouchable(
+                t == com.badlogic.gdx.scenes.scene2d.Touchable.disabled
+                    ? com.badlogic.gdx.scenes.scene2d.Touchable.disabled
+                    : com.badlogic.gdx.scenes.scene2d.Touchable.childrenOnly
+            );
+        }
     }
 
     public void dispose() {
