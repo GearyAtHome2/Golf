@@ -256,7 +256,7 @@ public class LevelData {
                 .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.PALM)
                 .difficulty(3f)
                 .teeH(5f, 0f).greenH(12f, 8f)
-                .wind(5f, 16f)
+                .wind(5f, 9f)
                 .treeH(13.5f, 4f).trees(0.4f, 4.2f, 0.5f)
                 .terrain(0.04f, 8f)
                 .fairway(56f, 0f).wiggle(0.15f, 0.1f).islands(0.2f).cohesion(0.5f)

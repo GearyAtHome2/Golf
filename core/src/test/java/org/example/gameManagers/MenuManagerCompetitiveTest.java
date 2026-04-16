@@ -1,10 +1,12 @@
 package org.example.gameManagers;
 
+import org.example.GdxTestSetup;
 import org.example.GameConfig;
 import org.example.hud.renderer.MainMenuRenderer;
 import org.example.input.GameInputProcessor;
 import org.example.scoreBoard.DailySubmissionCache;
 import org.example.session.CompetitiveSessions;
+import org.example.tutorial.TutorialPrefs;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +39,8 @@ public class MenuManagerCompetitiveTest {
 
     @BeforeEach
     public void setUp() {
+        GdxTestSetup.init();
+        TutorialPrefs.markComplete(); // tests assume the tutorial-complete menu layout
         menuManager = new MenuManager();
         handler = new TrackingMenuHandler();
         noSessions = new CompetitiveSessions(null, null, null, null);

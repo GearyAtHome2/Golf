@@ -151,45 +151,34 @@ public class ScoreSubmissionHandler {
 
     // ── Overlay helpers ───────────────────────────────────────────────────────
 
-    /** Shows a centred status panel over a dim full-screen backdrop. */
-    private void showSubmittingOverlay() {
-        if (stage == null) return;
+    /** Builds the shared dim backdrop + gold-bordered box, sets statusLabel, and returns the inner box. */
+    private Table buildStatusOverlay(String labelText, Color labelColor) {
         if (statusOverlay != null) statusOverlay.remove();
-
         statusOverlay = new Table();
         statusOverlay.setFillParent(true);
         statusOverlay.setBackground(UIUtils.createRoundedRectDrawable(new Color(0, 0, 0, 0.6f), 0));
-
         Table box = new Table();
         box.setBackground(UIUtils.createGoldBorderedPanel(new Color(0.05f, 0.05f, 0.05f, 0.97f), 3));
         box.pad(30, 60, 30, 60);
-
-        statusLabel = new Label("SUBMITTING...", skin);
+        statusLabel = new Label(labelText, skin);
         statusLabel.setFontScale(1.8f);
-        statusLabel.setColor(Color.WHITE);
-        box.add(statusLabel);
-
+        statusLabel.setColor(labelColor);
+        box.add(statusLabel).padBottom(24).row();
         statusOverlay.add(box);
         stage.addActor(statusOverlay);
+        return box;
+    }
+
+    /** Shows a centred status panel over a dim full-screen backdrop. */
+    private void showSubmittingOverlay() {
+        if (stage == null) return;
+        buildStatusOverlay("SUBMITTING...", Color.WHITE);
     }
 
     /** Replaces the overlay content with a failure message and Retry/Cancel buttons. */
     private void showFailureOverlay() {
         if (stage == null) { if (onCancel != null) onCancel.run(); return; }
-        if (statusOverlay != null) statusOverlay.remove();
-
-        statusOverlay = new Table();
-        statusOverlay.setFillParent(true);
-        statusOverlay.setBackground(UIUtils.createRoundedRectDrawable(new Color(0, 0, 0, 0.6f), 0));
-
-        Table box = new Table();
-        box.setBackground(UIUtils.createGoldBorderedPanel(new Color(0.05f, 0.05f, 0.05f, 0.97f), 3));
-        box.pad(30, 60, 30, 60);
-
-        statusLabel = new Label("SUBMISSION FAILED", skin);
-        statusLabel.setFontScale(1.8f);
-        statusLabel.setColor(Color.RED);
-        box.add(statusLabel).padBottom(24).row();
+        Table box = buildStatusOverlay("SUBMISSION FAILED", Color.RED);
 
         TextButton retryBtn  = new TextButton("RETRY",  skin);
         TextButton cancelBtn = new TextButton("CANCEL", skin);
@@ -209,9 +198,6 @@ public class ScoreSubmissionHandler {
 
         box.add(retryBtn).width(200).height(70).padRight(20);
         box.add(cancelBtn).width(200).height(70);
-
-        statusOverlay.add(box);
-        stage.addActor(statusOverlay);
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────

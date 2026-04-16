@@ -2,6 +2,7 @@ package org.example.hud;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import org.example.Platform;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
@@ -75,7 +76,7 @@ public class VictoryRenderer {
                 renderCompetitiveResults(batch, shapeRenderer, font, viewport, session, centerX, screenH * 0.45f, shout, shoutColor, subText);
                 batch.begin();
             }
-        } else if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+        } else if (!Platform.isAndroid()) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
             String prompt = "Press [N] for New Level";
@@ -155,7 +156,7 @@ public class VictoryRenderer {
             font.draw(batch, totalToPar, centerX - (layout.width / 2f), promptY + 70);
         }
 
-        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (!Platform.isAndroid()) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
             String prompt;
@@ -185,7 +186,7 @@ public class VictoryRenderer {
         layout.setText(font, timeStr);
         font.draw(batch, timeStr, centerX - layout.width / 2f, lineY);
 
-        if (Gdx.app.getType() != com.badlogic.gdx.Application.ApplicationType.Android) {
+        if (!Platform.isAndroid()) {
             font.getData().setScale(1.0f);
             font.setColor(Color.YELLOW);
             String prompt = session.isFinished()

@@ -145,6 +145,7 @@ public class LevelDataGenerator {
 
         for (LevelData.Archetype arch : archetypes) pool.add(createFixedLevelData(masterR.nextLong(), arch));
         while (pool.size() < 18) pool.add(createFixedLevelData(masterR.nextLong()));
+        while (pool.size() > 18) pool.remove(masterR.nextInt(pool.size()));
 
         pool.sort(Comparator.comparingDouble(LevelData::getShotIndex).reversed());
 

@@ -247,4 +247,82 @@ public class BallPhysicsTest {
         Vector3 wallNormal = new Vector3(1f, 0f, 0f); // pointing sideways
         assertTrue(BallPhysics.isWallCollision(wallNormal, 60f));
     }
+
+    // ── handleFlagPoleCollision ────────────────────────────────────────────────
+    // BALL_RADIUS = 0.2f, poleRadius = 0.06f → combinedRadius = 0.26f.
+    // Ball at (0.25, 1, 0) is inside that radius; ball at (1.0, 1, 0) is outside.
+
+    @Test
+    public void testFlagPoleCollisionDetectedWhenApproaching() {
+        Vector3 pos  = new Vector3(0.25f, 1f, 0f);
+        Vector3 vel  = new Vector3(-5f, 0f, 0f); // approaching pole (-X)
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        boolean hit  = BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertTrue(hit, "Should detect collision when ball overlaps and approaches pole");
+    }
+
+    @Test
+    public void testFlagPoleCollisionIgnoresRecedingBall() {
+        Vector3 pos  = new Vector3(0.25f, 1f, 0f);
+        Vector3 vel  = new Vector3(5f, 0f, 0f); // moving away
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        boolean hit  = BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertFalse(hit, "Should not collide when ball is moving away from pole");
+    }
+
+    @Test
+    public void testFlagPoleCollisionIgnoresBallTooFar() {
+        Vector3 pos  = new Vector3(1.0f, 1f, 0f); // outside combinedRadius of 0.26
+        Vector3 vel  = new Vector3(-5f, 0f, 0f);
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        boolean hit  = BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertFalse(hit, "Should not collide when ball is far from pole");
+    }
+
+    @Test
+    public void testFlagPoleCollisionIgnoresBallBelowPoleBase() {
+        Vector3 pos  = new Vector3(0.25f, -0.1f, 0f); // below poleBase.y = 0
+        Vector3 vel  = new Vector3(-5f, 0f, 0f);
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        boolean hit  = BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertFalse(hit, "Should not collide when ball is below the pole base");
+    }
+
+    @Test
+    public void testFlagPoleCollisionIgnoresBallAbovePoleTop() {
+        Vector3 pos  = new Vector3(0.25f, 4f, 0f); // above poleBase.y + poleHeight = 3
+        Vector3 vel  = new Vector3(-5f, 0f, 0f);
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        boolean hit  = BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertFalse(hit, "Should not collide when ball is above the pole top");
+    }
+
+    @Test
+    public void testFlagPoleCollisionReversesApproachVelocity() {
+        // Ball on the +X side of the pole, approaching in -X → should bounce back in +X
+        Vector3 pos  = new Vector3(0.25f, 1f, 0f);
+        Vector3 vel  = new Vector3(-5f, 0f, 0f);
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertTrue(vel.x > 0, "Ball should bounce back in +X after hitting pole on the +X side");
+    }
+
+    @Test
+    public void testFlagPoleCollisionDampensSpeed() {
+        // Restitution 0.28 → post-collision speed should be well below pre-collision speed
+        Vector3 pos  = new Vector3(0.25f, 1f, 0f);
+        Vector3 vel  = new Vector3(-10f, 0f, 0f);
+        Vector3 spin = new Vector3(0f, 0f, 0f);
+        float preSpeed = vel.len();
+        BallPhysics.handleFlagPoleCollision(pos, vel, spin,
+                new Vector3(0f, 0f, 0f), 0.06f, 3f);
+        assertTrue(vel.len() < preSpeed * 0.5f,
+                "Flag pole collision should significantly dampen the ball (low restitution)");
+    }
 }
