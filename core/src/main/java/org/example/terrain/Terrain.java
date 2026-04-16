@@ -56,9 +56,9 @@ public class Terrain {
 
     // Flag pole raise — lifts the flag when the ball approaches so it doesn't obstruct the putt
     private float flagRaiseT = 0f;
-    private static final float FLAG_RAISE_RADIUS = 4f;  // units — raise begins within this distance
-    private static final float FLAG_RAISE_MAX    = 0.5f; // units lifted when fully raised
-    private static final float FLAG_RAISE_SPEED  = 5f;  // lerp speed (reaches ~95% in ~0.6 s)
+    private static final float FLAG_RAISE_RADIUS = 6f;  // units — raise begins within this distance
+    private static final float FLAG_RAISE_MAX    = 0.75f; // units lifted when fully raised
+    private final Vector3 tempFlagBase = new Vector3();
 
     private final float CELL_SIZE = 10.0f;
     private List<TerrainObject>[][] objectGrid;
@@ -399,8 +399,10 @@ public class Terrain {
         if (flagInstance == null) return;
         float dist = cameraPosition.dst(holePosition);
         float distFactor = Math.max(0, dist - 50f);
-        float scale = 1.0f + (float) Math.sqrt(distFactor) * 0.15f;
-        scale *= org.example.hud.HUD.UI_SCALE;
+        // Base scale stays at 1.0 on all platforms (matches collision geometry).
+        // UI_SCALE only amplifies the distance-driven growth, so Android stays
+        // readable at range without widening the pole at close range.
+        float scale = 1.0f + (float) Math.sqrt(distFactor) * 0.15f * org.example.hud.HUD.UI_SCALE;
         Vector3 dir = new Vector3(cameraPosition).sub(holePosition);
         float angle = MathUtils.atan2(dir.x, dir.z) * MathUtils.radiansToDegrees;
 
@@ -408,10 +410,20 @@ public class Terrain {
         float wobble = wobbleAmplitude * (float) Math.exp(-WOBBLE_DECAY * t) * MathUtils.sin(WOBBLE_FREQUENCY * t);
 
         float ballDist = ballPosition.dst(holePosition);
-        float raiseTarget = MathUtils.clamp(1f - (ballDist / FLAG_RAISE_RADIUS), 0f, 1f);
-        flagRaiseT = MathUtils.lerp(flagRaiseT, raiseTarget, FLAG_RAISE_SPEED * Gdx.graphics.getDeltaTime());
+        flagRaiseT = MathUtils.clamp(1f - (ballDist / FLAG_RAISE_RADIUS), 0f, 1f);
 
         updateFlagTransform(holePosition, scale, angle, wobble, flagRaiseT * FLAG_RAISE_MAX);
+    }
+
+    /**
+     * Returns the effective flag pole base position accounting for the current raise,
+     * computed directly from the ball's live position. Safe to call during physics
+     * sub-steps — does not rely on the cached per-frame flagRaiseT.
+     */
+    public Vector3 getFlagPoleBase(Vector3 ballPosition) {
+        float ballDist = ballPosition.dst(holePosition);
+        float raiseT = MathUtils.clamp(1f - (ballDist / FLAG_RAISE_RADIUS), 0f, 1f);
+        return tempFlagBase.set(holePosition.x, holePosition.y + raiseT * FLAG_RAISE_MAX, holePosition.z);
     }
 
     /** Called by ball physics when the ball strikes the flag pole. */

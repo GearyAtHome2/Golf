@@ -11,7 +11,7 @@
         <activity
                 android:name="org.example.AndroidLauncher"
                 android:label="Golf Game 2026"
-                android:screenOrientation="landscape"
+                android:screenOrientation="sensorLandscape"
                 android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout"
                 android:windowSoftInputMode="adjustPan"
                 android:exported="true">

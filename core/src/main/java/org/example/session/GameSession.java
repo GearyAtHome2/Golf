@@ -35,6 +35,10 @@ public class GameSession implements Json.Serializable {
     private boolean submitted = false;
     private CompetitiveScore competitiveScore;
 
+    // Ball rest position — set when ball becomes stationary mid-hole, cleared on hole completion.
+    // Null when no position is cached (ball starts from tee on load).
+    private Float ballRestX, ballRestY, ballRestZ;
+
     private transient List<LevelData> courseLayout = new ArrayList<>();
     private transient Runnable onStateChanged;
 
@@ -75,8 +79,31 @@ public class GameSession implements Json.Serializable {
             competitiveScore.recordStroke(getCurrentHoleIndex(), currentHoleStrokes);
             currentHoleStrokes = 0;
             competitiveScore.setCurrentHoleIndex(getCurrentHoleIndex() + 1);
+            clearBallRestPosition();
             notifyStateChanged();
         }
+    }
+
+    /** Records the ball's resting position so it can be restored on next load. */
+    public void setBallRestPosition(float x, float y, float z) {
+        ballRestX = x; ballRestY = y; ballRestZ = z;
+    }
+
+    /**
+     * Clears the cached rest position. Call when a shot is taken (so a mid-flight
+     * crash does not restore a stale position) and on hole completion.
+     */
+    public void clearBallRestPosition() {
+        ballRestX = ballRestY = ballRestZ = null;
+    }
+
+    /**
+     * Returns the cached ball rest position as a float[3] {x,y,z}, or null if none is stored.
+     * Callers should create a Vector3 from this rather than storing the array.
+     */
+    public float[] getBallRestPosition() {
+        if (ballRestX == null) return null;
+        return new float[]{ballRestX, ballRestY, ballRestZ};
     }
 
     /** Accumulates elapsed time only while the session is active (started and not finished). */
@@ -116,6 +143,11 @@ public class GameSession implements Json.Serializable {
         json.writeValue("elapsedTimeSeconds", elapsedTimeSeconds);
         json.writeValue("submitted", submitted);
         json.writeValue("competitiveScore", competitiveScore);
+        if (ballRestX != null) {
+            json.writeValue("ballRestX", ballRestX);
+            json.writeValue("ballRestY", ballRestY);
+            json.writeValue("ballRestZ", ballRestZ);
+        }
     }
 
     @Override
@@ -129,6 +161,9 @@ public class GameSession implements Json.Serializable {
         this.elapsedTimeSeconds = jsonData.getFloat("elapsedTimeSeconds", 0f);
         this.submitted = jsonData.getBoolean("submitted", false);
         this.competitiveScore = json.readValue(CompetitiveScore.class, jsonData.get("competitiveScore"));
+        this.ballRestX = jsonData.has("ballRestX") ? jsonData.getFloat("ballRestX") : null;
+        this.ballRestY = jsonData.has("ballRestY") ? jsonData.getFloat("ballRestY") : null;
+        this.ballRestZ = jsonData.has("ballRestZ") ? jsonData.getFloat("ballRestZ") : null;
         rebuildLayout();
     }
 

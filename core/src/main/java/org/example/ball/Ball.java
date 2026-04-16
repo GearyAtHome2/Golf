@@ -298,7 +298,8 @@ public class Ball {
         float dz = position.z - holePos.z;
         if (dx * dx + dz * dz > 9f) return; // Cull: more than 3 units away
         float speed = velocity.len();
-        if (BallPhysics.handleFlagPoleCollision(position, velocity, spin, holePos, 0.1f, 5f)) {
+        Vector3 poleBase = terrain.getFlagPoleBase(position);
+        if (BallPhysics.handleFlagPoleCollision(position, velocity, spin, poleBase, 0.1f, 5f)) {
             Gdx.app.log("FlagCollision", String.format("impact=%.2f m/s  post=%.2f m/s", speed, velocity.len()));
             hitCooldown = 0.05f;
             lastInteraction = Interaction.TERRAIN;

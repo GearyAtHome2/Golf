@@ -88,6 +88,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private ParticleManager particleManager;
     private WindManager windManager;
     private boolean isVictory = false;
+    private Ball.State prevBallState = Ball.State.STATIONARY;
     private boolean showClubInfo = false;
     private boolean inTutorial = false;
     private TutorialController tutorialController = null;
@@ -572,8 +573,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             ball.setState(Ball.State.AIR);
         } else {
             long seed = currentLevelData != null ? currentLevelData.getSeed() : 100L;
-            ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config, seed);
+            Vector3 spawnPos = new Vector3(tee.x, tee.y + 0.17f, tee.z);
+            if (gameplayState == GameState.COMPETITIVE) {
+                GameSession active = sessionManager.getActive();
+                if (active != null) {
+                    float[] rest = active.getBallRestPosition();
+                    if (rest != null) spawnPos.set(rest[0], rest[1], rest[2]);
+                }
+            }
+            ball = new Ball(spawnPos, particleManager, config, seed);
         }
+        prevBallState = Ball.State.STATIONARY; // suppress spurious save on first frame
         hazardManager.setBallHit(false);
         refreshCameraController(hole);
     }
@@ -707,6 +717,19 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             if (ball.checkVictory(terrain)) triggerVictory();
         }
 
+        if (!isVictory && gameplayState == GameState.COMPETITIVE) {
+            Ball.State currentState = ball.getState();
+            if (currentState == Ball.State.STATIONARY && prevBallState != Ball.State.STATIONARY) {
+                GameSession active = sessionManager.getActive();
+                if (active != null) {
+                    Vector3 pos = ball.getPosition();
+                    active.setBallRestPosition(pos.x, pos.y, pos.z);
+                    sessionManager.saveActive();
+                }
+            }
+            prevBallState = currentState;
+        }
+
         particleManager.update(particleDelta, terrain);
     }
 
@@ -718,6 +741,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
             if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
             hazardManager.setBallHit(true);
+            if (gameplayState == GameState.COMPETITIVE) {
+                GameSession active = sessionManager.getActive();
+                if (active != null) active.clearBallRestPosition();
+            }
             sessionManager.saveActive();
             // Tutorial: shot has fired — move to the "watch" step
             if (inTutorial && tutorialController != null

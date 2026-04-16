@@ -41,3 +41,12 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Android signing & secrets ###
+*.keystore
+*.jks
+local.properties
+android/google-services.json
+
+### Local save files ###
+assets/save_*.json
