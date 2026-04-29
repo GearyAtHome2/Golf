@@ -17,13 +17,8 @@ import org.example.auth.GoogleSignInProvider;
 
 public class AndroidLauncher extends AndroidApplication implements GoogleSignInProvider {
 
-    /**
-     * The Web Client ID (OAuth 2.0 client type "Web application") from your Firebase project.
-     * Found at: Firebase Console → Authentication → Sign-in methods → Google
-     *            → Web SDK configuration → Web client ID.
-     * This is NOT the Android client ID.
-     */
-    private static final String WEB_CLIENT_ID = "91480313945-r0bdrluhdkc749l6chsovcn0be35l17i.apps.googleusercontent.com";
+    // WEB_CLIENT_ID and FIREBASE_API_KEY are injected at build time from
+    // android/key.properties (gitignored) via BuildConfig.
 
     private static final int RC_SIGN_IN = 9001;
 
@@ -34,8 +29,10 @@ public class AndroidLauncher extends AndroidApplication implements GoogleSignInP
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        FirebaseConfig.API_KEY = BuildConfig.FIREBASE_API_KEY;
+
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(WEB_CLIENT_ID)
+                .requestIdToken(BuildConfig.WEB_CLIENT_ID)
                 .requestEmail()
                 .build();
         googleSignInClient = GoogleSignIn.getClient(this, gso);

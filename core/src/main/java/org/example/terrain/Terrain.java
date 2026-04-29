@@ -44,7 +44,7 @@ public class Terrain {
     private Hole physicalHole;
     private ModelInstance flagInstance;
     private ModelInstance teeInstance;
-    private float holeSize = 0.7f;
+    private float holeSize = 0.55f;
     private float waterLevel;
     private float greenMinH = Float.MAX_VALUE, greenMaxH = -Float.MAX_VALUE;
 
@@ -332,10 +332,18 @@ public class Terrain {
         float yWeight = 2.0f;
         if (forPhysics && distToHole < rimRadius * 1.2f && distToHole > rimRadius * 0.8f) yWeight = 1.5f;
         Vector3 normal = new Vector3(hL - hR, yWeight * sampleEps, hD - hU).nor();
+        normal.set(
+            Float.intBitsToFloat(Float.floatToRawIntBits(normal.x) & 0xFFFFFFE0),
+            Float.intBitsToFloat(Float.floatToRawIntBits(normal.y) & 0xFFFFFFE0),
+            Float.intBitsToFloat(Float.floatToRawIntBits(normal.z) & 0xFFFFFFE0));
         if (forPhysics && distToHole <= rimRadius * 0.8f) {
             float bL = getSurfaceHeightAt(worldX - sampleEps, worldZ), bR = getSurfaceHeightAt(worldX + sampleEps, worldZ);
             float bD = getSurfaceHeightAt(worldX, worldZ - sampleEps), bU = getSurfaceHeightAt(worldX, worldZ + sampleEps);
             normal.set(bL - bR, 2.0f * sampleEps, bD - bU).nor();
+            normal.set(
+                Float.intBitsToFloat(Float.floatToRawIntBits(normal.x) & 0xFFFFFFE0),
+                Float.intBitsToFloat(Float.floatToRawIntBits(normal.y) & 0xFFFFFFE0),
+                Float.intBitsToFloat(Float.floatToRawIntBits(normal.z) & 0xFFFFFFE0));
         }
         return normal;
     }
@@ -530,10 +538,18 @@ public class Terrain {
     public enum TerrainType {
         TEE(0.4f, 2.0f, 1.1f, 0.75f, 0.2f, 0.45f, new Color(0.2f, 0.5f, 0.2f, 1f)),
         FAIRWAY(0.32f, 0.12f, 1.05f, 1.0f, 0.17f, 0.43f, new Color(0.1f, 0.4f, 0.1f, 1f)),
+        // Fringe: transition band between fairway and rough — moderate slow, slight spin penalty.
+        FRINGE(0.27f, 0.07f, 1.05f, 0.95f, 0.19f, 0.40f, new Color(0.22f, 0.50f, 0.13f, 1f)),
         ROUGH(1.2f, 4.5f, 1.5f, 2.1f, 0.63f, 0.32f, new Color(0.02f, 0.15f, 0.02f, 1f)),
+        // Deep rough: stronger slow and higher spin penalty than standard rough.
+        DEEP_ROUGH(1.8f, 8.0f, 1.8f, 3.2f, 0.78f, 0.20f, new Color(0.01f, 0.08f, 0.01f, 1f)),
         SAND(1.4f, 12.0f, 2.5f, 4.6f, 0.9f, 0.11f, new Color(0.85f, 0.8f, 0.5f, 1f)),
         GREEN(0.16f, 0.02f, 1.05f, 0.9f, 0.22f, 0.35f, new Color(0.1f, 0.6f, 0.1f, 1f)),
-        STONE(0.1f, 0.02f, 1.05f, 1.5f, 0.01f, 0.7f, new Color(0.18f, 0.18f, 0.2f, 1f));
+        STONE(0.1f, 0.02f, 1.05f, 1.5f, 0.01f, 0.7f, new Color(0.18f, 0.18f, 0.2f, 1f)),
+        // Mud: ball stops very quickly (high rolling resistance, very soft landing).
+        // Shot penalty is applied separately in ShotController — only 20% of spin carries
+        // through and power is reduced by 20%. See ShotController.executeShot().
+        MUD(2.0f, 16.0f, 2.5f, 4.0f, 0.95f, 0.05f, new Color(0.18f, 0.10f, 0.03f, 0.82f));
 
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness, restitution;
         public final Color color;

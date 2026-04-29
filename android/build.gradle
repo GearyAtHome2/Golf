@@ -15,12 +15,24 @@ dependencies {
 android {
     namespace "org.example"
     compileSdk 34
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "org.example"
         minSdk 21
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        // Read secrets from android/key.properties (gitignored — never commit that file).
+        def keyProps = new Properties()
+        def keyFile = rootProject.file('android/key.properties')
+        if (keyFile.exists()) {
+            keyFile.withInputStream { keyProps.load(it) }
+        }
+        buildConfigField "String", "FIREBASE_API_KEY", "\"${keyProps.getProperty('firebaseApiKey', '')}\""
+        buildConfigField "String", "WEB_CLIENT_ID",    "\"${keyProps.getProperty('webClientId', '')}\""
     }
     sourceSets {
         main {

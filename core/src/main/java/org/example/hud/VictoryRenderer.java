@@ -139,6 +139,7 @@ public class VictoryRenderer {
 
         float promptY = centerY - (boxHeight * 0.42f);
 
+        String diffText = "DIFFICULTY: " + session.getDifficulty().name().replace('_', ' ');
         if (session.isFinished()) {
             int totalDiff = session.getCompetitiveScore().getTotalToPar();
             // Golf convention: under-par scores give a positive handicap, over-par gives negative
@@ -148,12 +149,22 @@ public class VictoryRenderer {
             String hCapText = "YOUR HANDICAP: " + handicapStr;
             layout.setText(font, hCapText);
             font.draw(batch, hCapText, centerX - (layout.width / 2f), promptY + 55);
+
+            font.getData().setScale(1.0f);
+            font.setColor(Color.LIGHT_GRAY);
+            layout.setText(font, diffText);
+            font.draw(batch, diffText, centerX - (layout.width / 2f), promptY + 35);
         } else {
             font.getData().setScale(1.2f);
             font.setColor(Color.GREEN);
             String totalToPar = "TOTAL TO PAR: " + session.getCompetitiveScore().getToParString();
             layout.setText(font, totalToPar);
             font.draw(batch, totalToPar, centerX - (layout.width / 2f), promptY + 70);
+
+            font.getData().setScale(1.0f);
+            font.setColor(Color.LIGHT_GRAY);
+            layout.setText(font, diffText);
+            font.draw(batch, diffText, centerX - (layout.width / 2f), promptY + 45);
         }
 
         if (!Platform.isAndroid()) {

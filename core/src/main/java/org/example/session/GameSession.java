@@ -14,12 +14,13 @@ public class GameSession implements Json.Serializable {
         STANDARD_18,
         DAILY_18,
         DAILY_9,
-        DAILY_1;
+        DAILY_1,
+        MULTIPLAYER_9;
 
         public int holeCount() {
             return switch (this) {
                 case DAILY_1 -> 1;
-                case DAILY_9 -> 9;
+                case DAILY_9, MULTIPLAYER_9 -> 9;
                 default -> 18;
             };
         }
@@ -52,9 +53,13 @@ public class GameSession implements Json.Serializable {
     }
 
     public void rebuildLayout() {
-        List<LevelData> full18 = LevelDataGenerator.generate18Holes(masterSeed);
-        int count = (mode != null) ? mode.holeCount() : 18;
-        this.courseLayout = (count < full18.size()) ? full18.subList(0, count) : full18;
+        if (mode == GameMode.MULTIPLAYER_9) {
+            this.courseLayout = LevelDataGenerator.generate9RandomHoles(masterSeed);
+        } else {
+            List<LevelData> full18 = LevelDataGenerator.generate18Holes(masterSeed);
+            int count = (mode != null) ? mode.holeCount() : 18;
+            this.courseLayout = (count < full18.size()) ? full18.subList(0, count) : full18;
+        }
         if (this.competitiveScore == null) {
             this.competitiveScore = new CompetitiveScore(courseLayout);
         }

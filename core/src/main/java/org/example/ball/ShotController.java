@@ -218,6 +218,14 @@ public class ShotController {
         float powerPenalty = (float) Math.pow(rawR, 6) * 0.40f;
         float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * result.powerMod;
 
+        // Terrain penalties: scale power and spin based on surface type and shot quality
+        // relative to what's achievable with the selected club. Applied before ball.hit()
+        // so ShotPacket values are already-penalised — multiplayer replay needs no changes.
+        Terrain.TerrainType terrainType = terrain.getTerrainTypeAt(lastBallPos.x, lastBallPos.z);
+        float[] terrainPenalty = getTerrainPenalties(terrainType, relativeQuality(result.rating, club));
+        finalPowerMult *= terrainPenalty[0];
+        float terrainSpinMult = terrainPenalty[1];
+
         float launchLoft = (float) Math.asin(tempV1.y) * MathUtils.radiansToDegrees;
         ball.hit(tempV1, power, launchLoft, finalPowerMult, result.rating);
 
@@ -230,8 +238,8 @@ public class ShotController {
         float spinCurve = (float) Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
         float quality = getQualityFactor(result.rating);
 
-        float backspin = (power * finalPowerMult) * sForce * 14.5f * (1.0f + (quadOffset.y * 1.8f)) * quality * spinCurve;
-        float sidespin = (quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 60.0f * spinCurve);
+        float backspin = (power * finalPowerMult) * sForce * 14.5f * (1.0f + (quadOffset.y * 1.8f)) * quality * spinCurve * terrainSpinMult;
+        float sidespin = ((quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 60.0f * spinCurve)) * terrainSpinMult;
 
         ball.getSpin().set(rightOfAim).scl(backspin);
         ball.getSpin().add(tempV2.set(Vector3.Y).scl(-sidespin));
@@ -267,11 +275,42 @@ public class ShotController {
 
     private float getQualityFactor(MinigameResult.Rating rating) {
         return switch (rating) {
-            case PERFECTION -> 1.2f;
-            case SUPER -> 1.1f;
-            case POOR -> 0.6f;
-            case TERRIBLE, ABYSMAL -> 0.3f;
-            default -> 1f;
+            case PERFECTION         -> 1.2f;
+            case SUPER              -> 1.1f;
+            case GREAT              -> 1.05f;
+            case GOOD               -> 1.0f;
+            case POOR               -> 0.6f;
+            case TERRIBLE, ABYSMAL  -> 0.3f;
+        };
+    }
+
+    /** 0.0 = worst possible, 1.0 = best possible for this club. */
+    private float relativeQuality(MinigameResult.Rating rating, Club club) {
+        boolean hasPerfection = club.baseDifficulty >= 1.6f;
+        boolean hasSuper      = club.baseDifficulty >= 1.3f;
+        boolean hasGreat      = club.baseDifficulty >= 1.0f;
+        return switch (rating) {
+            case PERFECTION         -> 1.0f;
+            case SUPER              -> hasPerfection ? 0.67f : 1.0f;
+            case GREAT              -> hasPerfection ? 0.5f : (hasSuper ? 0.75f : 1.0f);
+            case GOOD               -> hasPerfection ? 0.33f : (hasSuper ? 0.5f : (hasGreat ? 0.5f : 1.0f));
+            case POOR               -> 0.1f;
+            case TERRIBLE, ABYSMAL  -> 0.0f;
+        };
+    }
+
+    /**
+     * Returns [powerMult, spinMult] for the given terrain and relative shot quality (0..1).
+     * Fairway/tee/green/stone/fringe return [1, 1] — no terrain layer applied.
+     * MUD is quality-independent (flat penalty regardless of how well you hit it).
+     */
+    private float[] getTerrainPenalties(Terrain.TerrainType type, float q) {
+        return switch (type) {
+            case ROUGH      -> new float[]{ MathUtils.lerp(0.95f, 1.0f, q), MathUtils.lerp(0.70f, 1.0f, q) };
+            case DEEP_ROUGH -> new float[]{ MathUtils.lerp(0.85f, 1.0f, q), MathUtils.lerp(0.40f, 0.80f, q) };
+            case SAND       -> new float[]{ MathUtils.lerp(0.95f, 1.0f, q), MathUtils.lerp(0.55f, 1.0f, q) };
+            case MUD        -> new float[]{ 0.80f, 0.20f };
+            default         -> new float[]{ 1.0f, 1.0f };
         };
     }
 

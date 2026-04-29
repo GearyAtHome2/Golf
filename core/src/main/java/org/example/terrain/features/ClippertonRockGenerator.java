@@ -104,7 +104,7 @@ public class ClippertonRockGenerator {
                     } else {
                         float blendT = 1.0f - ((distToGreen - GREEN_PHYSICAL_RADIUS) / GREEN_SMOOTH_RADIUS);
                         blendT = MathUtils.clamp(blendT, 0f, 1f);
-                        blendT = blendT * blendT * (3 - 2 * blendT);
+                        blendT = TerrainUtils.smoothstep(blendT);
                         currentH = MathUtils.lerp(currentH, actualGreenH, blendT);
                     }
                 }

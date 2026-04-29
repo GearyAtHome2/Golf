@@ -17,10 +17,11 @@ public class SessionPersistence {
     static String getFileName(GameSession.GameMode mode, String uid) {
         boolean hasUid = uid != null && !uid.isEmpty();
         return switch (mode) {
-            case STANDARD_18 -> STANDARD_FILE;
-            case DAILY_18    -> hasUid ? "save_daily_18_" + uid + ".json" : "save_daily_18.json";
-            case DAILY_9     -> hasUid ? "save_daily_9_"  + uid + ".json" : "save_daily_9.json";
-            case DAILY_1     -> hasUid ? "save_daily_1_"  + uid + ".json" : "save_daily_1.json";
+            case STANDARD_18  -> STANDARD_FILE;
+            case DAILY_18     -> hasUid ? "save_daily_18_" + uid + ".json" : "save_daily_18.json";
+            case DAILY_9      -> hasUid ? "save_daily_9_"  + uid + ".json" : "save_daily_9.json";
+            case DAILY_1      -> hasUid ? "save_daily_1_"  + uid + ".json" : "save_daily_1.json";
+            case MULTIPLAYER_9 -> ""; // ephemeral — never saved to disk
         };
     }
 
@@ -31,12 +32,16 @@ public class SessionPersistence {
 
     public static void saveSession(GameSession session, String uid) {
         if (session == null) return;
-        FileHandle file = Gdx.files.local(getFileName(session.getMode(), uid));
+        String filename = getFileName(session.getMode(), uid);
+        if (filename.isEmpty()) return; // ephemeral mode (e.g. MULTIPLAYER_9) — not persisted
+        FileHandle file = Gdx.files.local(filename);
         file.writeString(json.prettyPrint(session), false);
     }
 
     public static GameSession loadSession(GameSession.GameMode mode, String uid) {
-        FileHandle file = Gdx.files.local(getFileName(mode, uid));
+        String filename = getFileName(mode, uid);
+        if (filename.isEmpty()) return null;
+        FileHandle file = Gdx.files.local(filename);
         if (!file.exists()) return null;
         try {
             GameSession session = json.fromJson(GameSession.class, file.readString());
@@ -57,8 +62,13 @@ public class SessionPersistence {
         return loadSession(mode, "");
     }
 
+    /**
+     * Returns today's date as YYYYMMDD (e.g. 20260428) in UTC.
+     * UTC is used so all players share the same daily seed regardless of timezone,
+     * matching the server-side leaderboard window which also starts at UTC midnight.
+     */
     public static long getTodayTimestamp() {
-        Calendar cal = Calendar.getInstance();
+        Calendar cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         return (long) cal.get(Calendar.YEAR) * 10000 + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH);
     }
 }

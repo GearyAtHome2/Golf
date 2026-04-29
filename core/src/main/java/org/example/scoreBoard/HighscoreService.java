@@ -9,10 +9,11 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import org.example.FirebaseConfig;
 
 public class HighscoreService {
 
-    private static final String API_KEY = org.example.FirebaseConfig.API_KEY;
+    private static final String API_KEY = FirebaseConfig.API_KEY;
 
     public interface HighscoreListener {
         void onSuccess(Array<HighscoreEntry> entries);
@@ -107,6 +108,79 @@ public class HighscoreService {
         }
     }
 
+    public interface CountListener {
+        void onSuccess(int count);
+        void onFailure(Throwable t);
+    }
+
+    /**
+     * Builds the Firestore "where" JSON fragment scoped to today.
+     * Uses a composite filter (difficulty + timestamp) when difficulty is non-null and courseType is not HOLES_1;
+     * otherwise uses a simple timestamp-only filter.
+     */
+    private static String buildTodayWhereJson(String difficulty, CourseType courseType, String todayStart) {
+        if (difficulty == null || courseType == CourseType.HOLES_1) {
+            return "\"where\":{\"fieldFilter\":{\"field\":{\"fieldPath\":\"submissionTime\"},"
+                 + "\"op\":\"GREATER_THAN_OR_EQUAL\",\"value\":{\"timestampValue\":\"" + todayStart + "\"}}}";
+        } else {
+            return "\"where\":{\"compositeFilter\":{\"op\":\"AND\",\"filters\":["
+                 + "{\"fieldFilter\":{\"field\":{\"fieldPath\":\"difficulty\"},\"op\":\"EQUAL\",\"value\":{\"stringValue\":\"" + difficulty + "\"}}},"
+                 + "{\"fieldFilter\":{\"field\":{\"fieldPath\":\"submissionTime\"},\"op\":\"GREATER_THAN_OR_EQUAL\",\"value\":{\"timestampValue\":\"" + todayStart + "\"}}}"
+                 + "]}}";
+        }
+    }
+
+    /**
+     * Fires a Firestore aggregation COUNT query for today's entries.
+     * @param difficulty null to count across all difficulties (used for CourseType tab counts and HOLES_1).
+     */
+    public void fetchCount(String difficulty, CourseType courseType, CountListener listener) {
+        if (listener == null) return;
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'00:00:00'Z'", Locale.UK);
+        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+        String todayStart = sdf.format(new Date());
+
+        StringBuilder json = new StringBuilder();
+        json.append("{\"structuredAggregationQuery\":{");
+        json.append("\"structuredQuery\":{");
+        json.append("\"from\":[{\"collectionId\":\"").append(courseType.collectionId).append("\"}],");
+        json.append(buildTodayWhereJson(difficulty, courseType, todayStart));
+        json.append("},");
+        json.append("\"aggregations\":[{\"count\":{},\"alias\":\"count\"}]");
+        json.append("}}");
+
+        Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
+        request.setUrl(courseType.aggregationQueryUrl + "?key=" + API_KEY);
+        request.setContent(json.toString());
+        request.setHeader("Content-Type", "application/json");
+
+        Gdx.net.sendHttpRequest(request, new Net.HttpResponseListener() {
+            @Override
+            public void handleHttpResponse(Net.HttpResponse httpResponse) {
+                int status = httpResponse.getStatus().getStatusCode();
+                if (status < 200 || status >= 300) {
+                    Gdx.app.postRunnable(() -> listener.onFailure(new Exception("HTTP " + status)));
+                    return;
+                }
+                try {
+                    JsonValue root = new JsonReader().parse(httpResponse.getResultAsString());
+                    JsonValue first = root.isArray() ? root.get(0) : root;
+                    // integerValue is serialised as a string in Firestore REST responses
+                    String countStr = first.get("result").get("aggregateFields").get("count").getString("integerValue");
+                    int count = Integer.parseInt(countStr);
+                    Gdx.app.postRunnable(() -> listener.onSuccess(count));
+                } catch (Exception e) {
+                    Gdx.app.error("Highscore", "Count parse error: " + e.getMessage());
+                    Gdx.app.postRunnable(() -> listener.onFailure(e));
+                }
+            }
+            @Override public void failed(Throwable t) {
+                Gdx.app.postRunnable(() -> listener.onFailure(t));
+            }
+            @Override public void cancelled() {}
+        });
+    }
+
     public interface SubmitCallback {
         void onSuccess();
         void onFailure(int statusCode);
@@ -119,9 +193,9 @@ public class HighscoreService {
 
         StringBuilder json = new StringBuilder();
         json.append("{ \"fields\": {");
-        json.append("\"playerName\": { \"stringValue\": \"").append(escape(name)).append("\" },");
+        json.append("\"playerName\": { \"stringValue\": \"").append(FirebaseConfig.escJson(name)).append("\" },");
         if (uid != null && !uid.isEmpty()) {
-            json.append("\"uid\": { \"stringValue\": \"").append(escape(uid)).append("\" },");
+            json.append("\"uid\": { \"stringValue\": \"").append(FirebaseConfig.escJson(uid)).append("\" },");
         }
         json.append("\"score\": { \"integerValue\": ").append(score).append(" },");
         json.append("\"difficulty\": { \"stringValue\": \"").append(difficulty).append("\" },");
@@ -163,11 +237,6 @@ public class HighscoreService {
         });
     }
 
-    private static String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
     static String toFirestoreIntArray(int[] arr) {
         StringBuilder sb = new StringBuilder("{\"arrayValue\":{\"values\":[");
         for (int i = 0; i < arr.length; i++) {
@@ -187,11 +256,13 @@ public class HighscoreService {
         return arr;
     }
 
-    public void fetchHighscores(String difficulty, final HighscoreListener listener) {
-        fetchHighscores(difficulty, CourseType.HOLES_18, listener);
-    }
-
-    public void fetchHighscores(String difficulty, CourseType courseType, final HighscoreListener listener) {
+    /**
+     * Fetches today's entries for a CourseType across all difficulties.
+     * Used to count entries per difficulty tab client-side.
+     * Capped at 55 documents (5 difficulties × 10 each + 5 buffer).
+     */
+    public void fetchHighscoresAllDifficulties(CourseType courseType, final HighscoreListener listener) {
+        if (listener == null) return;
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'00:00:00'Z'", Locale.UK);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
         String todayStart = sdf.format(new Date());
@@ -199,15 +270,63 @@ public class HighscoreService {
         StringBuilder json = new StringBuilder();
         json.append("{ \"structuredQuery\": {");
         json.append("\"from\": [{\"collectionId\": \"").append(courseType.collectionId).append("\"}],");
-        if (courseType == CourseType.HOLES_1) {
-            // No difficulty filter — show all difficulties together
-            json.append("\"where\": { \"fieldFilter\": { \"field\": {\"fieldPath\": \"submissionTime\"}, \"op\": \"GREATER_THAN_OR_EQUAL\", \"value\": {\"timestampValue\": \"").append(todayStart).append("\"} } },");
-        } else {
-            json.append("\"where\": { \"compositeFilter\": { \"op\": \"AND\", \"filters\": [");
-            json.append("{ \"fieldFilter\": { \"field\": {\"fieldPath\": \"difficulty\"}, \"op\": \"EQUAL\", \"value\": {\"stringValue\": \"").append(difficulty).append("\"} } },");
-            json.append("{ \"fieldFilter\": { \"field\": {\"fieldPath\": \"submissionTime\"}, \"op\": \"GREATER_THAN_OR_EQUAL\", \"value\": {\"timestampValue\": \"").append(todayStart).append("\"} } }");
-            json.append("] } },");
-        }
+        json.append(buildTodayWhereJson(null, courseType, todayStart)).append(",");
+        json.append("\"orderBy\": [{ \"field\": {\"fieldPath\": \"submissionTime\"}, \"direction\": \"ASCENDING\" }],");
+        json.append("\"limit\": 55");
+        json.append("} }");
+
+        Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
+        request.setUrl(courseType.queryUrl + "?key=" + API_KEY);
+        request.setContent(json.toString());
+        request.setHeader("Content-Type", "application/json");
+
+        Gdx.net.sendHttpRequest(request, new Net.HttpResponseListener() {
+            @Override
+            public void handleHttpResponse(Net.HttpResponse httpResponse) {
+                int status = httpResponse.getStatus().getStatusCode();
+                String body = httpResponse.getResultAsString();
+                if (status < 200 || status >= 300) {
+                    Gdx.app.error("Highscore", "AllDiff fetch HTTP " + status + ": " + body);
+                    Gdx.app.postRunnable(() -> listener.onFailure(new Exception("HTTP " + status)));
+                    return;
+                }
+                try {
+                    JsonValue root = new JsonReader().parse(body);
+                    final Array<HighscoreEntry> entries = new Array<>();
+                    if (root.isArray()) {
+                        for (JsonValue wrapper : root) {
+                            if (wrapper == null || !wrapper.has("document")) continue;
+                            JsonValue fields = wrapper.get("document").get("fields");
+                            if (fields == null || !fields.has("difficulty")) continue;
+                            String diff = fields.get("difficulty").getString("stringValue");
+                            int score = fields.has("score") ? fields.get("score").getInt("integerValue") : 0;
+                            entries.add(new HighscoreEntry(null, score, diff, null));
+                        }
+                    }
+                    Gdx.app.postRunnable(() -> listener.onSuccess(entries));
+                } catch (Exception e) {
+                    Gdx.app.postRunnable(() -> listener.onFailure(e));
+                }
+            }
+            @Override public void failed(Throwable t) { Gdx.app.postRunnable(() -> listener.onFailure(t)); }
+            @Override public void cancelled() {}
+        });
+    }
+
+    public void fetchHighscores(String difficulty, final HighscoreListener listener) {
+        fetchHighscores(difficulty, CourseType.HOLES_18, listener);
+    }
+
+    public void fetchHighscores(String difficulty, CourseType courseType, final HighscoreListener listener) {
+        if (listener == null) return;
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'00:00:00'Z'", Locale.UK);
+        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+        String todayStart = sdf.format(new Date());
+
+        StringBuilder json = new StringBuilder();
+        json.append("{ \"structuredQuery\": {");
+        json.append("\"from\": [{\"collectionId\": \"").append(courseType.collectionId).append("\"}],");
+        json.append(buildTodayWhereJson(difficulty, courseType, todayStart)).append(",");
         json.append("\"orderBy\": [");
         if (courseType == CourseType.HOLES_1) {
             // Order by submissionTime only — Firestore can handle this without a composite index.

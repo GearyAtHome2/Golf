@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Net;
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
+import org.example.FirebaseConfig;
 
 /**
  * Firebase Authentication via REST API.
@@ -17,7 +18,7 @@ import com.badlogic.gdx.utils.JsonValue;
  */
 public class AuthService {
 
-    private static final String API_KEY   = org.example.FirebaseConfig.API_KEY;
+    private static final String API_KEY   = FirebaseConfig.API_KEY;
     private static final String AUTH_BASE = "https://identitytoolkit.googleapis.com/v1/accounts:";
     private static final String TOKEN_URL = "https://securetoken.googleapis.com/v1/token?key=" + API_KEY;
 
@@ -56,8 +57,8 @@ public class AuthService {
     // -------------------------------------------------------------------------
 
     public void signUp(String email, String password, String displayName, AuthCallback callback) {
-        String body = "{\"email\":\"" + escape(email) + "\","
-                    + "\"password\":\"" + escape(password) + "\","
+        String body = "{\"email\":\"" + FirebaseConfig.escJson(email) + "\","
+                    + "\"password\":\"" + FirebaseConfig.escJson(password) + "\","
                     + "\"returnSecureToken\":true}";
 
         post(AUTH_BASE + "signUp", body, response -> {
@@ -75,8 +76,8 @@ public class AuthService {
     // -------------------------------------------------------------------------
 
     public void signIn(String email, String password, AuthCallback callback) {
-        String body = "{\"email\":\"" + escape(email) + "\","
-                    + "\"password\":\"" + escape(password) + "\","
+        String body = "{\"email\":\"" + FirebaseConfig.escJson(email) + "\","
+                    + "\"password\":\"" + FirebaseConfig.escJson(password) + "\","
                     + "\"returnSecureToken\":true}";
 
         post(AUTH_BASE + "signInWithPassword", body, response -> {
@@ -138,7 +139,7 @@ public class AuthService {
 
     public void signInWithGoogle(String googleIdToken, AuthCallback callback) {
         // Firebase signInWithIdp accepts a Google ID token and returns a full Firebase session.
-        String body = "{\"postBody\":\"id_token=" + escape(googleIdToken) + "&providerId=google.com\","
+        String body = "{\"postBody\":\"id_token=" + FirebaseConfig.escJson(googleIdToken) + "&providerId=google.com\","
                     + "\"requestUri\":\"http://localhost\","
                     + "\"returnSecureToken\":true,"
                     + "\"returnIdpCredential\":true}";
@@ -160,7 +161,7 @@ public class AuthService {
     // -------------------------------------------------------------------------
 
     public void sendPasswordReset(String email, SimpleCallback callback) {
-        String body = "{\"requestType\":\"PASSWORD_RESET\",\"email\":\"" + escape(email) + "\"}";
+        String body = "{\"requestType\":\"PASSWORD_RESET\",\"email\":\"" + FirebaseConfig.escJson(email) + "\"}";
 
         post(AUTH_BASE + "sendOobCode", body,
             response -> Gdx.app.postRunnable(callback::onSuccess),
@@ -174,8 +175,8 @@ public class AuthService {
     private void setDisplayName(String idToken, String displayName,
                                 String uid, String refreshToken, String email,
                                 String name, AuthCallback callback) {
-        String body = "{\"idToken\":\"" + escape(idToken) + "\","
-                    + "\"displayName\":\"" + escape(displayName) + "\","
+        String body = "{\"idToken\":\"" + FirebaseConfig.escJson(idToken) + "\","
+                    + "\"displayName\":\"" + FirebaseConfig.escJson(displayName) + "\","
                     + "\"returnSecureToken\":false}";
 
         post(AUTH_BASE + "update", body, response -> {
@@ -254,15 +255,6 @@ public class AuthService {
         } catch (Exception e) {
             return "Something went wrong. Please try again.";
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Internal: minimal JSON string escaping
-    // -------------------------------------------------------------------------
-
-    private String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String urlEncode(String s) {

@@ -73,6 +73,17 @@ public class SessionManager {
         startCompetitiveMatch(Math.abs(MathUtils.random.nextLong()), GameSession.GameMode.STANDARD_18);
     }
 
+    /**
+     * Starts a multiplayer match from a host-distributed seed.
+     * The session is NOT saved to disk — multiplayer scores are not submitted to the leaderboard.
+     */
+    public void startMultiplayerMatch(long seed, GameConfig.Difficulty difficulty) {
+        activeSession = new GameSession(seed, difficulty, GameSession.GameMode.MULTIPLAYER_9,
+                                        SessionPersistence.getTodayTimestamp());
+        // No save callback — multiplayer sessions are ephemeral.
+        activeSession.setCourseLayout(LevelDataGenerator.generate9RandomHoles(seed));
+    }
+
     // Scrambles a timestamp-derived seed so players can't trivially reverse-engineer
     // today's daily map by guessing the input (e.g. "20260411"). All players share
     // the same scrambled seed for a given day. Do NOT change this — doing so would

@@ -34,7 +34,9 @@ public class Tree extends TerrainObject {
         CHERRY_BLOSSOM(new Color(0.2f, 0.18f, 0.18f, 1f), new Color(0.3f, 0.25f, 0.25f, 1f), new Color(1f, 0.7f, 0.75f, 1f), new Color(1f, 0.85f, 0.9f, 1f)),
         DEAD_GRAY(new Color(0.2f, 0.2f, 0.2f, 1f), new Color(0.4f, 0.4f, 0.4f, 1f), new Color(0.1f, 0.1f, 0.1f, 1f), new Color(0.3f, 0.3f, 0.3f, 1f)),
         GRAPEVINE(new Color(0.30f, 0.22f, 0.18f, 1f), new Color(0.40f, 0.30f, 0.25f, 1f), new Color(0.15f, 0.45f, 0.05f, 1f), new Color(0.25f, 0.55f, 0.15f, 1f)),
-        PALM(new Color(0.55f, 0.45f, 0.35f, 1f), new Color(0.65f, 0.55f, 0.45f, 1f), new Color(0.2f, 0.5f, 0.05f, 1f), new Color(0.4f, 0.7f, 0.15f, 1f));
+        PALM(new Color(0.55f, 0.45f, 0.35f, 1f), new Color(0.65f, 0.55f, 0.45f, 1f), new Color(0.2f, 0.5f, 0.05f, 1f), new Color(0.4f, 0.7f, 0.15f, 1f)),
+        CYPRESS(new Color(0.28f, 0.23f, 0.18f, 1f), new Color(0.38f, 0.32f, 0.25f, 1f), new Color(0.05f, 0.22f, 0.15f, 1f), new Color(0.12f, 0.32f, 0.22f, 1f)),
+        ACACIA(new Color(0.48f, 0.38f, 0.22f, 1f), new Color(0.62f, 0.50f, 0.32f, 1f), new Color(0.28f, 0.38f, 0.08f, 1f), new Color(0.42f, 0.52f, 0.16f, 1f));
 
         private final Color barkMin, barkMax, leafMin, leafMax;
 
@@ -88,7 +90,7 @@ public class Tree extends TerrainObject {
         trunk.transform.setToTranslation(x, y + th / 2, z);
         trunk.transform.rotate(0, 1, 0, mapRotation);
 
-        if (scheme == TreeScheme.FIR) {
+        if (scheme == TreeScheme.FIR || scheme == TreeScheme.CYPRESS) {
             float skirtMultiplier = 0.6f + (rng.nextFloat() * 0.31f);
             this.actualFoliageHeight = (th * skirtMultiplier) + (fr * 2);
             foliage = new ModelInstance(mb.createCone(fr * 2.5f, actualFoliageHeight, fr * 2.5f, 16, leafMat, attributes));
@@ -99,6 +101,10 @@ public class Tree extends TerrainObject {
             this.actualFoliageHeight = vineHeight;
             foliage = new ModelInstance(mb.createBox(vineWidth, vineHeight, tr * 2.2f, leafMat, attributes));
             foliage.transform.setToTranslation(x, y + th + (vineHeight / 2f), z);
+        } else if (scheme == TreeScheme.ACACIA) {
+            this.actualFoliageHeight = fr * 1.6f;
+            foliage = new ModelInstance(mb.createSphere(fr * 4.0f, fr * 1.6f, fr * 4.0f, 16, 8, leafMat, attributes));
+            foliage.transform.setToTranslation(x, y + th + fr * 0.8f, z);
         } else {
             this.actualFoliageHeight = fr * 2;
             foliage = new ModelInstance(mb.createSphere(fr * 2, fr * 2, fr * 2, 16, 16, leafMat, attributes));
@@ -130,7 +136,7 @@ public class Tree extends TerrainObject {
     }
 
     public boolean isInsideFoliage(Vector3 ballPos, float ballRadius) {
-        if (scheme == TreeScheme.FIR) {
+        if (scheme == TreeScheme.FIR || scheme == TreeScheme.CYPRESS) {
             float foliageBottom = pos.y + tH + (fR * 2) - actualFoliageHeight;
             float foliageTop = pos.y + tH + (fR * 2);
 
@@ -141,6 +147,15 @@ public class Tree extends TerrainObject {
 
             float distSq = Vector2.dst2(ballPos.x, ballPos.z, pos.x, pos.z);
             return distSq < Math.pow(coneRadiusAtHeight + ballRadius, 2);
+        }
+
+        if (scheme == TreeScheme.ACACIA) {
+            float halfW = fR * 2.0f;
+            float halfH = fR * 0.8f;
+            float centerY = pos.y + tH + halfH;
+            return Math.abs(ballPos.x - pos.x) < (halfW + ballRadius) &&
+                    Math.abs(ballPos.y - centerY) < (halfH + ballRadius) &&
+                    Math.abs(ballPos.z - pos.z) < (halfW + ballRadius);
         }
 
         if (scheme == TreeScheme.GRAPEVINE) {

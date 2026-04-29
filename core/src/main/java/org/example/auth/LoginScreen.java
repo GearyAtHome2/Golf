@@ -176,9 +176,9 @@ public class LoginScreen {
         TextButton forgotBtn   = makeLinkBtn("Forgot Password?", ls * 0.82f);
 
         t.add(makeLabel("Email", ls)).left().padBottom(3).row();
-        t.add(emailField).width(fw).height(fh).padBottom(sp).row();
+        t.add(pasteRow(emailField, fw, fh, bs)).width(fw).padBottom(sp).row();
         t.add(makeLabel("Password", ls)).left().padBottom(3).row();
-        t.add(pwField).width(fw).height(fh).padBottom(pad).row();
+        t.add(pasteRow(pwField, fw, fh, bs)).width(fw).padBottom(pad).row();
         t.add(loginBtn).width(fw).height(bh).row();
 
         Table links = new Table();
@@ -258,11 +258,11 @@ public class LoginScreen {
         TextButton backBtn   = makeLinkBtn("← Back", ls * 0.82f);
 
         t.add(makeLabel("Display Name", ls)).left().padBottom(3).row();
-        t.add(nameField).width(fw).height(fh).padBottom(sp).row();
+        t.add(pasteRow(nameField, fw, fh, bs)).width(fw).padBottom(sp).row();
         t.add(makeLabel("Email", ls)).left().padBottom(3).row();
-        t.add(emailField).width(fw).height(fh).padBottom(sp).row();
+        t.add(pasteRow(emailField, fw, fh, bs)).width(fw).padBottom(sp).row();
         t.add(makeLabel("Password (6+ characters)", ls)).left().padBottom(3).row();
-        t.add(pwField).width(fw).height(fh).padBottom(pad).row();
+        t.add(pasteRow(pwField, fw, fh, bs)).width(fw).padBottom(pad).row();
         t.add(createBtn).width(fw).height(bh).padBottom(sp).row();
         t.add(backBtn).left().row();
 
@@ -311,7 +311,7 @@ public class LoginScreen {
         successLbl.setAlignment(Align.center);
 
         t.add(makeLabel("Enter your email to reset password.", ls)).left().padBottom(sp).row();
-        t.add(emailField).width(fw).height(fh).padBottom(pad).row();
+        t.add(pasteRow(emailField, fw, fh, bs)).width(fw).padBottom(pad).row();
         t.add(sendBtn).width(fw).height(bh).padBottom(sp).row();
         t.add(successLbl).width(fw).padBottom(sp).row();
         t.add(backBtn).left().row();
@@ -417,6 +417,22 @@ public class LoginScreen {
             field.setPasswordCharacter('*');
         }
         return field;
+    }
+
+    /** Returns a row containing the text field and a small PASTE button beside it. */
+    private Table pasteRow(TextField field, float fw, float fh, float bs) {
+        float pasteW = 90f;
+        TextButton pasteBtn = makeButton("PASTE", bs * 0.65f);
+        pasteBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                String clip = Gdx.app.getClipboard().getContents();
+                if (clip != null && !clip.isEmpty()) field.setText(clip.trim());
+            }
+        });
+        Table row = new Table();
+        row.add(field).width(fw - pasteW - 6f).height(fh);
+        row.add(pasteBtn).width(pasteW).height(fh).padLeft(6f);
+        return row;
     }
 
     private Label makeLabel(String text, float scale) {

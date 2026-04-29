@@ -40,9 +40,11 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
 
     @Override
     public void update(float delta) {
-        // If no fingers are on the screen, reset the consumption flag
+        // If no fingers are on the screen, reset per-touch state
         if (!com.badlogic.gdx.Gdx.input.isTouched()) {
             isConsumed = false;
+            lastPointerCount = 0;
+            pressedMap.put(Action.SECONDARY_ACTION, false);
         }
 
         for (Action action : Action.values()) {

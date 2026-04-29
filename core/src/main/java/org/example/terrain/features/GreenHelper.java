@@ -14,9 +14,12 @@ public class GreenHelper {
         float dist = Vector3.dst(x, z, 0, gX, gZ, 0);
         float angle = MathUtils.atan2((z - gZ) + 0.00001f, (x - gX) + 0.00001f);//offset prevents discontinuity at Green Center
         float dynamicRadius = baseRadius + (MathUtils.sin(angle * 3 + seedOffset) * 3.1f);
+        float fringeWidth = baseRadius / 10f;
 
         if (dist <= dynamicRadius) {
             map[x][z] = Terrain.TerrainType.GREEN;
+        } else if (dist <= dynamicRadius + fringeWidth) {
+            map[x][z] = Terrain.TerrainType.FRINGE;
         }
     }
 
@@ -44,11 +47,10 @@ public class GreenHelper {
     /**
      * Extracts the 4-way wave interference logic for putting breaks.
      */
-    public static float calculateUndulation(int x, int z, float[] angles, float[] offsets) {
+    public static float calculateUndulation(int x, int z, float[] angles, float[] offsets, float[] freqs) {
         float total = 0;
         for (int i = 0; i < 4; i++) {
-            // 0.32f is the frequency constant used for "readable" breaks
-            float coord = (x * MathUtils.cos(angles[i]) + z * MathUtils.sin(angles[i])) * 0.32f;
+            float coord = (x * MathUtils.cos(angles[i]) + z * MathUtils.sin(angles[i])) * freqs[i];
             total += MathUtils.sin(coord + offsets[i]);
         }
         return total / 4.0f;

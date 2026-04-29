@@ -27,6 +27,7 @@ import org.example.GameConfig;
 import org.example.Platform;
 import org.example.ball.Ball;
 import org.example.ball.MinigameResult;
+import org.example.multiplayer.LiveScoreboardActor;
 import org.example.ball.ShotController;
 import org.example.ball.ShotDifficulty;
 import org.example.gameManagers.MenuManager;
@@ -86,6 +87,7 @@ public class HUD {
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
     private TextButton infoToggleBtn;
+    private TextButton scoreboardToggleBtn;
 
     private GameSession activeSession;
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
@@ -189,6 +191,7 @@ public class HUD {
         this.gameplayTable = mobileUIPackage.gameplayTable;
         this.victoryTable = mobileUIPackage.victoryTable;
         this.infoToggleBtn = mobileUIPackage.infoToggleBtn;
+        this.scoreboardToggleBtn = mobileUIPackage.scoreboardToggleBtn;
         this.skin = mobileUIPackage.skin;
         this.startMenuTable = mobileUIPackage.startMenuTable;
         this.mobileClubLabel = mobileUIPackage.clubLabel;
@@ -201,6 +204,19 @@ public class HUD {
                 infoJustToggled = true;
             }
         });
+
+        if (scoreboardToggleBtn != null) {
+            scoreboardToggleBtn.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent event, Actor actor) {
+                    if (mobileUIPackage.liveScoreboard != null) {
+                        mobileUIPackage.liveScoreboard.setVisible(true);
+                    }
+                    scoreboardToggleBtn.setVisible(false);
+                }
+            });
+        }
+
         mobileUIInitialized = true;
     }
 
@@ -293,6 +309,11 @@ public class HUD {
             }
             if (!config.difficulty.hasClubInfo()) showInfoDisplay = false;
             if (infoToggleBtn != null) infoToggleBtn.setVisible(config.difficulty.hasClubInfo() && !showInfoDisplay);
+            boolean isMultiplayer = session != null && session.getMode() == GameSession.GameMode.MULTIPLAYER_9;
+            if (scoreboardToggleBtn != null) {
+                boolean sbShowing = mobileUIPackage.liveScoreboard != null && mobileUIPackage.liveScoreboard.isVisible();
+                scoreboardToggleBtn.setVisible(isMultiplayer && !sbShowing);
+            }
             setUtilityButtonState(mobileUIPackage.projectBtn, config.difficulty.hasShotProjection());
             setUtilityButtonState(mobileUIPackage.distanceBtn, config.difficulty.hasRangeFinder());
         }
@@ -477,6 +498,9 @@ public class HUD {
             mobileUIPackage.arrowContainer.setVisible(true);
         showInfoDisplay = false;
         if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
+        if (scoreboardToggleBtn != null) scoreboardToggleBtn.setVisible(false);
+        if (mobileUIPackage != null && mobileUIPackage.liveScoreboard != null)
+            mobileUIPackage.liveScoreboard.setVisible(false);
         minigameController.reset();
         distanceDisplayTimer = 0;
         seedFeedbackTimer = 0;
@@ -513,7 +537,77 @@ public class HUD {
         batch.end();
     }
 
-    public void renderInstructions(GameInputProcessor input) {
+    /**
+     * Renders the determinism self-test overlay.
+     * phase 0-3 = test in progress; phase 4 = result ready.
+     */
+    public void showDetermTestOverlay(String statusText, int phase) {
+        float screenW = viewport.getWorldWidth();
+        float screenH = viewport.getWorldHeight();
+        viewport.apply();
+
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
+
+        float scale = screenH * 0.0028f;
+        font.getData().setScale(scale);
+
+        boolean complete = phase >= 4;
+        String title = complete ? "DETERM TEST - COMPLETE" : "DETERM TEST - RUNNING...";
+
+        float panelW = screenW * 0.82f;
+        float panelH = screenH * 0.48f;
+        float panelX = (screenW - panelW) / 2f;
+        float panelY = (screenH - panelH) / 2f;
+        float pad    = screenH * 0.035f;
+        float textX  = panelX + pad;
+        float wrapW  = panelW - pad * 2f;
+
+        UIUtils.createGoldBorderedPanel(new Color(0.04f, 0.04f, 0.04f, 0.97f), 3)
+                .draw(batch, panelX, panelY, panelW, panelH);
+
+        layout.setText(font, title);
+        float titleLineH = layout.height * 2.0f;
+        float curY = panelY + panelH - pad;
+
+        font.setColor(Color.YELLOW);
+        font.draw(batch, title, textX, curY);
+        curY -= titleLineH;
+
+        // Draw a separator line
+        batch.end();
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.5f, 0.5f, 0.1f, 1f);
+        shapeRenderer.rect(textX, curY - pad * 0.2f, wrapW, 2f);
+        shapeRenderer.end();
+        curY -= pad * 0.6f;
+        batch.begin();
+
+        // Render each line with colour-coding
+        float bodyScale = scale * 0.78f;
+        font.getData().setScale(bodyScale);
+        layout.setText(font, "X");
+        float bodyLineH = layout.height * 1.9f;
+
+        String[] lines = statusText.split("\n");
+        for (String line : lines) {
+            if (line.trim().isEmpty()) { curY -= bodyLineH * 0.5f; continue; }
+            if (line.contains("PASS"))           font.setColor(Color.GREEN);
+            else if (line.contains("FAIL"))      font.setColor(new Color(1f, 0.35f, 0.35f, 1f));
+            else if (line.startsWith("["))       font.setColor(Color.GRAY);
+            else                                 font.setColor(Color.WHITE);
+            font.draw(batch, line, textX, curY, wrapW, com.badlogic.gdx.utils.Align.left, true);
+            // Measure actual drawn height for wrapping
+            layout.setText(font, line, font.getColor(), wrapW, com.badlogic.gdx.utils.Align.left, true);
+            curY -= Math.max(bodyLineH, layout.height + bodyLineH * 0.25f);
+        }
+
+        font.getData().setScale(1.0f);
+        batch.end();
+    }
+
+public void renderInstructions(GameInputProcessor input) {
         overlayRenderer.renderInstructions(batch, shapeRenderer, font, viewport, input, () -> {
         });
     }
@@ -784,6 +878,16 @@ public class HUD {
                     : com.badlogic.gdx.scenes.scene2d.Touchable.childrenOnly
             );
         }
+    }
+
+    /**
+     * Feeds fresh player data to the live multiplayer scoreboard.
+     * Call every frame (or on each poll) while a multiplayer session is active.
+     * No-op when not on Android or when the scoreboard actor is not yet created.
+     */
+    public void updateLiveScoreboard(java.util.List<LiveScoreboardActor.ScoreEntry> entries) {
+        if (mobileUIPackage == null || mobileUIPackage.liveScoreboard == null) return;
+        mobileUIPackage.liveScoreboard.update(entries);
     }
 
     public void dispose() {

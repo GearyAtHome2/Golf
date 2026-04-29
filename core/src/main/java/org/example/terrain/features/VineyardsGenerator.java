@@ -35,7 +35,7 @@ public class VineyardsGenerator {
                 // If we are within 8 units of a fairway, we fade the vineyard effect out.
                 float distToPath = getDistanceToPath(x, z, isPath, 8.0f);
                 float fairwaySmooth = MathUtils.clamp(distToPath / 8.0f, 0f, 1f);
-                fairwaySmooth = fairwaySmooth * fairwaySmooth * (3 - 2 * fairwaySmooth);
+                fairwaySmooth = TerrainUtils.smoothstep(fairwaySmooth);
 
                 // 3. Regional Influence (Existing dual-sine mask)
                 float maskValue = MathUtils.sin(x * 0.04f) + MathUtils.sin(z * 0.08f);
@@ -64,7 +64,7 @@ public class VineyardsGenerator {
                     float hStart = heights[x][currentStepZ];
                     float hEnd = heights[x][nextStepZ];
 
-                    float smoothedT = riserProgress * riserProgress * (3 - 2 * riserProgress);
+                    float smoothedT = TerrainUtils.smoothstep(riserProgress);
                     targetH = MathUtils.lerp(hStart, hEnd, smoothedT);
 
                     if (riserProgress > 0.2f && riserProgress < 0.8f && finalInfluence > 0.6f) {

@@ -48,6 +48,7 @@ public final class MenuButtonResolver {
         items.add(new MenuButtonDescriptor("COMPETITIVE >", false, competitiveSparkle));
         items.add(MenuButtonDescriptor.enabled("INSTRUCTIONS"));
         items.add(MenuButtonDescriptor.enabled("PRACTICE >"));
+        items.add(MenuButtonDescriptor.enabled("MULTIPLAYER >"));
         items.add(MenuButtonDescriptor.enabled("LOG OUT"));
         return items;
     }
@@ -70,9 +71,12 @@ public final class MenuButtonResolver {
         GameSession daily1   = sessions != null ? sessions.daily1   : null;
 
         boolean standardFinished = standard != null && standard.isFinished();
-        String play18Label = standardFinished
-            ? "18 HOLES (COMPLETED)"
-            : (standard != null ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)" : "PLAY 18");
+        // Finished standard sessions are unlocked — non-daily 18 is infinitely replayable.
+        // The completed result still lives in save_standard.json until the next load clears it;
+        // when handicap archiving is added (F-029), hook into SessionPersistence before that deletion.
+        String play18Label = (standard != null && !standardFinished)
+            ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)"
+            : "PLAY 18";
 
         boolean daily18Done = DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_18, daily18, dailyCache);
         String daily18Label = daily18Done
@@ -93,7 +97,7 @@ public final class MenuButtonResolver {
             : (daily1 != null ? "CONTINUE DAILY 1-HOLE (1/1)" : "DAILY 1-HOLE"));
 
         return Arrays.asList(
-            new MenuButtonDescriptor(play18Label,  standardFinished, false),
+            new MenuButtonDescriptor(play18Label,  false, false),
             new MenuButtonDescriptor(daily18Label, daily18Done,      !daily18Done),
             new MenuButtonDescriptor(daily9Label,  daily9Done,       !daily9Done),
             new MenuButtonDescriptor(daily1Label,  daily1Done,       !daily1Done),

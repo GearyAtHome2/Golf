@@ -13,6 +13,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import org.example.GameConfig;
+import org.example.multiplayer.LiveScoreboardActor;
 import org.example.session.CompetitiveSessions;
 import org.example.session.GameSession;
 import org.example.gameManagers.MenuManager;
@@ -39,6 +40,8 @@ public static class MobileUIPackage {
         public Stage stage, startMenuStage, pauseMenuStage;
         public Table gameplayTable, victoryTable, startMenuTable;
         public TextButton infoToggleBtn;
+        public TextButton scoreboardToggleBtn;
+        public LiveScoreboardActor liveScoreboard;
         public HoldButton resetBallBtn, newMapBtn;
         public TextButton difficultyBtn, projectBtn, distanceBtn;
         public Label clubLabel;
@@ -105,7 +108,33 @@ public static class MobileUIPackage {
         addActionButton(leftStack, "OVERVIEW", style, input, GameInputProcessor.Action.OVERHEAD_VIEW, btnW, btnH, globalFontScale).left().row();
 
         leftStack.add(debug).width(getDebugWidth(viewport)).height(viewport.getWorldHeight() * 0.18f).left().padTop(spacing).row();
-        leftStack.add(spin).size(getSpinSize(viewport)).bottom().left().padTop(spacing);
+
+        float spinSize = getSpinSize(viewport);
+
+        Table spinRow = new Table();
+        spinRow.add(spin).size(spinSize);
+        leftStack.add(spinRow).bottom().left().padTop(spacing);
+
+        // Scoreboard toggle button — floats to the right of the spindicator, only visible in multiplayer.
+        ui.scoreboardToggleBtn = new TextButton("SCORES", style);
+        ui.scoreboardToggleBtn.getLabel().setFontScale(globalFontScale * 0.42f);
+        ui.scoreboardToggleBtn.setVisible(false);
+        Table sbBtnWrapper = new Table();
+        sbBtnWrapper.setFillParent(true);
+        sbBtnWrapper.bottom().left().padLeft(leftEdge + spinSize + spacing).padBottom(spacing);
+        sbBtnWrapper.add(ui.scoreboardToggleBtn).width(btnW).height(spinSize * 0.48f);
+        ui.stage.addActor(sbBtnWrapper);
+
+        // Live scoreboard panel — separate fillParent table, same anchor as the toggle button.
+        ui.liveScoreboard = new LiveScoreboardActor(ui.skin, globalFontScale * 0.84f, () -> {
+            ui.liveScoreboard.setVisible(false);
+            ui.scoreboardToggleBtn.setVisible(true);
+        });
+        Table sbWrapper = new Table();
+        sbWrapper.setFillParent(true);
+        sbWrapper.bottom().left().padLeft(leftEdge + spinSize + spacing).padBottom(spacing);
+        sbWrapper.add(ui.liveScoreboard);
+        ui.stage.addActor(sbWrapper);
 
         Table rightStack = new Table();
         rightStack.top().right();
@@ -263,8 +292,8 @@ public static class MobileUIPackage {
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
             case MAIN -> TutorialPrefs.isComplete()
-                ? new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"}
-                : new String[]{"TUTORIAL", "PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "LOG OUT"};
+                ? new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "MULTIPLAYER", "LOG OUT"}
+                : new String[]{"TUTORIAL", "PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "MULTIPLAYER", "LOG OUT"};
             case PLAY_OPTIONS -> new String[]{"RANDOM MAP", "SELECT MAP", "PLAY SEED", "BACK"};
             case MAP_SELECT -> {
                 LevelData.Archetype[] archetypes = LevelData.Archetype.values();
@@ -446,7 +475,7 @@ public static class MobileUIPackage {
         });
 
         ui.submitScoreBtn = new TextButton("SUBMIT SCORE", primaryStyle);
-        ui.submitScoreBtn.getLabel().setFontScale(fontScale);
+        ui.submitScoreBtn.getLabel().setFontScale(fontScale*.85f);
         ui.submitScoreBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {

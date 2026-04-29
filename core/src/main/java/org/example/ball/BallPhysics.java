@@ -7,6 +7,7 @@ import org.example.terrain.Terrain;
 import java.util.Random;
 
 import static org.example.ball.Ball.BALL_RADIUS;
+import static org.example.ball.Ball.q;
 
 public class BallPhysics {
 
@@ -24,14 +25,17 @@ public class BallPhysics {
     private static final Vector3 outSlope = new Vector3();
     private static final Vector3 outBounce = new Vector3();
 
-    private static final float VERTICAL_STOP_THRESHOLD = 0.20f;
-    private static final float SOFTNESS_ABSORPTION_FACTOR = 0.2f;
-    private static final float MIN_RESTITUTION = 0.15f;
-    private static final float SPIN_TRANSFER_RATIO = 0.35f;
-    private static final float FRICTION_SOFTNESS_BOOST = 0.5f;
+    // Bounce / landing constants
+    private static final float VERTICAL_STOP_THRESHOLD = 0.20f;    // m/s — kill vertical bounce below this to prevent micro-bouncing
+    private static final float SOFTNESS_ABSORPTION_FACTOR = 0.2f;  // fraction of restitution lost per unit terrain softness
+    private static final float MIN_RESTITUTION = 0.15f;            // minimum bounce coefficient — ball always retains some vertical energy
+    private static final float SPIN_TRANSFER_RATIO = 0.35f;        // fraction of grip impulse applied to ball velocity (rest goes into spin)
+    private static final float FRICTION_SOFTNESS_BOOST = 0.5f;     // extra grip per unit softness — soft terrain bites more on landing
+    // Grip scaler: 10 m/s impact * 0.012 = 0.12 grip, then clamped to [MIN, MAX]
     private static final float NORMAL_GRIP_SCALER = 0.012f;
-    private static final float NORMAL_GRIP_MIN = 0.5f;
-    private static final float NORMAL_GRIP_MAX = 2.5f;
+    private static final float NORMAL_GRIP_MIN = 0.5f;             // prevents near-zero grip on glancing hits
+    private static final float NORMAL_GRIP_MAX = 2.5f;             // prevents physics explosion on steep impacts
+    // Tangential energy retained after bounce: lerped from MAX (hard) to MIN (soft) by terrain softness
     private static final float MAX_ENERGY_RETAINED = 0.99f;
     private static final float MIN_ENERGY_RETAINED = 0.85f;
 
@@ -46,25 +50,30 @@ public class BallPhysics {
 
     public static Vector3 getAirDrag(Vector3 velocity, Vector3 wind, float dragCoeff) {
         relativeVelocity.set(velocity).sub(wind);
-        float speed = relativeVelocity.len();
+        float speed = q(relativeVelocity.len());
         if (speed < 0.01f) return outDrag.setZero();
-        return outDrag.set(relativeVelocity).nor().scl(-dragCoeff * speed * speed);
+        outDrag.set(relativeVelocity).nor();
+        outDrag.set(q(outDrag.x), q(outDrag.y), q(outDrag.z));
+        return outDrag.scl(-dragCoeff * speed * speed);
     }
 
     public static Vector3 getMagnusForce(Vector3 velocity, Vector3 wind, Vector3 spin, float liftCoeff, float sideCoeff) {
         relativeVelocity.set(velocity).sub(wind);
-        float airspeed = relativeVelocity.len();
-        if (airspeed < 2.5f || spin.len() < 0.1f) return outMagnus.setZero();
+        float airspeed = q(relativeVelocity.len());
+        // Below 2.5 m/s airspeed or negligible spin, Magnus effect is imperceptible
+        if (airspeed < 2.5f || q(spin.len()) < 0.1f) return outMagnus.setZero();
 
-        float surfaceSpeed = spin.len() * 0.02f;
+        float surfaceSpeed = spin.len() * 0.02f; // 0.02 ≈ ball radius in metres (converts spin rad/s to surface m/s)
         float spinRatio = surfaceSpeed / airspeed;
-        float cappedSpinRatio = Math.min(spinRatio, 3.0f);
-        float CL = 1.0f - (float) Math.exp(-0.9f * cappedSpinRatio);
+        float cappedSpinRatio = Math.min(spinRatio, 3.0f); // cap prevents unrealistic lift at very low airspeed
+        // Empirical lift coefficient curve: CL approaches 1 asymptotically; -0.9 controls rise rate
+        float CL = q(1.0f - (float) Math.exp(-0.9f * cappedSpinRatio));
         float airFoilEfficiency = MathUtils.clamp(airspeed / 15.0f, 0.0f, 1.0f);
         float speedRef = airspeed / 20.0f;
-        float dynamicLift = (speedRef * speedRef) * CL * (airFoilEfficiency * airFoilEfficiency);
+        float dynamicLift = q((speedRef * speedRef) * CL * (airFoilEfficiency * airFoilEfficiency));
 
         temp.set(relativeVelocity).crs(spin).nor();
+        temp.set(q(temp.x), q(temp.y), q(temp.z));
         return outMagnus.set(temp).scl(-dynamicLift * (liftCoeff + sideCoeff));
     }
 
@@ -79,34 +88,39 @@ public class BallPhysics {
         float previousY = position.y - (velocity.y * delta);
 
         if (previousY >= waterLevel && position.y < waterLevel && velocity.y < 0) {
-            float speed = velocity.len();
+            float speed = q(velocity.len());
             if (speed > 5.0f) {
-                float angleRad = (float) Math.asin(Math.abs(velocity.y) / speed);
-                float efficiency = MathUtils.cos(angleRad * 3.0f);
+                // Shallow-angle skip: ball travelling fast and nearly horizontally bounces off the surface
+                float angleRad = q((float) Math.asin(Math.abs(velocity.y) / speed));
+                float efficiency = q((float) Math.cos(angleRad * 3.0f)); // peaks at 0° (flat entry), zero at 30°
                 efficiency = MathUtils.clamp(efficiency, 0, 1) * efficiency;
-                velocity.y += (speed * speed) * 0.005f * efficiency;
-                velocity.scl(0.85f);
+                velocity.y += (speed * speed) * 0.005f * efficiency; // upward kick proportional to kinetic energy
+                velocity.scl(0.85f); // energy lost on surface contact
                 if (velocity.y > 0) return;
             }
         }
 
         if (immersion <= 0) return;
 
-        float speed = velocity.len();
+        float speed = q(velocity.len());
         float surfaceSpeed = spin.len() * 0.02f;
-        float CL = 1.0f - (float) Math.exp(-0.9f * (surfaceSpeed / (speed + 0.1f)));
+        float CL = q(1.0f - (float) Math.exp(-0.9f * (surfaceSpeed / (speed + 0.1f))));
         float dynamicLift = ((speed / 20.0f) * (speed / 20.0f)) * CL;
 
         temp.set(velocity).crs(Vector3.Y).nor();
-        temp2.set(velocity).crs(temp).nor().scl(spin.dot(temp) * dynamicLift * 0.8f * immersion);
+        temp.set(q(temp.x), q(temp.y), q(temp.z));
+        temp2.set(velocity).crs(temp).nor();
+        temp2.set(q(temp2.x), q(temp2.y), q(temp2.z));
+        temp2.scl(spin.dot(temp) * dynamicLift * 0.8f * immersion);
         velocity.add(temp2.scl(delta));
-        velocity.y += 6.5f * immersion * delta;
-        velocity.scl(MathUtils.clamp(1.0f - (2.4f * immersion * (1.0f + speed * 0.12f) * delta), 0.05f, 1.0f));
-        spin.scl(MathUtils.clamp(1.0f - (12.0f * immersion * delta), 0f, 1.0f));
+        velocity.y += 6.5f * immersion * delta;  // buoyancy: upward force scaled by how submerged the ball is
+        velocity.scl(MathUtils.clamp(1.0f - (2.4f * immersion * (1.0f + speed * 0.12f) * delta), 0.05f, 1.0f)); // water drag: stronger at higher speed
+        spin.scl(MathUtils.clamp(1.0f - (12.0f * immersion * delta), 0f, 1.0f)); // water kills spin quickly
     }
 
     public static boolean handleTrunkCollision(Vector3 pos, Vector3 vel, Vector3 spin, float dx, float dz) {
         temp.set(dx, 0, dz).nor();
+        temp.set(q(temp.x), q(temp.y), q(temp.z));
         float dot = vel.dot(temp);
         if (dot < 0) {
             vel.mulAdd(temp, -dot * 1.6f).scl(0.85f);
@@ -118,10 +132,12 @@ public class BallPhysics {
     }
 
     public static Vector3 getRollingFriction(Vector3 velocity, Vector3 normal, Terrain.TerrainType type, float gravity) {
-        float speed = velocity.len();
+        float speed = q(velocity.len());
         if (speed < 0.01f) return outFriction.setZero();
         float frictionMag = (type.kineticFriction * Math.abs(normal.y * gravity)) + (type.rollingResistance * speed);
-        return outFriction.set(velocity).nor().scl(-frictionMag);
+        outFriction.set(velocity).nor();
+        outFriction.set(q(outFriction.x), q(outFriction.y), q(outFriction.z));
+        return outFriction.scl(-frictionMag);
     }
 
     public static Vector3 getSlopeForce(Vector3 gravityForce, Vector3 normal) {
@@ -149,10 +165,15 @@ public class BallPhysics {
 
     private static void resolveTangentialBounce(Vector3 tangent, Vector3 spin, Vector3 normal, float absVDotN, float friction, float softness) {
         Vector3 tanDir = temp.set(tangent).nor();
-        if (tangent.len() < 0.01f && spin.len() > 0.1f) tanDir.set(normal).crs(spin).nor().scl(-1);
+        tanDir.set(q(tanDir.x), q(tanDir.y), q(tanDir.z));
+        if (tangent.len() < 0.01f && spin.len() > 0.1f) {
+            tanDir.set(normal).crs(spin).nor().scl(-1);
+            tanDir.set(q(tanDir.x), q(tanDir.y), q(tanDir.z));
+        }
 
         Vector3 sideDir = temp2.set(normal).crs(tanDir).nor();
-        float surfaceVel = tangent.len() - (spin.dot(sideDir) * BALL_RADIUS);
+        sideDir.set(q(sideDir.x), q(sideDir.y), q(sideDir.z));
+        float surfaceVel = q(tangent.len()) - (spin.dot(sideDir) * BALL_RADIUS);
         float pitchMarkGrip = (softness > 0.05f && softness < 0.5f) ? (absVDotN / 18f) * 0.85f * MathUtils.clamp(Math.abs(surfaceVel) / 10f, 0.2f, 1.0f) : 0;
 
         float normalGrip = MathUtils.clamp(absVDotN * NORMAL_GRIP_SCALER * MathUtils.lerp(0.35f, 1.0f, softness), NORMAL_GRIP_MIN, NORMAL_GRIP_MAX);
@@ -167,16 +188,17 @@ public class BallPhysics {
     }
 
     public static void resolveRollingSpin(Vector3 velocity, Vector3 spin, Vector3 normal, Terrain.TerrainType type, float delta) {
-        float speed = velocity.len();
+        float speed = q(velocity.len());
         if (speed < 0.01f) {
             spin.scl(1.0f - (10.0f * delta));
             return;
         }
         temp.set(normal).crs(velocity).nor();
+        temp.set(q(temp.x), q(temp.y), q(temp.z));
         Vector3 spinDiff = temp2.set(temp).scl(speed / 0.2f).sub(spin);
         temp.set(spinDiff).scl(MathUtils.clamp(8.0f * type.kineticFriction * delta, 0f, 1f));
         spin.add(temp);
-        if (spinDiff.len() > 0.1f) velocity.scl(MathUtils.clamp(1.0f - (temp.len() * 0.005f), 0.8f, 1.0f));
+        if (q(spinDiff.len()) > 0.1f) velocity.scl(MathUtils.clamp(1.0f - (q(temp.len()) * 0.005f), 0.8f, 1.0f));
     }
 
     public static boolean handleMonolithCollision(Vector3 pos, Vector3 vel, Vector3 spin, Vector3 mPos, float mW, float mH, float mD, float mRot) {
@@ -189,10 +211,11 @@ public class BallPhysics {
 
         if (distSq < BALL_RADIUS * BALL_RADIUS) {
             temp2.set(temp.x - closestX, temp.y - closestY, temp.z - closestZ).nor();
+            temp2.set(q(temp2.x), q(temp2.y), q(temp2.z));
             if (temp2.len() < 0.01f) temp2.set(vel).rotate(Vector3.Y, -mRot).scl(-1).nor();
             if (mRot != 0) temp2.rotate(Vector3.Y, mRot);
             vel.set(calculateBounceWithSpin(vel, temp2, spin, 0.45f, 0.3f, 0.05f));
-            pos.add(temp.set(temp2).scl(BALL_RADIUS - (float) Math.sqrt(distSq) + 0.01f));
+            pos.add(temp.set(temp2).scl(BALL_RADIUS - q((float) Math.sqrt(distSq)) + 0.01f));
             return true;
         }
         return false;
@@ -207,9 +230,10 @@ public class BallPhysics {
         if (pos.y < poleBase.y || pos.y > poleBase.y + poleHeight) return false;
 
         temp.set(dx, 0, dz).nor();
+        temp.set(q(temp.x), q(temp.y), q(temp.z));
         if (vel.dot(temp) >= 0) return false; // Already separating
 
-        float overlap = combinedRadius - (float) Math.sqrt(dx * dx + dz * dz);
+        float overlap = combinedRadius - q((float) Math.sqrt(dx * dx + dz * dz));
         vel.set(calculateBounceWithSpin(vel, temp, spin, 0.28f, 0.15f, 0.0f));
         pos.add(temp.scl(overlap + 0.01f));
         return true;
@@ -232,6 +256,6 @@ public class BallPhysics {
     }
 
     public static boolean isWallCollision(Vector3 normal, float steepnessThreshold) {
-        return (MathUtils.acos(normal.y) * MathUtils.radiansToDegrees) > steepnessThreshold;
+        return (q((float) Math.acos(normal.y)) * MathUtils.radiansToDegrees) > steepnessThreshold;
     }
 }

@@ -50,6 +50,14 @@ public class ArchetypeSpec {
     /** Base green tile radius. -1 = use the default (26f). */
     public float greenRadiusMin = -1f, greenRadiusMax = -1f;
 
+    // ── Deep rough ────────────────────────────────────────────────────────────
+    /** Tile distance from FAIRWAY/GREEN beyond which ROUGH becomes DEEP_ROUGH. -1 = disabled. */
+    public float deepRoughThreshold = 10f;
+    /** Multiplier on base patch coverage (0.15). 1.0 = default; >1 = more deep rough. */
+    public float roughDeepCover = 1.0f;
+    /** Height above water level up to which ROUGH/DEEP_ROUGH converts to MUD. -99 = disabled. */
+    public float mudHeight = 0.8f;
+
     // ── Distance & Par ────────────────────────────────────────────────────────
     /** Hole length in yards: distanceMin + random * (distanceMax - distanceMin). */
     public int distanceMin = 500, distanceMax = 500;
@@ -104,6 +112,9 @@ public class ArchetypeSpec {
     }
 
     public ArchetypeSpec greenSize(float min, float max) { greenRadiusMin = min; greenRadiusMax = max; return this; }
+    public ArchetypeSpec deepRough(float threshold)      { deepRoughThreshold = threshold; return this; }
+    public ArchetypeSpec roughDeepCover(float c)         { roughDeepCover = c;             return this; }
+    public ArchetypeSpec mudHeight(float h)              { mudHeight = h;                  return this; }
 
     public ArchetypeSpec distance(int min, int max) { distanceMin = min; distanceMax = max; return this; }
     public ArchetypeSpec mapWidth(int w)            { mapWidthOverride = w; return this; }

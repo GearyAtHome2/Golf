@@ -6,8 +6,12 @@ import java.util.List;
 
 public class TerrainUtils {
 
+    public static float smoothstep(float t) {
+        return t * t * (3 - 2 * t);
+    }
+
     public static boolean isUnmodifiable(Terrain.TerrainType type) {
-        return type == Terrain.TerrainType.TEE || type == Terrain.TerrainType.GREEN;
+        return type == Terrain.TerrainType.TEE || type == Terrain.TerrainType.GREEN || type == Terrain.TerrainType.FRINGE;
     }
 
     public static boolean isNearProtectedZone(int cx, int cz, Terrain.TerrainType[][] map, float teeBuffer, float greenBuffer) {

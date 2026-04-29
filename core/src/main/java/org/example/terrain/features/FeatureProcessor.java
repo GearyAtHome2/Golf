@@ -2,6 +2,7 @@ package org.example.terrain.features;
 
 import com.badlogic.gdx.math.MathUtils;
 import org.example.terrain.Terrain;
+import org.example.terrain.TerrainUtils;
 import org.example.terrain.level.LevelData;
 
 import java.util.Arrays;
@@ -87,7 +88,7 @@ public class FeatureProcessor {
         if (cachedDistMap == null || cachedSX == 0) return rawMogul;
         float dist = cachedDistMap[x * cachedSZ + z];
         float t = MathUtils.clamp(dist / MOGUL_FADE_DISTANCE, 0f, 1f);
-        return rawMogul * MathUtils.lerp(MOGUL_BASE_DAMPING, 1.0f, t * t * (3 - 2 * t));
+        return rawMogul * MathUtils.lerp(MOGUL_BASE_DAMPING, 1.0f, TerrainUtils.smoothstep(t));
     }
 
     public void applyFairwayGaussianSmoothing(Terrain.TerrainType[][] map, float[][] heights) {
@@ -162,7 +163,7 @@ public class FeatureProcessor {
             float fW = Math.max(minW * rM, targetW * rM);
             if (startFull && zN < 0.15f) {
                 float t = zN / 0.15f;
-                t = t * t * (3 - 2 * t);
+                t = TerrainUtils.smoothstep(t);
                 fW = MathUtils.lerp(map.length, fW, t);
                 cls[z] = MathUtils.lerp(map.length / 2f, tC, t);
             } else cls[z] = tC;

@@ -4,6 +4,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import org.example.terrain.Terrain;
+import org.example.terrain.TerrainUtils;
 import org.example.terrain.level.LevelData;
 
 import java.util.Random;
@@ -56,7 +57,7 @@ public class StoneRunGenerator {
                     ramp = 0f;
                 } else if (z < fadeEndIndex) {
                     ramp = (float) (z - moatEndIndex) / (fadeEndIndex - moatEndIndex);
-                    ramp = ramp * ramp * (3 - 2 * ramp);
+                    ramp = TerrainUtils.smoothstep(ramp);
                 } else {
                     ramp = 1.0f;
                 }
@@ -137,7 +138,7 @@ public class StoneRunGenerator {
                         float range = moatRadius - flatFloorRadius;
                         float localDist = distFromCentre - flatFloorRadius;
                         strength = 1.0f - (localDist / range);
-                        strength = strength * strength * (3 - 2 * strength);
+                        strength = TerrainUtils.smoothstep(strength);
                     }
                     heights[x][z] = MathUtils.lerp(heights[x][z], targetWaterDepth, strength);
                 }
@@ -271,7 +272,7 @@ public class StoneRunGenerator {
                 float downhill = heights[x][z];
                 if (dist < dynamicRadius + shelfFalloff) {
                     float sStr = dist <= dynamicRadius ? 1.0f : 1.0f - ((dist - dynamicRadius) / shelfFalloff);
-                    sStr = sStr * sStr * (3 - 2 * sStr);
+                    sStr = TerrainUtils.smoothstep(sStr);
                     downhill = MathUtils.lerp(heights[x][z], targetHeight, sStr);
                 }
 
@@ -297,8 +298,9 @@ public class StoneRunGenerator {
         }
     }
 
+    private static final Terrain.TerrainType[] PAD_TYPES = { Terrain.TerrainType.FAIRWAY, Terrain.TerrainType.ROUGH, Terrain.TerrainType.SAND };
+
     private Terrain.TerrainType getRandomPadType() {
-        int r = rng.nextInt(3);
-        return r == 0 ? Terrain.TerrainType.FAIRWAY : (r == 1 ? Terrain.TerrainType.ROUGH : Terrain.TerrainType.SAND);
+        return PAD_TYPES[rng.nextInt(PAD_TYPES.length)];
     }
 }

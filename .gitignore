@@ -47,6 +47,12 @@ bin/
 *.jks
 local.properties
 android/google-services.json
+key.properties
+signing.properties
+.env
+.env.*
+*.p12
+.idea/credentials.xml
 
 ### Local save files ###
 assets/save_*.json

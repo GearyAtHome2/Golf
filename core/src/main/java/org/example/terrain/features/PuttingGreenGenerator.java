@@ -1,5 +1,6 @@
 package org.example.terrain.features;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.ITerrainGenerator;
@@ -15,7 +16,9 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
     private final Random rng;
     private final float[] greenWaveAngles = new float[4];
     private final float[] greenWaveOffsets = new float[4];
+    private final float[] greenWaveFreqs = new float[4];
     private final float seedOffset;
+    private float greenTiltDx, greenTiltDz;
 
     public PuttingGreenGenerator(long seed) {
         this.rng = new Random(seed);
@@ -24,6 +27,24 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
         for (int i = 0; i < 4; i++) {
             greenWaveAngles[i] = rng.nextFloat() * MathUtils.PI * 2;
             greenWaveOffsets[i] = rng.nextFloat() * 100f;
+            greenWaveFreqs[i] = 0.32f * (1f + (rng.nextFloat() - 0.5f) * 0.1f); // ±5%
+        }
+        float tiltAngle = rng.nextFloat() * MathUtils.PI * 2;
+        float tiltMag   = 0.006f + rng.nextFloat() * 0.009f;
+        greenTiltDx = MathUtils.cos(tiltAngle) * tiltMag;
+        greenTiltDz = MathUtils.sin(tiltAngle) * tiltMag;
+
+        // Determinism fingerprint — compare between devices to isolate desync source
+        Gdx.app.log("GreenDet", "PuttingGreen seed=" + seed
+                + " seedOffset=0x" + Integer.toHexString(Float.floatToRawIntBits(seedOffset))
+                + " (" + seedOffset + ")");
+        for (int i = 0; i < 4; i++) {
+            float a = greenWaveAngles[i];
+            Gdx.app.log("GreenDet", "  wave[" + i + "]"
+                    + " angle=0x" + Integer.toHexString(Float.floatToRawIntBits(a))
+                    + " cos=0x" + Integer.toHexString(Float.floatToRawIntBits(MathUtils.cos(a)))
+                    + " sin=0x" + Integer.toHexString(Float.floatToRawIntBits(MathUtils.sin(a)))
+                    + " offset=0x" + Integer.toHexString(Float.floatToRawIntBits(greenWaveOffsets[i])));
         }
     }
 
@@ -82,8 +103,9 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
                 mask = (float) Math.pow(mask, 2); // Smoother transition
 
                 if (mask > 0) {
-                    float undulation = GreenHelper.calculateUndulation(x, z, greenWaveAngles, greenWaveOffsets);
-                    heights[x][z] = undulation * 1.2f * mask;
+                    float undulation = GreenHelper.calculateUndulation(x, z, greenWaveAngles, greenWaveOffsets, greenWaveFreqs);
+                    float tilt = (x - midX) * greenTiltDx + (z - midZ) * greenTiltDz;
+                    heights[x][z] = (undulation + tilt) * 1.2f * mask;
                 }
             }
         }
@@ -102,5 +124,25 @@ public class PuttingGreenGenerator implements ITerrainGenerator {
 
         teePos.set(startX - worldCenterX, heights[(int) startX][(int) startZ] + 0.15f, startZ - worldCenterZ);
         holePos.set(endX - worldCenterX, heights[(int) endX][(int) endZ], endZ - worldCenterZ);
+
+        // Heightmap fingerprint — XOR of all raw float bits plus 9 sample points around centre
+        int xorFp = 0;
+        for (int x = 0; x < width; x++)
+            for (int z = 0; z < depth; z++)
+                xorFp ^= Float.floatToRawIntBits(heights[x][z]);
+        Gdx.app.log("GreenDet", "PuttingGreen heightmap XOR=0x" + Integer.toHexString(xorFp));
+
+        StringBuilder sb = new StringBuilder("PuttingGreen samples (hex):");
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int sx = midX + dx * 8;
+                int sz = midZ + dz * 8;
+                if (sx >= 0 && sx < width && sz >= 0 && sz < depth) {
+                    sb.append(" [").append(sx).append(',').append(sz).append("]=0x")
+                      .append(Integer.toHexString(Float.floatToRawIntBits(heights[sx][sz])));
+                }
+            }
+        }
+        Gdx.app.log("GreenDet", sb.toString());
     }
 }

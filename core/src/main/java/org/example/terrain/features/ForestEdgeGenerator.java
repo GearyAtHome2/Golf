@@ -3,6 +3,7 @@ package org.example.terrain.features;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import org.example.terrain.Terrain;
+import org.example.terrain.TerrainUtils;
 import org.example.terrain.level.LevelData;
 
 import java.util.Random;
@@ -40,7 +41,7 @@ public class ForestEdgeGenerator {
 
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
-                if (isNonOverrideable(map[x][z])) continue;
+                if (TerrainUtils.isUnmodifiable(map[x][z])) continue;
                 map[x][z] = Terrain.TerrainType.ROUGH;
             }
         }
@@ -57,7 +58,7 @@ public class ForestEdgeGenerator {
 
         for (int x = 0; x < SIZE_X; x++) {
             for (int z = 0; z < SIZE_Z; z++) {
-                if (isNonOverrideable(map[x][z])) continue;
+                if (TerrainUtils.isUnmodifiable(map[x][z])) continue;
 
                 float dx = x - midX;
                 float dz = z - midZ;
@@ -86,7 +87,4 @@ public class ForestEdgeGenerator {
         }
     }
 
-    private boolean isNonOverrideable(Terrain.TerrainType type) {
-        return type == Terrain.TerrainType.TEE || type == Terrain.TerrainType.GREEN;
-    }
 }

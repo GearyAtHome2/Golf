@@ -90,7 +90,7 @@ public class LevelDataGenerator {
         data.setMaxFairwayWidth(spec.maxFairwayWidth);
         data.setMinFairwayWidth(spec.minFairwayWidth);
         data.setUndulation(undulation);
-        data.setHoleSize(0.6f);
+        data.setHoleSize(0.55f);
         data.setGreenRadius(greenRadius);
         data.setnBunkers(bunkers);
         data.setBunkerDepth(bDepth);
@@ -100,6 +100,9 @@ public class LevelDataGenerator {
         data.setFairwayWiggle(wiggle);
         data.setFairwayRoughIslands(spec.islands);
         data.setFairwayCohesion(spec.cohesion);
+        data.setDeepRoughThreshold(spec.deepRoughThreshold);
+        data.setRoughDeepCover(spec.roughDeepCover);
+        data.setMudHeight(spec.mudHeight);
         data.setWaterLevel(Math.min(teeH, greenH) - (3.0f + r.nextFloat() * 2.0f));
         data.setWind(new Vector3(r.nextFloat() - 0.5f, 0, r.nextFloat() - 0.5f).nor().scl(windSpeed));
 
@@ -137,6 +140,23 @@ public class LevelDataGenerator {
         return createFixedLevelData(seed, fallback);
     }
 
+    /**
+     * Generates 9 holes with no duplicate archetypes, chosen randomly from the full
+     * archetype pool. Each archetype appears at most once, and the selection order is
+     * fully randomised from the seed — no connection to the daily-9 layout.
+     */
+    public static List<LevelData> generate9RandomHoles(long seed) {
+        if (seed < 0) seed = System.nanoTime();
+        Random rng = new Random(seed);
+        List<LevelData.Archetype> archetypes = new ArrayList<>(Arrays.asList(LevelData.Archetype.values()));
+        Collections.shuffle(archetypes, rng);
+        List<LevelData> holes = new ArrayList<>();
+        for (int i = 0; i < 9 && i < archetypes.size(); i++) {
+            holes.add(createFixedLevelData(rng.nextLong(), archetypes.get(i)));
+        }
+        return holes;
+    }
+
     public static List<LevelData> generate18Holes(long seed) {
         if (seed < 0) seed = System.nanoTime();
         Random masterR = new Random(seed);
@@ -165,7 +185,53 @@ public class LevelDataGenerator {
                 resolveEndConflict(finalCourse);
             }
         }
+
+        enforcePar72(finalCourse);
         return finalCourse;
+    }
+
+    /**
+     * Adjusts variable-par holes (parFixed == 0) by retrying their seeds until the
+     * total course par equals 72.  Each variable hole can shift ±1 per pass; passes
+     * repeat until the target is met or no further progress is possible.
+     * At most 50 seed variants are tried per hole per attempt.
+     */
+    private static void enforcePar72(List<LevelData> course) {
+        int totalPar = 0;
+        for (LevelData h : course) totalPar += h.getPar();
+        if (totalPar == 72) return;
+
+        List<Integer> varIdx = new ArrayList<>();
+        for (int i = 0; i < course.size(); i++) {
+            if (course.get(i).getArchetype().spec().parFixed == 0) varIdx.add(i);
+        }
+        if (varIdx.isEmpty()) return;
+
+        int delta = 72 - totalPar; // positive → need higher total; negative → need lower
+
+        for (int pass = 0; pass < 10 && delta != 0; pass++) {
+            boolean progress = false;
+            for (int vi : varIdx) {
+                if (delta == 0) break;
+                LevelData hole = course.get(vi);
+                int cur = hole.getPar();
+                int target = delta > 0 ? cur + 1 : cur - 1;
+                ArchetypeSpec spec = hole.getArchetype().spec();
+                int minPar = spec.parThreshold34 > 0 ? 3 : 4;
+                if (target < minPar || target > 5) continue;
+
+                for (int attempt = 1; attempt <= 50; attempt++) {
+                    LevelData retry = createFixedLevelData(hole.getSeed() + attempt, hole.getArchetype());
+                    if (retry.getPar() == target) {
+                        course.set(vi, retry);
+                        delta -= (target - cur);
+                        progress = true;
+                        break;
+                    }
+                }
+            }
+            if (!progress) break;
+        }
     }
 
     private static void resolveEndConflict(List<LevelData> course) {

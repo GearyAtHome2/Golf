@@ -12,9 +12,9 @@ import java.util.Random;
 public class CenoteGenerator {
     private final Random rng;
 
-    private final float CENOTE_EXPONENT = 4f;
-    private final float TEE_BUFFER = 30.0f;
-    private final float GREEN_BUFFER = 30.0f;
+    private static final float CENOTE_EXPONENT = 4f;
+    private static final float TEE_BUFFER = 30.0f;
+    private static final float GREEN_BUFFER = 30.0f;
 
     public CenoteGenerator(Random rng) {
         this.rng = rng;

@@ -29,6 +29,12 @@ public class CameraController {
     private boolean introActive = true;
     private final Vector3 tempTargetPos = new Vector3();
 
+    private static final float ZOOM_SENS_THRESHOLD = 6f;   // default distance — full sensitivity at or beyond this
+    private static final float ZOOM_SENS_MIN_DIST  = 2.1f; // closest zoom — sensitivity floored here
+    private static final float ZOOM_SENS_FLOOR     = 0.55f; // 55% at closest zoom
+
+    private float zoomSensScale = 1f; // 0.1–1.0, updated each normal-mode frame
+
     private boolean isOverhead = false;
     private boolean isPaused = false;
     private boolean skipRotation = true; // discard stale mouse delta on first update after load
@@ -163,6 +169,10 @@ public class CameraController {
         boolean canRotate = (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !introActive)
                 || (config.controlStyle == GameConfig.CameraConfig.ControlStyle.DRAG && (input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) || Platform.isAndroid()));
 
+        // Scale sensitivity down when zoomed in close — full speed at ZOOM_SENS_THRESHOLD or beyond.
+        zoomSensScale = MathUtils.lerp(ZOOM_SENS_FLOOR, 1f,
+                MathUtils.clamp((distance - ZOOM_SENS_MIN_DIST) / (ZOOM_SENS_THRESHOLD - ZOOM_SENS_MIN_DIST), 0f, 1f));
+
         if (canRotate && !skipRotation) {
             float sens = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) && config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE
                     ? config.mouseSensitivity / config.fineTuneDivider
@@ -171,8 +181,8 @@ public class CameraController {
             float deltaX = input.getActionValue(GameInputProcessor.Action.DRAG_X);
             float deltaY = input.getActionValue(GameInputProcessor.Action.DRAG_Y);
 
-            yaw += deltaX * sens * config.getXMult();
-            targetPitch = MathUtils.clamp(targetPitch + (deltaY * sens * config.getYMult()), -10f, 85f);
+            yaw += deltaX * sens * zoomSensScale * config.getXMult();
+            targetPitch = MathUtils.clamp(targetPitch + (deltaY * sens * zoomSensScale * config.getYMult()), -10f, 85f);
         }
         skipRotation = false;
 
@@ -199,6 +209,9 @@ public class CameraController {
         this.targetPitch = 15f;
         this.introActive = false;
     }
+
+    /** Returns zoom-relative sensitivity as an integer 10–100 for debug display. */
+    public int getZoomSensitivityPct() { return Math.round(zoomSensScale * 100f); }
 
     public float getYaw() {
         return yaw;

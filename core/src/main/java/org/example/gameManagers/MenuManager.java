@@ -78,7 +78,6 @@ public class MenuManager {
 
     private boolean isSelectionLocked(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         if (currentMenuState == MenuState.EIGHTEEN_HOLES) {
-            if (menuSelection == 0) return sessions.standard != null && sessions.standard.isFinished();
             if (menuSelection == 1) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_18, sessions.daily18, dailyCache);
             if (menuSelection == 2) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_9,  sessions.daily9,  dailyCache);
             if (menuSelection == 3) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1,  sessions.daily1,  dailyCache);
@@ -101,23 +100,25 @@ public class MenuManager {
 
     private void handleMain(MenuHandler callback) {
         if (!TutorialPrefs.isComplete()) {
-            // TUTORIAL(0) PLAY(1) COMPETITIVE(2) INSTRUCTIONS(3) PRACTICE(4) LOG OUT(5)
+            // TUTORIAL(0) PLAY(1) COMPETITIVE(2) INSTRUCTIONS(3) PRACTICE(4) MULTIPLAYER(5) LOG OUT(6)
             switch (menuSelection) {
                 case 0 -> callback.onStartTutorial();
                 case 1 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
                 case 2 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
                 case 3 -> callback.onShowInstructions();
                 case 4 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
-                case 5 -> callback.onLogout();
+                case 5 -> callback.onOpenMultiplayerLobby();
+                case 6 -> callback.onLogout();
             }
         } else {
-            // PLAY(0) COMPETITIVE(1) INSTRUCTIONS(2) PRACTICE(3) LOG OUT(4)
+            // PLAY(0) COMPETITIVE(1) INSTRUCTIONS(2) PRACTICE(3) MULTIPLAYER(4) LOG OUT(5)
             switch (menuSelection) {
                 case 0 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
                 case 1 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
                 case 2 -> callback.onShowInstructions();
                 case 3 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
-                case 4 -> callback.onLogout();
+                case 4 -> callback.onOpenMultiplayerLobby();
+                case 5 -> callback.onLogout();
             }
         }
     }
@@ -171,30 +172,32 @@ public class MenuManager {
 
     private void handlePractice(MenuHandler callback) {
         if (TutorialPrefs.isComplete()) {
-            // DRIVING RANGE(0) PUTTING GREEN(1) TUTORIAL(2) BACK(3)
+            // DRIVING RANGE(0) PUTTING GREEN(1) TUTORIAL(2) DETERM TEST(3) BACK(4)
             switch (menuSelection) {
                 case 0 -> callback.onStartPracticeRange();
                 case 1 -> callback.onStartPuttingGreen();
                 case 2 -> callback.onStartTutorial();
-                case 3 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
+                case 3 -> callback.onStartDetermTest();
+                case 4 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
             }
         } else {
-            // DRIVING RANGE(0) PUTTING GREEN(1) BACK(2)
+            // DRIVING RANGE(0) PUTTING GREEN(1) DETERM TEST(2) BACK(3)
             switch (menuSelection) {
                 case 0 -> callback.onStartPracticeRange();
                 case 1 -> callback.onStartPuttingGreen();
-                case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 4; }
+                case 2 -> callback.onStartDetermTest();
+                case 3 -> { currentMenuState = MenuState.MAIN; menuSelection = 4; }
             }
         }
     }
 
     private int getMaxSelection() {
         return switch (currentMenuState) {
-            case MAIN -> TutorialPrefs.isComplete() ? 5 : 6;
+            case MAIN -> TutorialPrefs.isComplete() ? 6 : 7;
             case PLAY_OPTIONS -> 4;
             case MAP_SELECT -> MAP_SELECT_TOTAL;
             case EIGHTEEN_HOLES -> 5;
-            case PRACTICE -> TutorialPrefs.isComplete() ? 4 : 3;
+            case PRACTICE -> TutorialPrefs.isComplete() ? 5 : 4;
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.values().length + 1;
         };
     }
@@ -221,6 +224,10 @@ public class MenuManager {
         void onStartPracticeRange();
         void onStartPuttingGreen();
         void onLogout();
+        /** Launch the determinism self-test (auto-fires a shot twice and compares). */
+        default void onStartDetermTest() {}
+        /** Open the multiplayer lobby screen. */
+        default void onOpenMultiplayerLobby() {}
         /** Called when a completed but unsubmitted daily session is selected from the menu. */
         default void onResubmitDaily(CourseType type) {}
         /** Launch the tutorial. */

@@ -128,7 +128,7 @@ public class SubmissionCoordinator {
                     callbacks.onMenuInvalidate();
                     callbacks.onAutoRetrySuccess();
                 }),
-                null
+                () -> Gdx.app.log("SubmissionCoordinator", "Auto-retry failed or was cancelled for " + type)
         ).triggerSilent();
     }
 }
