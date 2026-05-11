@@ -21,7 +21,7 @@ import org.example.multiplayer.DeterminismRecorder;
 public class Ball {
 
     public enum State {AIR, CONTACT, ROLLING, STATIONARY}
-    public enum Interaction {NONE, LEAVES, WATER, TERRAIN}
+    public enum Interaction {NONE, LEAVES, WATER, TERRAIN, STONE_OBJECT, WOOD_OBJECT}
 
     public static final float BALL_RADIUS = 0.15f;
     private static final float GRAVITY = -9.81f;
@@ -60,6 +60,9 @@ public class Ball {
     private boolean detLandLogged = false;
 
     private float accumulator = 0f;
+    private float pendingBounceImpact = 0f;     // set on bounce, consumed by GolfGame for sound
+    private float pendingFoliageRustleSpeed = 0f; // max speed while in foliage this frame
+    private float pendingTwigSnapSpeed = 0f;      // speed at deflection moment (0 = no snap this frame)
     private boolean isGoodShot = false;
     private State state = State.STATIONARY;
     private Interaction lastInteraction = Interaction.NONE;
@@ -275,6 +278,11 @@ public class Ball {
                         // the ball kept falling along the cliff and re-hit every hitCooldown
                         // frame, producing a stuck ball with constant wall-bounce particles.
                         tempV2.set(q(n.x), q(n.y), q(n.z));
+                        float impactDot = -velocity.dot(tempV2);
+                        pendingBounceImpact = Math.max(0f, impactDot);
+                        Gdx.app.log("BOUNCE", String.format(
+                                "wallBounce pos=(%.2f,%.2f,%.2f) normal=(%.2f,%.2f,%.2f) impactDot=%.3f pendingBounceImpact=%.3f state=%s",
+                                position.x, position.y, position.z, n.x, n.y, n.z, impactDot, pendingBounceImpact, state));
                         velocity.set(BallPhysics.calculateBounceWithSpin(velocity, tempV2, spin, BOUNCE_RESTITUTION, 0.4f, 0f));
                         // Push position horizontally to clear wall geometry
                         Vector3 wn = new Vector3(n.x, 0, n.z).nor();
@@ -330,6 +338,7 @@ public class Ball {
         if (position.y < terrainHeight && !BallPhysics.isWallCollision(normal, 45f)) position.y = terrainHeight;
 
         if (state == State.AIR && velocity.dot(normal) < -MIN_BOUNCE_VY) {
+            pendingBounceImpact = -velocity.dot(normal); // capture before velocity is changed
             if (!detLandLogged) {
                 detLandLogged = true;
                 Gdx.app.log("DET", String.format("L LAND  s=%04d %-5s p=%08x,%08x,%08x v=%08x,%08x,%08x",
@@ -367,15 +376,19 @@ public class Ball {
         if (hitCooldown > 0) return;
         for (Tree tree : terrain.getTreesAt(position.x, position.z)) {
             if (tree.checkTrunkCollision(position, BALL_RADIUS)) {
+                float preImpactSpeed = velocity.len();
                 if (BallPhysics.handleTrunkCollision(position, velocity, spin, position.x - tree.getPosition().x, position.z - tree.getPosition().z)) {
-                    lastInteraction = Interaction.TERRAIN; isGoodShot = false; hitCooldown = 0.1f;
+                    pendingBounceImpact = preImpactSpeed;
+                    lastInteraction = Interaction.WOOD_OBJECT; isGoodShot = false; hitCooldown = 0.1f;
                     particleManager.spawnRatingBurst(position, Color.BROWN, 4, 1.0f);
                 }
                 continue;
             }
             if (tree.isInsideFoliage(position, BALL_RADIUS)) {
                 lastInteraction = Interaction.LEAVES;
-                BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE, physicsRandom);
+                float snapSpeed = BallPhysics.applyFoliagePhysics(velocity, spin, delta, FOLIAGE_DRAG_LIN, FOLIAGE_DRAG_SQU, DEFLECTION_CHANCE_PER_METER, DEFLECTION_MAGNITUDE, physicsRandom);
+                pendingFoliageRustleSpeed = Math.max(pendingFoliageRustleSpeed, velocity.len());
+                if (snapSpeed > 0) pendingTwigSnapSpeed = Math.max(pendingTwigSnapSpeed, snapSpeed);
                 if (random.nextFloat() < 0.1f) particleManager.spawnRatingBurst(position, Color.FOREST, 1, 0.3f);
             }
         }
@@ -402,8 +415,10 @@ public class Ball {
     private void handleMonolithCollisions(Terrain terrain) {
         if (hitCooldown > 0) return;
         for (Monolith m : terrain.getMonolithsAt(position.x, position.z)) {
+            float preImpactSpeed = velocity.len();
             if (BallPhysics.handleMonolithCollision(position, velocity, spin, m.getPosition(), m.getWidth(), m.getHeight(), m.getDepth(), m.getRotationY())) {
-                hitCooldown = 0.05f; lastInteraction = Interaction.TERRAIN; isGoodShot = false;
+                pendingBounceImpact = preImpactSpeed;
+                hitCooldown = 0.05f; lastInteraction = Interaction.STONE_OBJECT; isGoodShot = false;
                 particleManager.spawnRatingBurst(position, Color.GRAY, 5, 1.1f);
                 break;
             }
@@ -467,6 +482,13 @@ public class Ball {
 
     public Vector3 getPosition() { return position; }
     public Vector3 getVelocity() { return velocity; }
+
+    /** Returns the impact speed of the most recent bounce, then resets it to 0. Returns 0 if no bounce occurred since last call. */
+    public float consumeBounceImpact() { float v = pendingBounceImpact; pendingBounceImpact = 0f; return v; }
+    /** Returns the max ball speed during foliage contact this frame, then resets. Returns 0 if no foliage contact. */
+    public float consumeFoliageRustleSpeed() { float v = pendingFoliageRustleSpeed; pendingFoliageRustleSpeed = 0f; return v; }
+    /** Returns the ball speed at the moment of a foliage deflection this frame, then resets. Returns 0 if no deflection. */
+    public float consumeTwigSnapSpeed() { float v = pendingTwigSnapSpeed; pendingTwigSnapSpeed = 0f; return v; }
     public Vector3 getSpin() { return spin; }
     public State getState() { return state; }
     public void setState(State state) { this.state = state; }

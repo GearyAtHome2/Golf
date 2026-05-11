@@ -67,7 +67,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         this.googleSignInProvider = googleSignInProvider;
     }
 
-    private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG, DETERM_TEST, MULTIPLAYER_LOBBY}
+    private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG, DETERM_TEST, MULTIPLAYER_LOBBY, SOUND_SETTINGS}
 
     private GameState currentState = GameState.LOGIN;
     private GameState previousState = GameState.START;
@@ -94,6 +94,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private Club currentClub = Club.DRIVER;
     private ParticleManager particleManager;
     private WindManager windManager;
+    private org.example.glamour.SoundManager soundManager;
+    private float foliageRustleCooldown = 0f;
+    private float twigSnapCooldown      = 0f;
+    private final com.badlogic.gdx.math.Vector3 cachedWaterPos   = new com.badlogic.gdx.math.Vector3();
+    private final com.badlogic.gdx.math.Vector3 cachedFoliagePos = new com.badlogic.gdx.math.Vector3();
+    private boolean waterPosValid   = false;
+    private boolean foliagePosValid = false;
+    private float ambientPosTimer   = 0f;
+    private static final float AMBIENT_POS_INTERVAL  = 0.5f;
+    private static final float AMBIENT_TREE_RADIUS   = 80f;
+    private static final float AMBIENT_WATER_RADIUS  = 80f;
     private boolean isVictory = false;
     private Ball.State prevBallState = Ball.State.STATIONARY;
     private boolean showClubInfo = false;
@@ -108,8 +119,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     // Multiplayer shot replay state
     private RoomService.RoomState      currentMultiplayerRoom = null;
     private int                        localStrokeNum         = 0;   // 1-indexed, reset per hole
-    private final java.util.Map<String, Integer>   consumedStrokes = new java.util.HashMap<>();
-    private final java.util.Map<String, RemoteBall> remoteBalls    = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, Integer>        consumedStrokes      = new java.util.HashMap<>();
+    private final java.util.Map<String, RemoteBall>     remoteBalls          = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, Ball.State>     remoteBallLastStates = new java.util.HashMap<>();
     private float                      shotPollTimer          = 0f;
     private static final float         SHOT_POLL_INTERVAL     = 0.5f;
     // Per remote player: one ModelInstance for the ball + TRAIL_LENGTH instances for trail points.
@@ -180,6 +192,22 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         shotController = new ShotController();
         particleManager = new ParticleManager();
         windManager = new WindManager();
+        soundManager = new org.example.glamour.SoundManager();
+        soundManager.setMasterVolume(org.example.glamour.SoundPrefs.loadMaster());
+        soundManager.setSfxVolume(org.example.glamour.SoundPrefs.loadSfx());
+        soundManager.setAmbientVolume(org.example.glamour.SoundPrefs.loadAmbient());
+        soundManager.setArcadeFlightSoundsEnabled(org.example.glamour.SoundPrefs.loadArcadeFlight());
+        soundManager.setBounceScale(org.example.glamour.SoundPrefs.loadBounce());
+        soundManager.setArcadeAirborneScale(org.example.glamour.SoundPrefs.loadArcadeAirborne());
+        soundManager.setAirWhooshScale(org.example.glamour.SoundPrefs.loadAirWhoosh());
+        soundManager.setAmbientTreesScale(org.example.glamour.SoundPrefs.loadAmbTrees());
+        soundManager.setAmbientWaterScale(org.example.glamour.SoundPrefs.loadAmbWater());
+        soundManager.setBirdsongScale(org.example.glamour.SoundPrefs.loadBirdsong());
+        soundManager.prewarm();
+        shotController.setSoundManager(soundManager);
+        menuManager.setSoundManager(soundManager);
+        hud.setSoundManager(soundManager);
+        particleManager.setSoundManager(soundManager);
         sessionManager = new SessionManager(config);
 
         authService = new AuthService();
@@ -380,10 +408,24 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (this.currentState == newState) return;
         Gdx.app.log("STATE_CHANGE", currentState + " -> " + newState);
 
+        GameState oldState = this.currentState;
+
+        // Sound: exiting old state
+        if (soundManager != null) {
+            if (oldState == GameState.START) soundManager.onMenuExit();
+            else if (isGameplayState(oldState) && (newState == GameState.LOADING || newState == GameState.START)) soundManager.onHoleExit();
+        }
+
         if (isGameplayState(newState)) this.gameplayState = newState;
         if (!isOverlayState(this.currentState)) this.previousState = this.currentState;
 
         this.currentState = newState;
+
+        // Sound: entering new state
+        if (soundManager != null) {
+            if (newState == GameState.START) soundManager.onMenuEnter();
+            else if (oldState == GameState.LOADING && isGameplayState(newState)) soundManager.onHoleEnter(false); // TODO: pass true for canyon/reverb maps
+        }
 
         switch (newState) {
             case LOGIN:
@@ -391,6 +433,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             case PAUSED:
             case INSTRUCTIONS:
             case CAMERA_CONFIG:
+            case SOUND_SETTINGS:
             case MULTIPLAYER_LOBBY:
                 Gdx.input.setCursorCatched(false);
                 break;
@@ -400,7 +443,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
 
         if (cameraController != null) {
-            cameraController.setPaused(newState == GameState.PAUSED || newState == GameState.START);
+            cameraController.setPaused(newState == GameState.PAUSED || newState == GameState.START || isOverlayState(newState));
         }
         setupInputProcessor();
     }
@@ -429,7 +472,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     }
                 }
             }
-            case INSTRUCTIONS, CAMERA_CONFIG -> handleOverlayInput();
+            case INSTRUCTIONS, CAMERA_CONFIG, SOUND_SETTINGS -> handleOverlayInput();
             case PAUSED -> handlePauseInput();
             default -> handleGameplayInput();
         }
@@ -464,7 +507,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 break;
 
             case STEP_4_CLUB:
-                if (currentClub == Club.IRON_9) {
+                if (currentClub == Club.IRON_6) {
                     tutorialSession.controller.advance();
                 }
                 break;
@@ -548,6 +591,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             exitToMainMenu();
         } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
             changeState(gameplayState);
+        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.OPEN_SOUND_SETTINGS)) {
+            enterSoundSettings();
         } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) {
             enterInstructions();
         } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CAM_CONFIG)) {
@@ -561,8 +606,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         } else if (Platform.isAndroid() && Gdx.input.justTouched()) {
             tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             hud.getStage().getViewport().unproject(tempV3);
-            if ((currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) ||
-                    (currentState == GameState.CAMERA_CONFIG && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y))) {
+            if ((currentState == GameState.INSTRUCTIONS  && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) ||
+                    (currentState == GameState.CAMERA_CONFIG   && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) ||
+                    (currentState == GameState.SOUND_SETTINGS  && !hud.isTouchInsideSoundSettings(tempV3.x, tempV3.y))) {
                 changeState(previousState);
             }
         }
@@ -652,6 +698,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         pendingShotUploads.clear();
         pendingBallRest = null; pendingBallRestHole = -1;
         remoteBalls.clear();
+        remoteBallLastStates.clear();
         remoteBallInstances.clear();
         if (isMultiplayer && currentMultiplayerRoom != null && remoteBallModel != null) {
             String myUid = userSession.getUid();
@@ -702,6 +749,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Terrain terrain = levelManager.getTerrain();
         Vector3 tee = terrain.getTeePosition();
         Vector3 hole = terrain.getHolePosition();
+        if (soundManager != null) soundManager.setWindGroundLevel((tee.y + hole.y) * 0.5f);
 
         if (gameplayState == GameState.PUTTING_GREEN) {
             terrain.setTeePosition(new Vector3(tee.x, terrain.getHeightAt(tee.x, tee.z), tee.z));
@@ -721,6 +769,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             ball = new Ball(spawnPos, particleManager, config, seed);
         }
         prevBallState = Ball.State.STATIONARY; // suppress spurious save on first frame
+        ambientPosTimer = 0f; // recompute water/foliage positions immediately on new hole
         hazardManager.setBallHit(false);
         refreshCameraController(hole);
     }
@@ -743,6 +792,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         isVictory = true;
         float vel = ball.getVelocity().len();
         ball.getVelocity().setZero();
+        if (soundManager != null) soundManager.playBallCup(vel);
         ball.getPosition().set(terrain.getHolePosition());
         int shots = hud.getShotCount();
         int par   = currentLevelData != null ? currentLevelData.getPar() : 4;
@@ -847,7 +897,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         } else if (currentState == GameState.MULTIPLAYER_LOBBY) {
             multiplayerLobbyScreen.render(delta);
         } else if (currentState == GameState.START) {
-            hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
+            if (soundManager != null) soundManager.updateMenu(delta);
+            hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache, soundManager);
+        } else if (currentState == GameState.SOUND_SETTINGS) {
+            hud.renderSoundSettings();
         } else if (currentState == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
         } else if (currentState == GameState.CAMERA_CONFIG) {
@@ -908,19 +961,69 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         if (currentState != GameState.PAUSED) {
             windManager.update(effDelta, currentWind, camera.position);
+            if (soundManager != null) {
+                soundManager.update(effDelta, currentWind, camera.position);
+                updateAmbientPositions(effDelta, terrain);
+                soundManager.updateSpatialAmbient(
+                    camera.position,
+                    waterPosValid   ? cachedWaterPos   : null,
+                    foliagePosValid ? cachedFoliagePos : null,
+                    null);
+            }
 
             if (!isVictory) {
                 updateShotLogic(delta, terrain);
             }
 
             ball.update(effDelta, terrain, currentWind);
+
+            if (soundManager != null) {
+                org.example.terrain.Terrain.TerrainType surface =
+                        terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
+                float bounceImpact = ball.consumeBounceImpact();
+                if (bounceImpact > 0) {
+                    org.example.ball.Ball.Interaction interaction = ball.getLastInteraction();
+                    if (interaction == org.example.ball.Ball.Interaction.WOOD_OBJECT) {
+                        soundManager.playBallBounceWood(camera.position, ball.getPosition(), bounceImpact);
+                    } else {
+                        org.example.terrain.Terrain.TerrainType bounceSurface =
+                                interaction == org.example.ball.Ball.Interaction.STONE_OBJECT
+                                ? org.example.terrain.Terrain.TerrainType.STONE : surface;
+                        Gdx.app.log("BOUNCE", String.format(
+                                "playBounce impact=%.3f surface=%s interaction=%s pos=(%.2f,%.2f,%.2f)",
+                                bounceImpact, bounceSurface, interaction, ball.getPosition().x, ball.getPosition().y, ball.getPosition().z));
+                        soundManager.playBallBounce(camera.position, ball.getPosition(), bounceImpact, bounceSurface);
+                    }
+                }
+                boolean isAirborne = ball.getState() == Ball.State.AIR;
+                soundManager.updateFlightSound(effDelta, ball.getVelocity().len(), isAirborne, camera.position, ball.getPosition());
+                float rollSpeed = (ball.getState() == Ball.State.ROLLING) ? ball.getVelocity().len() : 0f;
+                if (ball.getState() == Ball.State.ROLLING) Gdx.app.log("ROLL", "state=ROLLING speed=" + rollSpeed);
+                soundManager.updateBallRoll(effDelta, camera.position, ball.getPosition(), rollSpeed, surface);
+
+                float foliageSpeed = ball.consumeFoliageRustleSpeed();
+                soundManager.updateFoliageRustle(effDelta, foliageSpeed > 0);
+                foliageRustleCooldown -= effDelta;
+                if (foliageSpeed > 0 && foliageRustleCooldown <= 0f) {
+                    soundManager.playFoliageRustle(camera.position, ball.getPosition(), foliageSpeed);
+                    foliageRustleCooldown = com.badlogic.gdx.math.MathUtils.lerp(0.30f, 0.12f,
+                            com.badlogic.gdx.math.MathUtils.clamp(foliageSpeed / 20f, 0f, 1f));
+                }
+
+                float snapSpeed = ball.consumeTwigSnapSpeed();
+                twigSnapCooldown -= effDelta;
+                if (snapSpeed > 0 && twigSnapCooldown <= 0f) {
+                    soundManager.playTwigSnap(camera.position, ball.getPosition(), snapSpeed);
+                    twigSnapCooldown = 0.35f;
+                }
+            }
         }
 
         if (cameraController != null) {
             cameraController.update(ball.getPosition(), inputProcessor);
         }
 
-        if (config.particlesEnabled) particleManager.handleBallInteraction(ball, terrain);
+        if (config.particlesEnabled) particleManager.handleBallInteraction(ball, terrain, camera.position);
 
         if (!isVictory) {
             hazardManager.update(effDelta, ball, terrain, gameplayState == GameState.PRACTICE_RANGE, this);
@@ -963,6 +1066,49 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (isMultiplayer && !remoteBalls.isEmpty()) {
             Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
             for (RemoteBall rb : remoteBalls.values()) rb.update(effDelta, terrain, wind);
+
+            // Per-ball spatial audio
+            if (soundManager != null) {
+                for (java.util.Map.Entry<String, RemoteBall> entry : remoteBalls.entrySet()) {
+                    String uid = entry.getKey();
+                    RemoteBall rb = entry.getValue();
+                    if (!rb.hasRestPosition() || rb.isHoledOut()) {
+                        soundManager.stopRemoteWhoosh(uid);
+                        soundManager.stopRemoteRoll(uid);
+                        continue;
+                    }
+                    Ball.State prev = remoteBallLastStates.getOrDefault(uid, Ball.State.STATIONARY);
+                    Ball.State cur  = rb.getState();
+                    remoteBallLastStates.put(uid, cur);
+
+                    Vector3 ballPos = rb.isInFlight() ? rb.getPosition() : rb.getLastRestPosition();
+                    float pan = calcRemotePan(ballPos);
+
+                    // Whoosh
+                    if (cur == Ball.State.AIR) {
+                        if (prev != Ball.State.AIR) soundManager.startRemoteWhoosh(uid);
+                        soundManager.updateRemoteWhoosh(uid, rb.getVelocity().len(),
+                                camera.position, ballPos, pan);
+                    } else if (prev == Ball.State.AIR) {
+                        soundManager.stopRemoteWhoosh(uid);
+                    }
+
+                    // Bounce
+                    if (rb.consumeBounceEvent()) {
+                        soundManager.playRemoteBounce(camera.position, ballPos,
+                                rb.getVelocity().len(), rb.getLastBounceSurface(), pan);
+                    }
+
+                    // Roll
+                    if (cur == Ball.State.ROLLING || cur == Ball.State.CONTACT) {
+                        Terrain.TerrainType surface = terrain.getTerrainTypeAt(ballPos.x, ballPos.z);
+                        soundManager.updateRemoteRoll(uid, effDelta, rb.getVelocity().len(),
+                                camera.position, ballPos, pan, surface);
+                    } else if (prev == Ball.State.ROLLING || prev == Ball.State.CONTACT) {
+                        soundManager.stopRemoteRoll(uid);
+                    }
+                }
+            }
 
             shotPollTimer += effDelta;
             if (shotPollTimer >= SHOT_POLL_INTERVAL) {
@@ -1238,6 +1384,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             com.badlogic.gdx.math.Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : null;
             hud.renderTutorialOverlay(tutorialSession.controller.getCurrentStep(), wind);
         }
+
+        if (isMultiplayer && !remoteBalls.isEmpty()) {
+            hud.drawRemoteNameTags(remoteBalls.values(), camera,
+                    cameraController != null && cameraController.isOverhead());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1341,7 +1492,18 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                         if (p.strokeNum > consumed) {
                             consumedStrokes.put(p.uid, p.strokeNum);
                             RemoteBall rb = remoteBalls.get(p.uid);
-                            if (rb != null) rb.offerPacket(p);
+                            if (rb != null) {
+                                boolean wasStationary = rb.getState() == Ball.State.STATIONARY;
+                                rb.offerPacket(p);
+                                if (wasStationary && soundManager != null) {
+                                    com.badlogic.gdx.math.Vector3 shotPos =
+                                            new com.badlogic.gdx.math.Vector3(p.sx, p.sy, p.sz);
+                                    float speed = new com.badlogic.gdx.math.Vector3(p.vx, p.vy, p.vz).len();
+                                    float power = com.badlogic.gdx.math.MathUtils.clamp(speed / 50f, 0f, 1f);
+                                    soundManager.playRemoteBallStrike("iron", power,
+                                            camera.position, shotPos, calcRemotePan(shotPos));
+                                }
+                            }
                         }
                     }
                 }
@@ -1511,7 +1673,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     /** Called by the host's "Next Hole" / "End Match" button. */
     private void onMpNextHole() {
-        if (!mpAllPlayersFinishedHole) return;
+        // No mpAllPlayersFinishedHole guard here — the button is only enabled when that
+        // condition was met, and a stale poll callback flipping the field between the
+        // button being built and the tap would cause silent no-ops. nextHoleInFlight
+        // prevents double-fire instead.
         GameSession active = sessionManager.getActive();
         int nextHole = (active != null ? active.getCurrentHoleIndex() : 0) + 1;
         boolean isFinalHole = (active != null && active.getMode().holeCount() == nextHole);
@@ -1592,8 +1757,13 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             tutorialSession = null;
             selectedArchetype = null;
             hud.clearTutorialBlock();
+            hud.invalidateMobileMenuState();
         }
         changeState(GameState.START);
+    }
+
+    private void enterSoundSettings() {
+        changeState(GameState.SOUND_SETTINGS);
     }
 
     private void enterInstructions() {
@@ -1635,6 +1805,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     @Override
     public void onShowInstructions() {
         enterInstructions();
+    }
+
+    @Override
+    public void onShowSoundSettings() {
+        enterSoundSettings();
     }
 
     @Override
@@ -1780,7 +1955,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private boolean isOverlayState(GameState state) {
-        return state == GameState.INSTRUCTIONS || state == GameState.CAMERA_CONFIG;
+        return state == GameState.INSTRUCTIONS || state == GameState.CAMERA_CONFIG || state == GameState.SOUND_SETTINGS;
     }
 
     @Override
@@ -1790,6 +1965,83 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (loginScreen != null) loginScreen.resize(width, height);
         if (multiplayerLobbyScreen != null) multiplayerLobbyScreen.resize(width, height);
         if (mpScoreboardOverlay != null) mpScoreboardOverlay.resize(width, height);
+    }
+
+    @Override
+    public void pause() {
+        if (soundManager != null) soundManager.onAppPause();
+    }
+
+    @Override
+    public void resume() {
+        if (soundManager != null) soundManager.onAppResume();
+    }
+
+    /** Returns stereo pan (-1=left, 1=right) for a world position relative to the camera's facing. */
+    private float calcRemotePan(com.badlogic.gdx.math.Vector3 worldPos) {
+        com.badlogic.gdx.math.Vector3 toTarget = new com.badlogic.gdx.math.Vector3(worldPos).sub(camera.position);
+        if (toTarget.len2() < 0.001f) return 0f;
+        toTarget.nor();
+        com.badlogic.gdx.math.Vector3 right = new com.badlogic.gdx.math.Vector3(camera.direction).crs(camera.up).nor();
+        return com.badlogic.gdx.math.MathUtils.clamp(toTarget.dot(right), -1f, 1f);
+    }
+
+    private void updateAmbientPositions(float delta, org.example.terrain.Terrain terrain) {
+        ambientPosTimer -= delta;
+        if (ambientPosTimer > 0f) return;
+        ambientPosTimer = AMBIENT_POS_INTERVAL;
+
+        float cx = camera.position.x;
+        float cz = camera.position.z;
+
+        // Water: find nearest terrain point (on an 8-unit grid) where height < waterLevel
+        float waterLevel = terrain.getWaterLevel();
+        // Search for nearest water tile regardless of water level sign — archetypes use negative levels.
+        // Skip only the Terrain sentinel (-1f from non-ClassicGenerator maps with no water system).
+        float bestDistSq = Float.MAX_VALUE;
+        waterPosValid = false;
+        float terrainHalfX = terrain.getMaxDistanceX();
+        float terrainHalfZ = terrain.getMaxDistanceZ();
+        int steps = (int)(AMBIENT_WATER_RADIUS / 8f);
+        for (int dx = -steps; dx <= steps; dx++) {
+            for (int dz = -steps; dz <= steps; dz++) {
+                float wx = cx + dx * 8f;
+                float wz = cz + dz * 8f;
+                // Skip out-of-bounds positions — getSurfaceHeightAt clamps to the edge,
+                // which can falsely match water if the terrain edge happens to be low.
+                if (Math.abs(wx) >= terrainHalfX || Math.abs(wz) >= terrainHalfZ) continue;
+                if (terrain.getHeightAt(wx, wz) < waterLevel) {
+                    float distSq = dx * dx * 64f + dz * dz * 64f;
+                    if (distSq < bestDistSq) {
+                        bestDistSq = distSq;
+                        cachedWaterPos.set(wx, waterLevel, wz);
+                        waterPosValid = true;
+                    }
+                }
+            }
+        }
+
+        // Trees: weighted centroid of nearby trees — weight = fR / (1 + dist)
+        java.util.List<org.example.terrain.objects.Tree> allTrees = terrain.getTrees();
+        float totalWeight = 0f;
+        float sumX = 0f, sumY = 0f, sumZ = 0f;
+        for (org.example.terrain.objects.Tree tree : allTrees) {
+            com.badlogic.gdx.math.Vector3 tp = tree.getPosition();
+            float dist = (float) Math.sqrt((tp.x - cx) * (tp.x - cx) + (tp.z - cz) * (tp.z - cz));
+            if (dist <= AMBIENT_TREE_RADIUS) {
+                float weight = tree.fR / (1f + dist);
+                totalWeight += weight;
+                sumX += tp.x * weight;
+                sumY += (tp.y + tree.getTrunkHeight() + tree.fR * 0.5f) * weight;
+                sumZ += tp.z * weight;
+            }
+        }
+        if (totalWeight > 0f) {
+            cachedFoliagePos.set(sumX / totalWeight, sumY / totalWeight, sumZ / totalWeight);
+            foliagePosValid = true;
+        } else {
+            foliagePosValid = false;
+        }
     }
 
     @Override
@@ -1806,6 +2058,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (highlightModel != null) highlightModel.dispose();
         if (remoteBallModel != null) remoteBallModel.dispose();
         if (mpScoreboardOverlay != null) mpScoreboardOverlay.dispose();
+        if (soundManager != null) soundManager.dispose();
     }
 
     /** Holds all per-tutorial-run state so the 4 individual fields can be replaced by a single nullable reference. */

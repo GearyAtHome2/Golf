@@ -199,6 +199,7 @@ public class LoginScreen {
             googleBtn.addListener(new ChangeListener() {
                 @Override public void changed(ChangeEvent e, Actor a) {
                     if (busy) return;
+                    showStatus("Signing in with Google...");
                     setBusy(true);
                     googleSignInProvider.startSignIn(new GoogleSignInProvider.Callback() {
                         @Override public void onSuccess(String googleIdToken) {
@@ -220,6 +221,7 @@ public class LoginScreen {
             String email = emailField.getText().trim();
             String pw    = pwField.getText();
             if (email.isEmpty() || pw.isEmpty()) { showError("Please enter your email and password."); return; }
+            showStatus("Signing in...");
             setBusy(true);
             lastEmail = email;
             authService.signIn(email, pw, new AuthService.AuthCallback() {
@@ -274,6 +276,7 @@ public class LoginScreen {
             if (name.length() > 30)   { showError("Display name must be 30 characters or fewer."); return; }
             if (email.isEmpty())      { showError("Please enter your email."); return; }
             if (pw.length() < 6) { showError("Password must be at least 6 characters."); return; }
+            showStatus("Creating account...");
             setBusy(true);
             lastEmail = email;
             authService.signUp(email, pw, name, new AuthService.AuthCallback() {
@@ -319,6 +322,7 @@ public class LoginScreen {
         Runnable doForgot = () -> {
             String email = emailField.getText().trim();
             if (email.isEmpty()) { showError("Please enter your email."); return; }
+            showStatus("Sending reset email...");
             setBusy(true);
             authService.sendPasswordReset(email, new AuthService.SimpleCallback() {
                 @Override public void onSuccess() {
@@ -359,7 +363,15 @@ public class LoginScreen {
     }
 
     private void showError(String msg) {
-        if (activeErrorLabel != null) activeErrorLabel.setText(msg);
+        if (activeErrorLabel == null) return;
+        activeErrorLabel.setColor(new Color(1f, 0.35f, 0.35f, 1f));
+        activeErrorLabel.setText(msg);
+    }
+
+    private void showStatus(String msg) {
+        if (activeErrorLabel == null) return;
+        activeErrorLabel.setColor(Color.LIGHT_GRAY);
+        activeErrorLabel.setText(msg);
     }
 
     private void setBusy(boolean b) {

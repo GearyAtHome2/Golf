@@ -28,6 +28,7 @@ public final class MenuButtonResolver {
             case MAIN           -> resolveMain(sessions, dailyCache);
             case EIGHTEEN_HOLES -> resolveEighteenHoles(sessions, dailyCache);
             case PRACTICE       -> resolvePractice();
+            case SETTINGS       -> resolveSettings();
             default             -> null;
         };
     }
@@ -46,11 +47,19 @@ public final class MenuButtonResolver {
         }
         items.add(MenuButtonDescriptor.enabled("PLAY >"));
         items.add(new MenuButtonDescriptor("COMPETITIVE >", false, competitiveSparkle));
-        items.add(MenuButtonDescriptor.enabled("INSTRUCTIONS"));
+        items.add(MenuButtonDescriptor.enabled("SETTINGS"));
         items.add(MenuButtonDescriptor.enabled("PRACTICE >"));
         items.add(MenuButtonDescriptor.enabled("MULTIPLAYER >"));
         items.add(MenuButtonDescriptor.enabled("LOG OUT"));
         return items;
+    }
+
+    private static List<MenuButtonDescriptor> resolveSettings() {
+        return java.util.Arrays.asList(
+            MenuButtonDescriptor.enabled("SOUND"),
+            MenuButtonDescriptor.enabled("INSTRUCTIONS"),
+            MenuButtonDescriptor.enabled("< BACK TO MAIN")
+        );
     }
 
     private static List<MenuButtonDescriptor> resolvePractice() {

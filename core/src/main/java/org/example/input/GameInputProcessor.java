@@ -51,6 +51,7 @@ public interface GameInputProcessor {
         DRAG_Y,
         SCROLL_Y,
         SECONDARY_ACTION,
-        TAP
+        TAP,
+        OPEN_SOUND_SETTINGS
     }
 }

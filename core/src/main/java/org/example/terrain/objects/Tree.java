@@ -150,12 +150,13 @@ public class Tree extends TerrainObject {
         }
 
         if (scheme == TreeScheme.ACACIA) {
-            float halfW = fR * 2.0f;
-            float halfH = fR * 0.8f;
-            float centerY = pos.y + tH + halfH;
-            return Math.abs(ballPos.x - pos.x) < (halfW + ballRadius) &&
-                    Math.abs(ballPos.y - centerY) < (halfH + ballRadius) &&
-                    Math.abs(ballPos.z - pos.z) < (halfW + ballRadius);
+            float halfW = fR * 2.0f + ballRadius;
+            float halfH = fR * 0.8f + ballRadius;
+            float centerY = pos.y + tH + fR * 0.8f;
+            float dx = (ballPos.x - pos.x) / halfW;
+            float dy = (ballPos.y - centerY) / halfH;
+            float dz = (ballPos.z - pos.z) / halfW;
+            return (dx * dx + dy * dy + dz * dz) < 1.0f;
         }
 
         if (scheme == TreeScheme.GRAPEVINE) {

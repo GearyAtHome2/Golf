@@ -14,6 +14,10 @@ import org.example.terrain.Terrain;
 public class ParticleManager {
     private final Array<GameParticle> particles = new Array<>();
     private final Model boxModel;
+    private SoundManager soundManager;
+    private boolean wasInWater = false;
+
+    public void setSoundManager(SoundManager sm) { this.soundManager = sm; }
 
     private static final float PARTICLE_SIZE = 0.12f;
     private static final float DEFAULT_GRAVITY = 9.81f;
@@ -44,9 +48,12 @@ public class ParticleManager {
         }
     }
 
-    public void handleBallInteraction(Ball ball, Terrain terrain) {
+    public void handleBallInteraction(Ball ball, Terrain terrain, Vector3 cameraPos) {
         Ball.Interaction interaction = ball.getLastInteraction();
-        if (interaction == Ball.Interaction.NONE) return;
+        if (interaction == Ball.Interaction.NONE) {
+            wasInWater = false;
+            return;
+        }
 
         float speed = ball.getVelocity().len();
         if (speed < 1.0f) {
@@ -67,7 +74,10 @@ public class ParticleManager {
                 } else {
                     spawnSplash(ball.getPosition(), params.color, params.count, speed * params.forceMult);
                 }
+                if (!wasInWater && soundManager != null) soundManager.playSplash(cameraPos, ball.getPosition(), speed);
+                wasInWater = true;
             } else {
+                wasInWater = false;
                 Vector3 splashDir = ball.getVelocity().cpy().nor().scl(-1).add(0, 0.5f, 0).nor();
                 spawnDirectional(ball.getPosition(), splashDir, params.color, params.count, speed * params.forceMult, params.life);
             }

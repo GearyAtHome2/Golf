@@ -19,7 +19,7 @@ import org.example.tutorial.TutorialPrefs;
 public class MainMenuRenderer {
 
     public enum MenuState {
-        MAIN, EIGHTEEN_HOLES, DIFFICULTY_SELECT, PRACTICE, PLAY_OPTIONS, MAP_SELECT
+        MAIN, EIGHTEEN_HOLES, DIFFICULTY_SELECT, PRACTICE, PLAY_OPTIONS, MAP_SELECT, SETTINGS
     }
 
     private static final int SCROLL_WINDOW = 8;
@@ -83,6 +83,7 @@ public class MainMenuRenderer {
             case EIGHTEEN_HOLES -> renderEighteenMenu(batch, font, selection, fixedLeftX, menuStartY, spacing, sessions, dailyCache);
             case DIFFICULTY_SELECT -> renderDifficultyMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
             case PRACTICE -> renderPracticeMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
+            case SETTINGS -> renderSettingsMenu(batch, font, selection, fixedLeftX, menuStartY, spacing);
         }
 
         if (state == MenuState.MAIN) {
@@ -187,6 +188,12 @@ public class MainMenuRenderer {
             drawOption(batch, font, selection == i, true, diffs[i].name().replace("_", " "), x, y - (s * i));
         }
         drawOption(batch, font, selection == diffs.length, true, "< BACK", x, y - (s * (diffs.length + 0.5f)));
+    }
+
+    private void renderSettingsMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {
+        drawOption(batch, font, selection == 0, true, "SOUND",           x, y);
+        drawOption(batch, font, selection == 1, true, "INSTRUCTIONS",   x, y - s);
+        drawOption(batch, font, selection == 2, true, "< BACK TO MAIN", x, y - (s * 2.5f));
     }
 
     private void renderPracticeMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {

@@ -68,6 +68,9 @@ public class PauseMenuRenderer {
             drawCenteredShadowedText(batch, font, "[O] CAMERA CONFIG", centerX, currentY, Color.WHITE);
             currentY -= spacing;
 
+            drawCenteredShadowedText(batch, font, "[V] SOUND SETTINGS", centerX, currentY, Color.WHITE);
+            currentY -= spacing;
+
             drawCenteredShadowedText(batch, font, "[I] INSTRUCTIONS", centerX, currentY, Color.WHITE);
             currentY -= spacing;
 

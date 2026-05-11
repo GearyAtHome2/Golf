@@ -239,10 +239,14 @@ public class BallPhysics {
         return true;
     }
 
-    public static void applyFoliagePhysics(Vector3 vel, Vector3 spin, float delta,
+    /**
+     * Applies drag and probabilistic deflection while the ball is inside foliage.
+     * @return the ball speed at the moment of deflection (for twig-snap volume scaling), or 0 if no deflection fired.
+     */
+    public static float applyFoliagePhysics(Vector3 vel, Vector3 spin, float delta,
                                            float dragLin, float dragSqu, float deflectChance, float deflectMag, Random deterministicRandom) {
         float speed = vel.len();
-        if (speed < 0.1f) return;
+        if (speed < 0.1f) return 0f;
         vel.scl(Math.max(0, 1 - (dragLin + dragSqu * speed) * delta));
         spin.scl(0.8f);
 
@@ -252,7 +256,9 @@ public class BallPhysics {
             float ry = (deterministicRandom.nextFloat() * 2 - 1) * deflectMag;
             float rz = (deterministicRandom.nextFloat() * 2 - 1) * deflectMag;
             vel.rotate(Vector3.X, rx).rotate(Vector3.Y, ry).rotate(Vector3.Z, rz).scl(0.95f);
+            return speed;
         }
+        return 0f;
     }
 
     public static boolean isWallCollision(Vector3 normal, float steepnessThreshold) {

@@ -14,6 +14,7 @@ import org.example.Club;
 import org.example.hud.HUD;
 import org.example.input.GameInputProcessor;
 import org.example.terrain.Terrain;
+import org.example.ball.MinigameResult;
 
 public class ShotController {
     private static final float MIN_RENDER_SCALE = 0.15f;
@@ -46,8 +47,20 @@ public class ShotController {
     private float cancelCooldown = 0f;
     private final float CANCEL_COOLDOWN_TIME = 0.5f;
 
+    /** Lead time (seconds) between playing the swing sound and ball.hit() firing. */
+    private static final float SHOT_SOUND_LEAD = 0.1f;
+    private boolean pendingShot = false;
+    private float shotLeadTimer = 0f;
+    private MinigameResult pendingResult;
+    private Club pendingClub;
+    private float pendingPower;
+
     private float animationTimer = 0f;
     private ShotDifficulty currentDifficulty;
+
+    private org.example.glamour.SoundManager soundManager;
+
+    public void setSoundManager(org.example.glamour.SoundManager sm) { this.soundManager = sm; }
 
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
@@ -103,6 +116,8 @@ public class ShotController {
         isCharging = false;
         isPowerLocked = false;
         waitingForMinigame = false;
+        pendingShot = false;
+        shotLeadTimer = 0f;
         spaceHoldTime = 0f;
         lockedPower = 0f;
         lockTimer = 0f;
@@ -134,6 +149,16 @@ public class ShotController {
             toggleGuideline();
         }
 
+        if (pendingShot) {
+            shotLeadTimer -= delta;
+            if (shotLeadTimer <= 0f) {
+                pendingShot = false;
+                executeShot(ball, lockedCamDir, pendingClub, pendingPower, lockedSpin, terrain, pendingResult);
+                return true;
+            }
+            return false;
+        }
+
         if (waitingForMinigame) {
             if (hud.wasMinigameCanceled()) {
                 reset();
@@ -142,8 +167,14 @@ public class ShotController {
             if (hud.isMinigameComplete()) {
                 waitingForMinigame = false;
                 isSpinLocked = false;
-                executeShot(ball, lockedCamDir, club, lockedPower, lockedSpin, terrain, hud.getMinigameResult());
-                return true;
+                // Play the swing sound now — the clip has ~50ms of swing before impact,
+                // so ball.hit() fires after SHOT_SOUND_LEAD to keep them in sync.
+                if (soundManager != null) soundManager.playBallStrike(clubSoundCategory(club), lockedPower / MAX_POWER);
+                pendingResult = hud.getMinigameResult();
+                pendingClub   = club;
+                pendingPower  = lockedPower;
+                pendingShot   = true;
+                shotLeadTimer = SHOT_SOUND_LEAD;
             }
             return false;
         }
@@ -228,6 +259,7 @@ public class ShotController {
 
         float launchLoft = (float) Math.asin(tempV1.y) * MathUtils.radiansToDegrees;
         ball.hit(tempV1, power, launchLoft, finalPowerMult, result.rating);
+        if (soundManager != null) soundManager.startFlightSound(result.rating);
 
         Vector3 aimDir = new Vector3(aimDirFreeform.x, 0, aimDirFreeform.z).nor();
         Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
@@ -271,6 +303,15 @@ public class ShotController {
         float rawR = MathUtils.clamp(rawOffset.len(), 0f, 1f);
         float quadR = (float) Math.pow(rawR, 2.8f);
         return (rawR > 0) ? new Vector2(rawOffset).nor().scl(quadR) : new Vector2(0, 0);
+    }
+
+    /** Maps a Club to a SoundManager category string. */
+    private static String clubSoundCategory(Club club) {
+        if (club == Club.DRIVER) return "driver";
+        if (club == Club.PUTTER) return "putter";
+        String n = club.name(); // e.g. "PWEDGE", "GWEDGE", "SWEDGE", "LWEDGE"
+        if (n.contains("WEDGE")) return "wedge";
+        return "iron"; // covers IRON_*, WOOD_*, HYBRID_*
     }
 
     private float getQualityFactor(MinigameResult.Rating rating) {
@@ -372,7 +413,7 @@ public class ShotController {
     }
 
     public boolean isCharging() {
-        return isCharging || isPowerLocked || waitingForMinigame;
+        return isCharging || isPowerLocked || waitingForMinigame || pendingShot;
     }
 
     public void dispose() {

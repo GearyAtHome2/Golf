@@ -254,6 +254,12 @@ public class ScoreSubmissionHandler {
             public void onFailure(int statusCode) {
                 if ((statusCode == 401 || statusCode == 403) && !isRetry && authService != null && userSession != null) {
                     Gdx.app.log("SCORE_SUBMIT", "Token expired (" + statusCode + ") — refreshing and retrying");
+                    Gdx.app.postRunnable(() -> {
+                        if (statusLabel != null) {
+                            statusLabel.setText("REFRESHING SESSION...");
+                            statusLabel.setColor(Color.LIGHT_GRAY);
+                        }
+                    });
                     authService.refreshToken(userSession.getRefreshToken(), new AuthService.AuthCallback() {
                         @Override
                         public void onSuccess(AuthService.AuthResult r) {

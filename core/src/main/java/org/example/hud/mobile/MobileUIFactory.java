@@ -183,7 +183,7 @@ public static class MobileUIPackage {
         return table.add(btn).width(w).height(h);
     }
 
-    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache, Viewport viewport, BitmapFont font) {
+    public static void buildStartMenuButtons(Table table, MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache, Viewport viewport, BitmapFont font, org.example.glamour.SoundManager soundManager) {
         table.clearChildren();
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
         MainMenuRenderer.MenuState state = menuManager.getCurrentMenuState();
@@ -213,6 +213,11 @@ public static class MobileUIPackage {
                 float finalMenuScale = textWidthAtBase > bW * 0.85f ? baseMenuScale * (bW * 0.85f / textWidthAtBase) : baseMenuScale;
                 btn.getLabel().setFontScale(finalMenuScale);
                 font.getData().setScale(1.0f);
+                btn.addListener(new InputListener() {
+                    @Override public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                        if (soundManager != null) soundManager.playButtonDown(); return false;
+                    }
+                });
                 btn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
@@ -277,6 +282,11 @@ public static class MobileUIPackage {
                     btn.getLabel().getStyle().fontColor = Color.DARK_GRAY;
                 }
             } else {
+                btn.addListener(new InputListener() {
+                    @Override public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                        if (soundManager != null) soundManager.playButtonDown(); return false;
+                    }
+                });
                 btn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
@@ -292,8 +302,9 @@ public static class MobileUIPackage {
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
         return switch (state) {
             case MAIN -> TutorialPrefs.isComplete()
-                ? new String[]{"PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "MULTIPLAYER", "LOG OUT"}
-                : new String[]{"TUTORIAL", "PLAY", "COMPETITIVE", "INSTRUCTIONS", "PRACTICE", "MULTIPLAYER", "LOG OUT"};
+                ? new String[]{"PLAY", "COMPETITIVE", "SETTINGS", "PRACTICE", "MULTIPLAYER", "LOG OUT"}
+                : new String[]{"TUTORIAL", "PLAY", "COMPETITIVE", "SETTINGS", "PRACTICE", "MULTIPLAYER", "LOG OUT"};
+            case SETTINGS -> new String[]{"SOUND", "INSTRUCTIONS", "< BACK"};
             case PLAY_OPTIONS -> new String[]{"RANDOM MAP", "SELECT MAP", "PLAY SEED", "BACK"};
             case MAP_SELECT -> {
                 LevelData.Archetype[] archetypes = LevelData.Archetype.values();
@@ -447,6 +458,7 @@ public static class MobileUIPackage {
         });
         pauseTable.add(ui.difficultyBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
 
+        pauseTable.add(createMenuButton("SOUND SETTINGS", menuStyle, input, GameInputProcessor.Action.OPEN_SOUND_SETTINGS, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
         pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();
 

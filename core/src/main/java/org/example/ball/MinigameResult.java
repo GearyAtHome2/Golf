@@ -9,9 +9,9 @@ public class MinigameResult {
     public Rating rating;
 
     public enum Rating {
-        PERFECTION(new String[]{"MONSTROUS!", "GOD-LIKE!", "YOU ARE GOLF", "BABABOOEY!", "GIVE ME BACK MY SON!", "I'VE ABANDONED MY CHILD!"}, new float[]{0.3f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f}, Color.PURPLE),
-        SUPER(new String[]{"CRACKING!", "YOU BEAUTY!", "MASHED POTATOES!", "LIGHT THE CANDLE", "VERY CHEEKY"}, new float[]{0.3f, 0.2f, 0.1f, 0.1f, 0.3f}, Color.PINK),
-        GREAT(new String[]{"SOLID", "LOVELY", "CHEEKY", "ABOVE AVERAGE"}, new float[]{0.5f, 0.4f, 0.1f, 0.3f}, Color.GOLD),
+        PERFECTION(new String[]{"OUT OF THIS WORLD!", "YOU ARE GOLF", "UNIDENTIFIABLE!", "GIVE ME BACK MY SON!", "BEAM ME UP", "WHAT!?!"}, new float[]{0.3f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f}, Color.PURPLE),
+        SUPER(new String[]{"CRACKING!", "YOU BEAUTY!", "MASHED POTATOES!", "LIGHT THE CANDLE", "VERY CHEEKY", "THAT'S ELECTRIC!"}, new float[]{0.3f, 0.2f, 0.1f, 0.1f, 0.3f, 0.3f}, Color.PINK),
+        GREAT(new String[]{"SOLID", "BLAZIN'", "ABOVE AVERAGE", "HOT HOT"}, new float[]{0.5f, 0.4f, 0.1f, 0.3f}, Color.GOLD),
         GOOD(new String[]{"She'll play", "Decent", "Nice", "That'll do, Pig", "That's Golf"}, new float[]{1f, 1f, 1f, 0.3f, 0.8f}, Color.GREEN),
         POOR(new String[]{"Meh.", "Sloppy", "Weak", "Does your boyfriend play golf?", "Not good enough"}, new float[]{0.6f, 0.3f, 0.2f, 0.1f, 0.3f}, Color.GRAY),
         TERRIBLE(new String[]{"TRAGIC!", "HORRIFIC!", "FOOOOOORE!", "Tiger Wouldn't"}, new float[]{0.4f, 0.4f, 0.2f, 0.5f}, Color.ORANGE),

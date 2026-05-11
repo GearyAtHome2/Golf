@@ -14,6 +14,9 @@ import org.example.tutorial.TutorialPrefs;
 public class MenuManager {
     private MenuState currentMenuState = MenuState.MAIN;
     private int menuSelection = 0;
+
+    private org.example.glamour.SoundManager soundManager;
+    public void setSoundManager(org.example.glamour.SoundManager sm) { this.soundManager = sm; }
     private int pendingMatchMode = 0;
     private LevelData.Archetype selectedArchetype = null;
     private int mapScrollOffset = 0;
@@ -30,6 +33,7 @@ public class MenuManager {
                 menuSelection = (menuSelection - 1 + maxSelection) % maxSelection;
             } while (isSelectionLocked(sessions, dailyCache) && menuSelection != oldSelection);
             if (currentMenuState == MenuState.MAP_SELECT) adjustScrollOffset();
+            if (menuSelection != oldSelection && soundManager != null) soundManager.playButtonDown();
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.MENU_DOWN)) {
@@ -37,9 +41,11 @@ public class MenuManager {
                 menuSelection = (menuSelection + 1) % maxSelection;
             } while (isSelectionLocked(sessions, dailyCache) && menuSelection != oldSelection);
             if (currentMenuState == MenuState.MAP_SELECT) adjustScrollOffset();
+            if (menuSelection != oldSelection && soundManager != null) soundManager.playButtonDown();
         }
 
         if (input.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU) && currentMenuState != MenuState.MAIN) {
+            if (soundManager != null) soundManager.playButtonDown();
             handleBackNavigation();
             return;
         }
@@ -65,6 +71,7 @@ public class MenuManager {
 
     private void processSelection(MenuHandler callback, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         if (isSelectionLocked(sessions, dailyCache)) return;
+        if (soundManager != null) soundManager.playButtonUp();
 
         switch (currentMenuState) {
             case MAIN -> handleMain(callback);
@@ -73,6 +80,7 @@ public class MenuManager {
             case EIGHTEEN_HOLES -> handleEighteen(callback, sessions);
             case DIFFICULTY_SELECT -> handleDifficulty(callback);
             case PRACTICE -> handlePractice(callback);
+            case SETTINGS -> handleSettings(callback);
         }
     }
 
@@ -94,32 +102,42 @@ public class MenuManager {
             case MAP_SELECT -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 1; mapScrollOffset = 0; }
             case PLAY_OPTIONS -> { currentMenuState = MenuState.MAIN; menuSelection = 0; }
             case DIFFICULTY_SELECT -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = pendingMatchMode; }
+            case SETTINGS -> { currentMenuState = MenuState.MAIN; menuSelection = 2; }
             default -> { currentMenuState = MenuState.MAIN; menuSelection = 0; }
         }
     }
 
     private void handleMain(MenuHandler callback) {
         if (!TutorialPrefs.isComplete()) {
-            // TUTORIAL(0) PLAY(1) COMPETITIVE(2) INSTRUCTIONS(3) PRACTICE(4) MULTIPLAYER(5) LOG OUT(6)
+            // TUTORIAL(0) PLAY(1) COMPETITIVE(2) SETTINGS(3) PRACTICE(4) MULTIPLAYER(5) LOG OUT(6)
             switch (menuSelection) {
                 case 0 -> callback.onStartTutorial();
                 case 1 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
                 case 2 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
-                case 3 -> callback.onShowInstructions();
+                case 3 -> { currentMenuState = MenuState.SETTINGS; menuSelection = 0; }
                 case 4 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
                 case 5 -> callback.onOpenMultiplayerLobby();
                 case 6 -> callback.onLogout();
             }
         } else {
-            // PLAY(0) COMPETITIVE(1) INSTRUCTIONS(2) PRACTICE(3) MULTIPLAYER(4) LOG OUT(5)
+            // PLAY(0) COMPETITIVE(1) SETTINGS(2) PRACTICE(3) MULTIPLAYER(4) LOG OUT(5)
             switch (menuSelection) {
                 case 0 -> { currentMenuState = MenuState.PLAY_OPTIONS; menuSelection = 0; }
                 case 1 -> { currentMenuState = MenuState.EIGHTEEN_HOLES; menuSelection = 0; }
-                case 2 -> callback.onShowInstructions();
+                case 2 -> { currentMenuState = MenuState.SETTINGS; menuSelection = 0; }
                 case 3 -> { currentMenuState = MenuState.PRACTICE; menuSelection = 0; }
                 case 4 -> callback.onOpenMultiplayerLobby();
                 case 5 -> callback.onLogout();
             }
+        }
+    }
+
+    private void handleSettings(MenuHandler callback) {
+        // SOUND(0) INSTRUCTIONS(1) BACK(2)
+        switch (menuSelection) {
+            case 0 -> callback.onShowSoundSettings();
+            case 1 -> callback.onShowInstructions();
+            case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 2; }
         }
     }
 
@@ -199,6 +217,7 @@ public class MenuManager {
             case EIGHTEEN_HOLES -> 5;
             case PRACTICE -> TutorialPrefs.isComplete() ? 5 : 4;
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.values().length + 1;
+            case SETTINGS -> 3;
         };
     }
 
@@ -232,5 +251,7 @@ public class MenuManager {
         default void onResubmitDaily(CourseType type) {}
         /** Launch the tutorial. */
         default void onStartTutorial() {}
+        /** Open the sound settings overlay. */
+        default void onShowSoundSettings() {}
     }
 }

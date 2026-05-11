@@ -63,7 +63,10 @@ public class HUD {
     private com.badlogic.gdx.scenes.scene2d.ui.Label mobileClubLabel;
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
     private final GameInfoRenderer gameInfoRenderer = new GameInfoRenderer();
+    private org.example.glamour.SoundManager soundManager;
+    public void setSoundManager(org.example.glamour.SoundManager sm) { this.soundManager = sm; }
     private final PauseMenuRenderer pauseMenuRenderer = new PauseMenuRenderer();
+    private final org.example.hud.renderer.SoundSettingsRenderer soundSettingsRenderer = new org.example.hud.renderer.SoundSettingsRenderer();
     private final OverlayRenderer overlayRenderer = new OverlayRenderer();
     private final NotificationManager notificationManager = new NotificationManager();
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
@@ -220,7 +223,7 @@ public class HUD {
         mobileUIInitialized = true;
     }
 
-    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, org.example.scoreBoard.DailySubmissionCache dailyCache) {
+    public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, org.example.scoreBoard.DailySubmissionCache dailyCache, org.example.glamour.SoundManager soundManager) {
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
@@ -237,7 +240,7 @@ public class HUD {
         if (startMenuStage != null) {
             if (Platform.isAndroid()) {
                 if (lastMobileMenuState != menuManager.getCurrentMenuState()) {
-                    setupMobileStartMenu(menuManager, callback, sessions, dailyCache);
+                    setupMobileStartMenu(menuManager, callback, sessions, dailyCache, soundManager);
                     lastMobileMenuState = menuManager.getCurrentMenuState();
                 }
             }
@@ -250,10 +253,10 @@ public class HUD {
         }
     }
 
-    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, org.example.scoreBoard.DailySubmissionCache dailyCache) {
+    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, org.example.scoreBoard.DailySubmissionCache dailyCache, org.example.glamour.SoundManager soundManager) {
         if (startMenuTable == null) return;
         startMenuTable.clearChildren();
-        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, dailyCache, viewport, font);
+        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, dailyCache, viewport, font, soundManager);
     }
 
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput) {
@@ -350,7 +353,8 @@ public class HUD {
     }
 
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, GameSession session, Terrain terrain) {
-        gameInfoRenderer.render(batch, font, viewport, config, isPractice, levelData, club, ball, session, terrain, shotCount);
+        String soundDebug = soundManager != null ? soundManager.getActiveSoundDebug() : "";
+        gameInfoRenderer.render(batch, font, viewport, config, isPractice, levelData, club, ball, session, terrain, shotCount, soundDebug);
     }
 
     private void updateSpinInput(float delta, GameInputProcessor input) {
@@ -605,6 +609,18 @@ public class HUD {
 
         font.getData().setScale(1.0f);
         batch.end();
+    }
+
+public void renderSoundSettings() {
+        if (batch.isDrawing()) batch.end();
+        viewport.apply();
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        soundSettingsRenderer.render(batch, shapeRenderer, font, viewport, soundManager);
+    }
+
+    public boolean isTouchInsideSoundSettings(float x, float y) {
+        return soundSettingsRenderer.isClickInside(x, y);
     }
 
 public void renderInstructions(GameInputProcessor input) {
@@ -888,6 +904,104 @@ public void renderInstructions(GameInputProcessor input) {
     public void updateLiveScoreboard(java.util.List<LiveScoreboardActor.ScoreEntry> entries) {
         if (mobileUIPackage == null || mobileUIPackage.liveScoreboard == null) return;
         mobileUIPackage.liveScoreboard.update(entries);
+    }
+
+    private static final com.badlogic.gdx.graphics.Color[] REMOTE_TAG_COLORS = {
+        new com.badlogic.gdx.graphics.Color(1f,    0.45f, 0.75f, 1f), // pink
+        new com.badlogic.gdx.graphics.Color(0.72f, 0.35f, 1f,   1f), // purple
+        new com.badlogic.gdx.graphics.Color(0.3f,  1f,   0.45f, 1f), // green
+        new com.badlogic.gdx.graphics.Color(1f,    0.95f, 0.3f,  1f), // yellow
+    };
+
+    /**
+     * Draws a username tag above each remote ball. Call after all other HUD rendering.
+     * Tags fade from fully opaque within 10 units to a 0.15 floor at 200 units;
+     * always solid in overhead mode. Hidden when the ball is holed out.
+     */
+    public void drawRemoteNameTags(java.util.Collection<org.example.multiplayer.RemoteBall> remoteBalls,
+                                   com.badlogic.gdx.graphics.Camera camera,
+                                   boolean isOverhead) {
+        if (remoteBalls == null || remoteBalls.isEmpty()) return;
+
+        final float PAD = 4f * UI_SCALE;
+        font.getData().setScale(0.7f * UI_SCALE);
+
+        // Collect visible tags first so we can do boxes and text in separate passes
+        // (ShapeRenderer and SpriteBatch can't overlap).
+        int max = remoteBalls.size();
+        float[] tx = new float[max], ty = new float[max];
+        float[] tw = new float[max], th = new float[max];
+        float[] ta = new float[max];
+        String[] tn = new String[max];
+        com.badlogic.gdx.graphics.Color[] tc = new com.badlogic.gdx.graphics.Color[max];
+        int count = 0;
+        int colorIdx = 0;
+
+        viewport.apply();
+
+        for (org.example.multiplayer.RemoteBall rb : remoteBalls) {
+            com.badlogic.gdx.graphics.Color col = REMOTE_TAG_COLORS[colorIdx % REMOTE_TAG_COLORS.length];
+            colorIdx++;
+            if (!rb.hasRestPosition() || rb.isHoledOut()) continue;
+            String name = rb.displayName;
+            if (name == null || name.isEmpty()) continue;
+
+            com.badlogic.gdx.math.Vector3 ballPos = rb.isInFlight() ? rb.getPosition() : rb.getLastRestPosition();
+            tempV3.set(ballPos).add(0, 2.5f, 0);
+            camera.project(tempV3);
+            if (tempV3.z > 1f) continue;
+
+            float hudX = tempV3.x / Gdx.graphics.getWidth()  * viewport.getWorldWidth();
+            float hudY = tempV3.y / Gdx.graphics.getHeight() * viewport.getWorldHeight();
+
+            float alpha;
+            if (isOverhead) {
+                alpha = 1f;
+            } else {
+                float t = com.badlogic.gdx.math.MathUtils.clamp((camera.position.dst(ballPos) - 10f) / 190f, 0f, 1f);
+                alpha = 1f - t * 0.85f;
+            }
+
+            layout.setText(font, name);
+            tx[count] = hudX - layout.width / 2f;
+            ty[count] = hudY;
+            tw[count] = layout.width;
+            th[count] = layout.height;
+            ta[count] = alpha;
+            tn[count] = name;
+            tc[count] = col;
+            count++;
+        }
+
+        if (count == 0) { font.getData().setScale(1f); return; }
+
+        // Pass 1 — semi-transparent background boxes via ShapeRenderer
+        if (batch.isDrawing()) batch.end();
+        com.badlogic.gdx.Gdx.gl.glEnable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
+        com.badlogic.gdx.Gdx.gl.glBlendFunc(com.badlogic.gdx.graphics.GL20.GL_SRC_ALPHA,
+                com.badlogic.gdx.graphics.GL20.GL_ONE_MINUS_SRC_ALPHA);
+        shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
+        shapeRenderer.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Filled);
+        for (int i = 0; i < count; i++) {
+            shapeRenderer.setColor(0f, 0f, 0f, 0.45f * ta[i]);
+            shapeRenderer.rect(tx[i] - PAD, ty[i] - th[i] - PAD,
+                               tw[i] + PAD * 2f, th[i] + PAD * 2f);
+        }
+        shapeRenderer.end();
+        com.badlogic.gdx.Gdx.gl.glDisable(com.badlogic.gdx.graphics.GL20.GL_BLEND);
+
+        // Pass 2 — coloured text via SpriteBatch
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
+        for (int i = 0; i < count; i++) {
+            com.badlogic.gdx.graphics.Color col = tc[i];
+            font.setColor(col.r, col.g, col.b, ta[i]);
+            font.draw(batch, tn[i], tx[i], ty[i]);
+        }
+        batch.end();
+
+        font.getData().setScale(1f);
+        font.setColor(com.badlogic.gdx.graphics.Color.WHITE);
     }
 
     public void dispose() {

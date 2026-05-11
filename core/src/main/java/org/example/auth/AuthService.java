@@ -18,9 +18,8 @@ import org.example.FirebaseConfig;
  */
 public class AuthService {
 
-    private static final String API_KEY   = FirebaseConfig.API_KEY;
     private static final String AUTH_BASE = "https://identitytoolkit.googleapis.com/v1/accounts:";
-    private static final String TOKEN_URL = "https://securetoken.googleapis.com/v1/token?key=" + API_KEY;
+    private static final String TOKEN_BASE = "https://securetoken.googleapis.com/v1/token?key=";
 
     // -------------------------------------------------------------------------
     // Public result / callback types
@@ -101,7 +100,7 @@ public class AuthService {
         String body = "grant_type=refresh_token&refresh_token=" + urlEncode(refreshToken);
 
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
-        request.setUrl(TOKEN_URL);
+        request.setUrl(TOKEN_BASE + FirebaseConfig.API_KEY);
         request.setContent(body);
         request.setHeader("Content-Type", "application/x-www-form-urlencoded");
 
@@ -196,7 +195,7 @@ public class AuthService {
 
     private void post(String url, String body, SuccessHandler onSuccess, FailureHandler onFailure) {
         Net.HttpRequest request = new Net.HttpRequest(Net.HttpMethods.POST);
-        request.setUrl(url + "?key=" + API_KEY);
+        request.setUrl(url + "?key=" + FirebaseConfig.API_KEY);
         request.setContent(body);
         request.setHeader("Content-Type", "application/json");
 
