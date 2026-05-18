@@ -13,16 +13,38 @@ dependencies {
 }
 
 android {
-    namespace "org.example"
-    compileSdk 34
+    namespace "com.gearygolf.golf"
+    compileSdk 35
     buildFeatures {
         buildConfig true
     }
+    signingConfigs {
+        release {
+            def keyProps = new Properties()
+            def keyFile = rootProject.file('android/key.properties')
+            if (keyFile.exists()) keyFile.withInputStream { keyProps.load(it) }
+            storeFile     = rootProject.file(keyProps.getProperty('storeFile', ''))
+            storePassword = keyProps.getProperty('storePassword', '')
+            keyAlias      = keyProps.getProperty('keyAlias', '')
+            keyPassword   = keyProps.getProperty('keyPassword', '')
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            debuggable true
+            minifyEnabled false
+        }
+    }
     defaultConfig {
-        applicationId "org.example"
+        applicationId "com.gearygolf.golf"
         minSdk 21
-        targetSdk 34
-        versionCode 1
+        targetSdk 35
+        versionCode 10
         versionName "1.0"
 
         // Read secrets from android/key.properties (gitignored — never commit that file).

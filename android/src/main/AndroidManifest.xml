@@ -5,12 +5,12 @@
 
     <application
             android:icon="@mipmap/app_icon"
-            android:allowBackup="true"
+            android:allowBackup="false"
             android:label="Geary Golf"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 
         <activity
-                android:name="org.example.AndroidLauncher"
+                android:name="com.gearygolf.golf.AndroidLauncher"
                 android:label="Geary Golf"
                 android:screenOrientation="sensorLandscape"
                 android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout"

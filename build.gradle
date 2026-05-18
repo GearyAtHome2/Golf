@@ -50,7 +50,7 @@ project(":desktop") {
     apply plugin: "application"
 
     application {
-        mainClass = "org.example.DesktopLauncher"
+        mainClass = "com.gearygolf.golf.DesktopLauncher"
     }
 
     dependencies {
@@ -113,7 +113,7 @@ project(":desktop") {
         // Platform specific flags
         if (isWindows) {
         } else if (isMac) {
-            argsList << '--mac-package-identifier' << "org.example.golfgame2026"
+            argsList << '--mac-package-identifier' << "com.gearygolf.golf"
         }
 
         commandLine argsList

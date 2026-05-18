@@ -15,7 +15,7 @@
       </SelectionState>
       <SelectionState runConfigName="AndroidLauncher">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-04-30T12:52:55.015393400Z">
+        <DropdownSelection timestamp="2026-05-18T15:16:35.548611800Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\mgear\.android\avd\Medium_Phone.avd" />
