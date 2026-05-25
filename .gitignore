@@ -57,6 +57,9 @@ signing.properties
 ### Local save files ###
 assets/save_*.json
 
+### JVM crash/heap dumps ###
+*.hprof
+
 ### Claude Code tooling ###
 .claude/
 *.md
