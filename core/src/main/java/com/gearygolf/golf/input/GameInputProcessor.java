@@ -53,6 +53,12 @@ public interface GameInputProcessor {
         SCROLL_Y,
         SECONDARY_ACTION,
         TAP,
-        OPEN_SOUND_SETTINGS
+        OPEN_SOUND_SETTINGS,
+        TRAILER_MODE,
+        REPLAY_SHOT,
+        TRAILER_PAN_LEFT,
+        TRAILER_PAN_RIGHT,
+        EXPORT_SHOT,
+        IMPORT_SHOT
     }
 }

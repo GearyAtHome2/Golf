@@ -62,6 +62,7 @@ public class SubmissionCoordinator {
                     session.getTotalScore(),
                     new RoundHistoryService.SaveCallback() {
                         @Override public void onSuccess() {
+                            session.markRoundHistorySaved();
                             Gdx.app.log("SubmissionCoordinator", "Round history saved");
                         }
                         @Override public void onFailure(String reason) {
@@ -99,6 +100,24 @@ public class SubmissionCoordinator {
             case HOLES_1  -> sessionManager.getDaily1();
         };
         if (session == null) return;
+
+        if (type == CourseType.HOLES_18 && !session.isRoundHistorySaved()) {
+            roundHistory.saveRound(
+                    userSession.getUid(),
+                    userSession.getIdToken(),
+                    session.getDifficulty(),
+                    session.getTotalScore(),
+                    new RoundHistoryService.SaveCallback() {
+                        @Override public void onSuccess() {
+                            session.markRoundHistorySaved();
+                            Gdx.app.log("SubmissionCoordinator", "Round history saved (resubmit)");
+                        }
+                        @Override public void onFailure(String reason) {
+                            Gdx.app.error("SubmissionCoordinator", "Round history save failed (resubmit): " + reason);
+                        }
+                    }
+            );
+        }
 
         submissionInProgress = true;
         callbacks.onSubmissionStarted();
@@ -164,6 +183,24 @@ public class SubmissionCoordinator {
     private void tryAutoRetrySession(GameSession session, CourseType type) {
         if (session == null || !session.isFinished() || session.isSubmitted()) return;
         if (dailyCache.isFetched() && dailyCache.hasSubmitted(type)) return;
+
+        if (type == CourseType.HOLES_18 && !session.isRoundHistorySaved()) {
+            roundHistory.saveRound(
+                    userSession.getUid(),
+                    userSession.getIdToken(),
+                    session.getDifficulty(),
+                    session.getTotalScore(),
+                    new RoundHistoryService.SaveCallback() {
+                        @Override public void onSuccess() {
+                            session.markRoundHistorySaved();
+                            Gdx.app.log("SubmissionCoordinator", "Round history saved (auto-retry)");
+                        }
+                        @Override public void onFailure(String reason) {
+                            Gdx.app.error("SubmissionCoordinator", "Round history save failed (auto-retry): " + reason);
+                        }
+                    }
+            );
+        }
 
         new ScoreSubmissionHandler(
                 session,

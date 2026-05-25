@@ -30,7 +30,7 @@ public class LevelFactory {
                 break;
             default:
                 data = (LevelDataGenerator.createFixedLevelData(manualSeed));
-                generator = new ClassicGenerator(data);
+                generator = createGeneratorForData(data);
                 defaultClub = Club.DRIVER;
                 waterLevel = data.getWaterLevel();
                 distance = data.getDistance();
@@ -38,6 +38,10 @@ public class LevelFactory {
         }
 
         return new LevelCreationResult(generator, data, defaultClub, waterLevel, distance);
+    }
+
+    public static ITerrainGenerator createGeneratorForData(LevelData data) {
+        return new ClassicGenerator(data);
     }
 
     public enum GameMode {START, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN}

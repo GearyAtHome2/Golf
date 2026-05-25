@@ -38,6 +38,7 @@ public class CameraController {
     private boolean isOverhead = false;
     private boolean isPaused = false;
     private boolean skipRotation = true; // discard stale mouse delta on first update after load
+    private boolean detached = false;    // trailer mode: camera orbits fixed point, ignores ball position
 
     public CameraController(PerspectiveCamera camera, float initialDistance, Vector3 startLookAt, GameConfig.CameraConfig config) {
         this.camera = camera;
@@ -58,7 +59,32 @@ public class CameraController {
 
     public void setPaused(boolean paused) {
         this.isPaused = paused;
-        updateCursorState(); // Ensure cursor is released immediately on pause
+        updateCursorState();
+    }
+
+    public void setDetached(boolean d) {
+        this.detached = d;
+        if (!d) introActive = false; // re-attaching: skip intro lerp, snap back to tracking
+    }
+
+    public boolean isDetached() { return detached; }
+
+    /**
+     * Shift the detached focal point relative to the camera's current yaw.
+     * @param forward  +1 = pan away from camera, -1 = pan toward camera
+     * @param right    +1 = pan right, -1 = pan left
+     * @param delta    frame delta (seconds)
+     */
+    public void panFocalPoint(float forward, float right, float delta) {
+        if (!detached) return;
+        float speed = distance * 1.8f; // pan speed scales with zoom distance
+        float radYaw = -MathUtils.degreesToRadians * yaw;
+        // Forward direction (camera looks toward -sin(yaw), -cos(yaw) on XZ plane)
+        float fwdX = -MathUtils.sin(radYaw);
+        float fwdZ = -MathUtils.cos(radYaw);
+        // Right direction: rotate forward 90° clockwise
+        currentLookAt.x += (fwdX * forward - fwdZ * right) * speed * delta;
+        currentLookAt.z += (fwdZ * forward + fwdX * right) * speed * delta;
     }
 
 
@@ -147,7 +173,7 @@ public class CameraController {
         float lerpSpeed = lerpBase * delta;
         float lookSpeed = (introActive && dstToTarget > 15f) ? 0.8f : 8.0f;
 
-        currentLookAt.lerp(ballPos, lookSpeed * delta);
+        if (!detached) currentLookAt.lerp(ballPos, lookSpeed * delta);
         distance = MathUtils.lerp(distance, targetDistance, lerpSpeed);
         pitch = MathUtils.lerp(pitch, targetPitch, lerpSpeed);
 
@@ -189,10 +215,12 @@ public class CameraController {
         float radYaw = -MathUtils.degreesToRadians * yaw;
         float radPitch = MathUtils.degreesToRadians * pitch;
 
+        // In detached mode orbit around the frozen look-at rather than the live ball position.
+        Vector3 orbitCenter = detached ? currentLookAt : ballPos;
         tempTargetPos.set(
-                ballPos.x + distance * MathUtils.cos(radPitch) * MathUtils.sin(radYaw),
-                ballPos.y + distance * MathUtils.sin(radPitch),
-                ballPos.z + distance * MathUtils.cos(radPitch) * MathUtils.cos(radYaw)
+                orbitCenter.x + distance * MathUtils.cos(radPitch) * MathUtils.sin(radYaw),
+                orbitCenter.y + distance * MathUtils.sin(radPitch),
+                orbitCenter.z + distance * MathUtils.cos(radPitch) * MathUtils.cos(radYaw)
         );
 
         camera.position.lerp(tempTargetPos, lerpSpeed);

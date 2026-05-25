@@ -70,7 +70,9 @@ public class BallPhysics {
         float CL = q(1.0f - (float) Math.exp(-0.9f * cappedSpinRatio));
         float airFoilEfficiency = MathUtils.clamp(airspeed / 15.0f, 0.0f, 1.0f);
         float speedRef = airspeed / 20.0f;
-        float dynamicLift = q((speedRef * speedRef) * CL * (airFoilEfficiency * airFoilEfficiency));
+        // F-032: airFoilEfficiency is no longer squared — v^4 dependence has no physical basis.
+        // Revert to (airFoilEfficiency * airFoilEfficiency) to restore original behaviour.
+        float dynamicLift = q((speedRef * speedRef) * CL * airFoilEfficiency);
 
         temp.set(relativeVelocity).crs(spin).nor();
         temp.set(q(temp.x), q(temp.y), q(temp.z));

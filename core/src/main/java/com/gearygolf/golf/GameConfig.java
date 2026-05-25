@@ -25,7 +25,7 @@ public class GameConfig {
     }
 
     public enum Difficulty {
-        NOVICE(0.17f), INTERMEDIATE(0.26f), ADVANCED(0.45f), PRO(0.67f), TOUR_PRO(0.88f);
+        NOVICE(0.14f), INTERMEDIATE(0.22f), ADVANCED(0.41f), PRO(0.6f), TOUR_PRO(0.75f);
         public final float needleSpeedMult;
 
         Difficulty(float s) {

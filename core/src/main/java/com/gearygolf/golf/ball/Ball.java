@@ -37,6 +37,9 @@ public class Ball {
     private static final float MAX_STEP_UP = 1.0f;
     /** Fixed physics step — identical to RemoteBall.FIXED_STEP for deterministic parity. */
     private static final float FIXED_STEP = 1f / 240f;
+    /** F-032: Speed-dependent spin decay multiplier. Lower = spin survives longer into flight.
+     *  Revert to 0.0002f to restore original behaviour. */
+    private static final float SPIN_DECAY_SPEED_SENSITIVITY = 0.00008f;
 
     private final Vector3 position = new Vector3();
     private final Vector3 velocity = new Vector3();
@@ -64,6 +67,12 @@ public class Ball {
     private float pendingTwigSnapSpeed = 0f;      // speed at deflection moment (0 = no snap this frame)
     private boolean isGoodShot = false;
     private State state = State.STATIONARY;
+
+    // Trailer-mode shot replay — snapshot taken immediately after spin is applied
+    private final Vector3 shotSnapPosition = new Vector3();
+    private final Vector3 shotSnapVelocity = new Vector3();
+    private final Vector3 shotSnapSpin     = new Vector3();
+    private boolean hasShotSnapshot = false;
     private Interaction lastInteraction = Interaction.NONE;
     private float hitCooldown = 0f;
     private final Vector3 tempV1 = new Vector3();
@@ -259,12 +268,12 @@ public class Ball {
                     .scl(delta));
 
             if (!handleAirCollisions(terrain)) applyAirMovement(delta, terrain);
-            if (q(velocity.len()) > 0.1f) spin.scl(Math.max(0f, q(1.0f - ((0.05f + (velocity.len2() * 0.0002f)) * delta))));
+            if (q(velocity.len()) > 0.1f) spin.scl(Math.max(0f, q(1.0f - ((0.05f + (velocity.len2() * SPIN_DECAY_SPEED_SENSITIVITY)) * delta))));
         }
     }
 
     private boolean handleAirCollisions(Terrain terrain) {
-        tempV1.set(velocity).scl(0.016f);
+        tempV1.set(velocity).scl(FIXED_STEP);
         for (float t = 0.33f; t <= 1.0f; t += 0.33f) {
             float cx = position.x + (tempV1.x * t), cz = position.z + (tempV1.z * t), cy = position.y + (tempV1.y * t);
             float h = q(terrain.getHeightAt(cx, cz) + BALL_RADIUS / 3f);
@@ -449,6 +458,51 @@ public class Ball {
 
     public void capturePosition() {
         lastShotPosition.set(this.position);
+    }
+
+    /** Call once after spin has been applied (i.e. after ShotController.executeShot completes). */
+    public void snapshotShotStart() {
+        shotSnapPosition.set(position);
+        shotSnapVelocity.set(velocity);
+        shotSnapSpin.set(spin);
+        hasShotSnapshot = true;
+    }
+
+    /** Reset to the snapshotted shot start and re-enter flight. No-op if no shot has been fired yet. */
+    public boolean replayShot() {
+        if (!hasShotSnapshot) return false;
+        position.set(shotSnapPosition);
+        velocity.set(shotSnapVelocity);
+        spin.set(shotSnapSpin);
+        state = State.AIR;
+        physicsStepCount = 0;
+        detLandLogged = false;
+        physicsRandom = new Random(initialSeed);
+        isInitialFlight = true;
+        hitCooldown = 0.1f;
+        accumulator = 0f;
+        renderer.resetTrail(renderer.getActiveTrailColor());
+        lastTrailPos.set(position);
+        return true;
+    }
+
+    /**
+     * Applies the stored velocity/spin and enters AIR state — used to fire a shot replay.
+     * Ball position must already be set (done at spawn time in SHOT_REPLAY mode).
+     */
+    public void launchReplay(float vx, float vy, float vz, float wx, float wy, float wz) {
+        capturePosition(); // record launch position so OOB/water resets come back here
+        velocity.set(vx, vy, vz);
+        spin.set(wx, wy, wz);
+        state = State.AIR;
+        physicsStepCount = 0;
+        detLandLogged = false;
+        physicsRandom = new Random(initialSeed);
+        isInitialFlight = true;
+        hitCooldown = 0.1f;
+        accumulator = 0f;
+        renderer.resetTrail(renderer.getActiveTrailColor());
+        lastTrailPos.set(position);
     }
 
     public void resetToLastPosition() {

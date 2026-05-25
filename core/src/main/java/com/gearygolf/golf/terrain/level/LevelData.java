@@ -1,6 +1,8 @@
 package com.gearygolf.golf.terrain.level;
 
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.gearygolf.golf.terrain.features.TableMountainGenerator;
 import com.gearygolf.golf.terrain.objects.Tree;
 import com.gearygolf.golf.terrain.objects.Tree.TreeScheme;
 
@@ -323,6 +325,50 @@ public class LevelData {
                 .par34(260, 320, 480, 690)
                 .greenSize(28f, 34f)
                 .deepRough(14f)
+        ),
+
+        // ── Badlands — dry cracked earth with fissure network and stone patches ──
+        // BadlandsGenerator carves a graph-based crack network across the whole map:
+        // branching/recombining fissures with STONE walls and SAND floors, plus
+        // scattered stone patches throughout the rough. Very sparse trees.
+        BADLANDS(new ArchetypeSpec()
+                .algo(TerrainAlgorithm.PLATEAU)
+                .treeScheme(TreeScheme.DEAD_GRAY)
+                .mudHeight(-99f)
+                .deepRough(-1f)     // stone/sand passes handle rough differentiation instead
+                .difficulty(5f)
+                .teeH(4f, 2f).greenH(30f, 2f)
+                .wind(1f, 3f)
+                .treeH(5f, 1f).trees(0.06f, 3f, 0.5f)
+                .terrain(0.025f, 6f)
+                .fairway(46f, 0f).wiggle(0.08f, 0.05f)
+                .bunkers(4, 6, 1.5f)
+                .distance(610, 750)
+                .par(4)
+                .greenSize(22f, 26f)
+                .undulation(0.3f)
+        ),
+
+//         ── Table Mountain — custom TableMountainGenerator ────────────────────
+//         Steep-walled plateau crossing the full map width. Par 4, two-shot strategy.
+//         TableMountainGenerator ignores algo/teeH/greenH for height — uses its own
+//         seeded parameters — but reads bunkers, greenRadius, trees, wind from data.
+        TABLE_MOUNTAIN(new ArchetypeSpec()
+                .algo(TerrainAlgorithm.MULTI_WAVE)
+                .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.AUTUMN_MAPLE)
+                .mudHeight(-99f)
+                .roughDeepCover(1.0f)
+                .difficulty(4f)
+                .teeH(3f, 2f).greenH(3f, 2f)
+                .wind(1f, 3f)
+                .treeH(10f, 3f).trees(0.52f, 6f, 0.7f)
+                .terrain(0.03f, 6f)
+                .fairway(50f, 0f).wiggle(0.1f, 0.05f)
+                .bunkers(3, 5, 2.0f)
+                .distance(500, 625)
+                .par(4)
+                .greenSize(20f, 24f)
+                .undulation(0.4f)
         );
 
         private final ArchetypeSpec spec;

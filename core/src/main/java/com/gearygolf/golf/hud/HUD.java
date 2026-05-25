@@ -42,6 +42,7 @@ import com.gearygolf.golf.session.CompetitiveSessions;
 import com.gearygolf.golf.session.GameSession;
 import com.gearygolf.golf.terrain.Terrain;
 import com.gearygolf.golf.terrain.level.LevelData;
+import com.gearygolf.golf.shot.ShotExportPacket;
 import com.gearygolf.golf.tutorial.TutorialController;
 import com.gearygolf.golf.tutorial.TutorialOverlayRenderer;
 
@@ -60,6 +61,7 @@ public class HUD {
     private com.badlogic.gdx.scenes.scene2d.ui.Label mobileClubLabel;
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
     private final GameInfoRenderer gameInfoRenderer = new GameInfoRenderer();
+    private final TerrainToastRenderer terrainToastRenderer = new TerrainToastRenderer();
     private com.gearygolf.golf.glamour.SoundManager soundManager;
     public void setSoundManager(com.gearygolf.golf.glamour.SoundManager sm) { this.soundManager = sm; }
     private final PauseMenuRenderer pauseMenuRenderer = new PauseMenuRenderer();
@@ -79,6 +81,8 @@ public class HUD {
     private float distanceDisplayTimer = 0;
     private String distanceText = "";
     private float seedFeedbackTimer = 0;
+    private float shotExportFeedbackTimer = 0;
+    private boolean importShotRequested = false;
     private boolean mainMenuRequested = false;
     private Stage stage;
     private Skin skin;
@@ -269,12 +273,12 @@ public class HUD {
         MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, dailyCache, viewport, font, soundManager);
     }
 
-    public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput) {
+    public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput, String lastShotExport) {
         if (batch.isDrawing()) batch.end();
-        if (!blockInput) handlePauseInput(levelData, input, session);
+        if (!blockInput) handlePauseInput(levelData, input, session, lastShotExport);
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer, session);
+        pauseMenuRenderer.render(batch, font, viewport, config, seedFeedbackTimer, shotExportFeedbackTimer, lastShotExport != null, session);
         batch.end();
         if (Platform.isAndroid() && pauseMenuStage != null) {
             pauseMenuStage.act();
@@ -282,7 +286,7 @@ public class HUD {
         }
     }
 
-    private void handlePauseInput(LevelData levelData, GameInputProcessor input, GameSession session) {
+    private void handlePauseInput(LevelData levelData, GameInputProcessor input, GameSession session, String lastShotExport) {
         if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_ANIMATION)) config.cycleAnimation();
         if (input.isActionJustPressed(GameInputProcessor.Action.CYCLE_DIFFICULTY)) {
             if (session == null) config.cycleDifficulty();
@@ -295,7 +299,15 @@ public class HUD {
             Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
             seedFeedbackTimer = 2.0f;
         }
+        if (input.isActionJustPressed(GameInputProcessor.Action.EXPORT_SHOT) && lastShotExport != null) {
+            Gdx.app.getClipboard().setContents(lastShotExport);
+            shotExportFeedbackTimer = 2.0f;
+        }
+        if (input.isActionJustPressed(GameInputProcessor.Action.IMPORT_SHOT)) {
+            importShotRequested = true;
+        }
         if (seedFeedbackTimer > 0) seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
+        if (shotExportFeedbackTimer > 0) shotExportFeedbackTimer -= Gdx.graphics.getDeltaTime();
     }
 
     public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, GameSession session, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
@@ -334,6 +346,7 @@ public class HUD {
             distanceDisplayTimer = 3.0f;
         }
         if (isPractice) updatePracticeDistanceLogic(ball);
+        terrainToastRenderer.update(delta);
         preShotDebugActor.update(terrain, ball, gameCamera);
         boolean shouldShowDebug = (ball.getState() == Ball.State.STATIONARY);
         preShotDebugActor.setVisible(!isAndroid && shouldShowDebug);
@@ -368,6 +381,9 @@ public class HUD {
         batch.begin();
         notificationManager.render(batch, font, viewport);
         batch.end();
+        if (terrainToastRenderer.isActive()) {
+            terrainToastRenderer.render(batch, font, viewport);
+        }
     }
 
     private void renderClubAndBallInfo(boolean isPractice, LevelData levelData, Club club, Ball ball, GameSession session, Terrain terrain) {
@@ -468,6 +484,15 @@ public class HUD {
         }
     }
 
+    public void triggerTerrainToast(com.gearygolf.golf.terrain.Terrain.TerrainType type,
+                                     Vector3 ballWorldPos, Camera camera) {
+        terrainToastRenderer.trigger(type, ballWorldPos, camera, viewport, config.animSpeed);
+    }
+
+    public void dismissTerrainToast() {
+        terrainToastRenderer.dismiss();
+    }
+
     public void logShotInitiated(Vector3 ballPos, Club club, ShotDifficulty diff, float powerMod) {
         minigameController.start(ballPos, club, diff, powerMod, config.animSpeed, config.difficulty);
     }
@@ -482,6 +507,10 @@ public class HUD {
 
     public void showOutOfBounds() {
         notificationManager.showHazard("OUT OF BOUNDS", Color.RED, 1.1f);
+    }
+
+    public void showGameNotification(String text, Color color, float duration) {
+        notificationManager.showHazard(text, color, duration);
     }
 
     public void renderVictory(int shots, LevelData levelData, GameSession session, boolean uploadDone) {
@@ -558,6 +587,49 @@ public class HUD {
         font.setColor(Color.WHITE);
         font.draw(batch, "LOADING MAP...", textX, textY);
         font.getData().setScale(1.0f);
+        batch.end();
+    }
+
+    /**
+     * Renders the "ready to launch" overlay for imported shot replay.
+     * Ball is stationary at the shot position; user fires it manually.
+     */
+    public void renderShotReplayReadyHUD(ShotExportPacket.ShotReplayData replayData) {
+        if (batch.isDrawing()) batch.end();
+        viewport.apply();
+        batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.begin();
+
+        float screenW = viewport.getWorldWidth();
+        float screenH = viewport.getWorldHeight();
+        float scale   = screenH * 0.0022f;
+        font.getData().setScale(scale * 1.6f);
+
+        // Title
+        String title = "-- SHOT REPLAY --";
+        layout.setText(font, title);
+        font.setColor(Color.YELLOW);
+        font.draw(batch, title, (screenW - layout.width) / 2f, screenH * 0.88f);
+
+        // Archetype + hole
+        font.getData().setScale(scale);
+        if (replayData != null) {
+            String archetypeName = replayData.archetype.name().replace('_', ' ');
+            String info = archetypeName + "  |  HOLE " + (replayData.holeIndex + 1);
+            layout.setText(font, info);
+            font.setColor(Color.WHITE);
+            font.draw(batch, info, (screenW - layout.width) / 2f, screenH * 0.82f);
+        }
+
+        // Launch prompt
+        font.getData().setScale(scale * 1.1f);
+        String prompt = Platform.isAndroid() ? "TAP THE SCREEN TO LAUNCH" : "PRESS [SPACE] TO LAUNCH";
+        layout.setText(font, prompt);
+        font.setColor(new Color(0.4f, 1f, 0.4f, 1f));
+        font.draw(batch, prompt, (screenW - layout.width) / 2f, screenH * 0.14f);
+
+        font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
         batch.end();
     }
 
@@ -749,6 +821,12 @@ public void renderInstructions(GameInputProcessor input) {
         boolean m = mainMenuRequested;
         mainMenuRequested = false;
         return m;
+    }
+
+    public boolean wasImportShotRequested() {
+        boolean v = importShotRequested;
+        importShotRequested = false;
+        return v;
     }
 
     public MinigameResult getMinigameResult() {
@@ -996,14 +1074,13 @@ public void renderInstructions(GameInputProcessor input) {
         if (remoteBalls == null || remoteBalls.isEmpty()) return;
 
         final float PAD = 4f * UI_SCALE;
-        font.getData().setScale(0.7f * UI_SCALE);
 
         // Collect visible tags first so we can do boxes and text in separate passes
         // (ShapeRenderer and SpriteBatch can't overlap).
         int max = remoteBalls.size();
         float[] tx = new float[max], ty = new float[max];
         float[] tw = new float[max], th = new float[max];
-        float[] ta = new float[max];
+        float[] ta = new float[max], ts = new float[max];
         String[] tn = new String[max];
         com.badlogic.gdx.graphics.Color[] tc = new com.badlogic.gdx.graphics.Color[max];
         int count = 0;
@@ -1019,7 +1096,9 @@ public void renderInstructions(GameInputProcessor input) {
             if (name == null || name.isEmpty()) continue;
 
             com.badlogic.gdx.math.Vector3 ballPos = rb.isInFlight() ? rb.getPosition() : rb.getLastRestPosition();
-            tempV3.set(ballPos).add(0, 2.5f, 0);
+            // Project the ball itself — no world-space offset so distant/close labels
+            // both land near the ball on screen.
+            tempV3.set(ballPos);
             camera.project(tempV3);
             if (tempV3.z > 1f) continue;
 
@@ -1034,12 +1113,20 @@ public void renderInstructions(GameInputProcessor input) {
                 alpha = 1f - t * 0.85f;
             }
 
+            // Scale font with distance so the label stays visually proportional to the ball.
+            float dist = camera.position.dst(ballPos);
+            float fontScale = com.badlogic.gdx.math.MathUtils.clamp(60f / dist, 0.3f, 1.0f) * UI_SCALE;
+            font.getData().setScale(fontScale);
             layout.setText(font, name);
+
+            // Fixed screen-space gap above the projected ball position.
+            float screenGap = 8f * UI_SCALE;
             tx[count] = hudX - layout.width / 2f;
-            ty[count] = hudY;
+            ty[count] = hudY + layout.height + screenGap;
             tw[count] = layout.width;
             th[count] = layout.height;
             ta[count] = alpha;
+            ts[count] = fontScale;
             tn[count] = name;
             tc[count] = col;
             count++;
@@ -1066,6 +1153,7 @@ public void renderInstructions(GameInputProcessor input) {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         for (int i = 0; i < count; i++) {
+            font.getData().setScale(ts[i]);
             com.badlogic.gdx.graphics.Color col = tc[i];
             font.setColor(col.r, col.g, col.b, ta[i]);
             font.draw(batch, tn[i], tx[i], ty[i]);

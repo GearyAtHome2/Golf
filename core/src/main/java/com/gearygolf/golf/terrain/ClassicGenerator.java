@@ -32,6 +32,8 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final ForestEdgeGenerator woodlandEdgeGenerator;
     private final StoneRunGenerator stoneRunGenerator;
     private final CypressBayouGenerator cypressBayouGenerator;
+    private final BadlandsGenerator badlandsGenerator;
+    private final TableMountainGenerator tableMountainGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
@@ -109,6 +111,10 @@ public class ClassicGenerator implements ITerrainGenerator {
         this.woodlandEdgeGenerator = new ForestEdgeGenerator(data);
         this.stoneRunGenerator = new StoneRunGenerator(data);
         this.cypressBayouGenerator = new CypressBayouGenerator(data, rng, waveAngles, waveFreqs, waveAmps, waveOffsets);
+        this.badlandsGenerator = (data.getArchetype() == LevelData.Archetype.BADLANDS)//todo - readd
+                ? new BadlandsGenerator(data) : null;
+        this.tableMountainGenerator = (data.getArchetype() == LevelData.Archetype.TABLE_MOUNTAIN)
+                ? new TableMountainGenerator(data) : null;
     }
 
     public LevelData getData() {
@@ -249,7 +255,12 @@ public class ClassicGenerator implements ITerrainGenerator {
         int SIZE_Z = map[0].length;
 
         long tArch = PerfLog.now();
-        if (flags.isMonolithPlains) {
+        if (flags.isTableMountain) {
+            tableMountainGenerator.apply(map, h, gX, gZ);
+        } else if (flags.isBadlands) {
+            data.setWaterLevel(-15.0f);
+            badlandsGenerator.apply(map, h);
+        } else if (flags.isMonolithPlains) {
             data.setWaterLevel(-2.0f);
         } else if (flags.isCraterFields) {
             data.setWaterLevel(-10.0f);
@@ -284,6 +295,7 @@ public class ClassicGenerator implements ITerrainGenerator {
         float water = data.getWaterLevel();
 
         long tBunker = PerfLog.now();
+        if (flags.isTableMountain || flags.isBadlands) bunkerGenerator.setGreensideBunkerRatio(1.0f);
         bunkerGenerator.generateBunkers(map, h, data.getnBunkers(), data.getBunkerDepth(), gX, gZ, teeP, bunkerRecords, water);
         PerfLog.log("generateBunkers", tBunker);
 
@@ -316,6 +328,19 @@ public class ClassicGenerator implements ITerrainGenerator {
         long tDeepRough = PerfLog.now();
         applyDeepRoughPass(map);
         PerfLog.log("applyDeepRoughPass", tDeepRough);
+
+        if (flags.isBadlands) {
+            long tSand = PerfLog.now();
+            // Scatter SAND through the remaining ROUGH (same noise approach as deep rough)
+            applySandPass(map, 0.22f);
+            // Everything else is bare cracked rock — no plain ROUGH on Badlands
+            int bSIZE_X = map.length, bSIZE_Z = map[0].length;
+            for (int x = 0; x < bSIZE_X; x++)
+                for (int z = 0; z < bSIZE_Z; z++)
+                    if (map[x][z] == Terrain.TerrainType.ROUGH)
+                        map[x][z] = Terrain.TerrainType.STONE;
+            PerfLog.log("applySandPass+roughToStone", tSand);
+        }
 
         if (data.getMudHeight() > -99f) {
             long tMud = PerfLog.now();
@@ -436,6 +461,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                         || t == Terrain.TerrainType.DEEP_ROUGH
                         || t == Terrain.TerrainType.MUD;
                 if (!validType || worldY < water - 0.5f) continue;
+            } else if (data.getArchetype() == LevelData.Archetype.TABLE_MOUNTAIN) {
+                if (map[tx][tz] != Terrain.TerrainType.DEEP_ROUGH || worldY < water + 0.1f) continue;
             } else {
                 if (worldY < water + 0.1f || (map[tx][tz] != Terrain.TerrainType.ROUGH && map[tx][tz] != Terrain.TerrainType.DEEP_ROUGH)) continue;
             }
@@ -643,6 +670,35 @@ public class ClassicGenerator implements ITerrainGenerator {
         }
     }
 
+    /**
+     * Scatters SAND patches through ROUGH tiles using the same multi-wave noise
+     * approach as applyDeepRoughPass. Applied after the deep-rough pass so that
+     * DEEP_ROUGH areas are not overwritten.
+     *
+     * @param map      terrain type grid
+     * @param coverage approximate fraction of eligible ROUGH tiles to convert (0–1)
+     */
+    private void applySandPass(Terrain.TerrainType[][] map, float coverage) {
+        int SIZE_X = map.length, SIZE_Z = map[0].length;
+
+        // Offset so sand and deep-rough patches use independent noise
+        float sOff1 = off1 + 500f;
+        float sOff2 = off2 + 700f;
+
+        final float PATCH_FREQ    = 0.050f;  // ~35-tile patch wavelength
+        final float PATCH_FEATHER = 0.12f;
+        float threshold = 1f - coverage;     // noise must exceed this to convert
+
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                if (map[x][z] != Terrain.TerrainType.ROUGH) continue;
+                float n      = processor.generateMultiWaveNoise(x + sOff1, z + sOff2, PATCH_FREQ);
+                float chance = MathUtils.clamp((n - (threshold - PATCH_FEATHER)) / (PATCH_FEATHER * 2f), 0f, 1f);
+                if (rng.nextFloat() < chance) map[x][z] = Terrain.TerrainType.SAND;
+            }
+        }
+    }
+
     /** Converts ROUGH/DEEP_ROUGH tiles at or below water + mudHeight into MUD. */
     private void applyMudPass(Terrain.TerrainType[][] map, float[][] heights, float water) {
         float ceiling = water + data.getMudHeight();
@@ -787,9 +843,11 @@ public class ClassicGenerator implements ITerrainGenerator {
                 }
             }
         }
-        if (data.getMinFairwayWidth() <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
-        else
-            processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
+        boolean isTableMountain = data.getArchetype() == LevelData.Archetype.TABLE_MOUNTAIN;
+        if (!isTableMountain) {
+            if (data.getMinFairwayWidth() <= 0) processor.generateSegmentedFairway(map, gX, gZ, fWidth);
+            else processor.generateContinuousFairway(map, gX, gZ, fWidth, data.getMinFairwayWidth(), data.getFairwayWiggle(), isIsland, data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY);
+        }
     }
 
     private float calculateHeightNoise(int x, int z, float freq, float und, float maxH, LevelData.TerrainAlgorithm algo) {
@@ -825,7 +883,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isOasisDunes, isStoneRun, isWoodlandEdge, isCypressBayou, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isOasisDunes, isStoneRun, isWoodlandEdge, isCypressBayou, isBadlands, isTableMountain, isPathDependent;
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
             isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
@@ -841,6 +899,8 @@ public class ClassicGenerator implements ITerrainGenerator {
             isStoneRun = data.getArchetype() == LevelData.Archetype.STONE_RUN;
             isWoodlandEdge = data.getArchetype() == LevelData.Archetype.WOODLAND_EDGE;
             isCypressBayou = data.getArchetype() == LevelData.Archetype.CYPRESS_BAYOU;
+            isBadlands = data.getArchetype() == LevelData.Archetype.BADLANDS;
+            isTableMountain = data.getArchetype() == LevelData.Archetype.TABLE_MOUNTAIN;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }

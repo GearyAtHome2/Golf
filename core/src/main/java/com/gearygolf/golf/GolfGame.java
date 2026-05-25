@@ -57,6 +57,8 @@ import com.gearygolf.golf.terrain.level.LevelData;
 import com.gearygolf.golf.terrain.level.LevelDataGenerator;
 import com.gearygolf.golf.terrain.level.LevelFactory;
 import com.gearygolf.golf.terrain.tutorial.TutorialGenerator;
+import com.gearygolf.golf.shot.ShotExportPacket;
+import com.gearygolf.golf.terrain.TerrainGenVersion;
 import com.gearygolf.golf.tutorial.TutorialController;
 import com.gearygolf.golf.tutorial.TutorialPrefs;
 
@@ -70,7 +72,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         this.googleSignInProvider = googleSignInProvider;
     }
 
-    private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG, DETERM_TEST, MULTIPLAYER_LOBBY, SOUND_SETTINGS, PROFILE_SCREEN, RANK_INFO}
+    private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG, DETERM_TEST, MULTIPLAYER_LOBBY, SOUND_SETTINGS, PROFILE_SCREEN, RANK_INFO, SHOT_REPLAY}
 
     private GameState currentState = GameState.LOGIN;
     private GameState previousState = GameState.START;
@@ -112,11 +114,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private boolean isVictory = false;
     private boolean standard18UploadDone = false;
     private boolean standard18UploadInProgress = false;
-    private Ball.State prevBallState = Ball.State.STATIONARY;
+    private Ball.State prevBallState      = Ball.State.STATIONARY;
+    private Ball.State prevBallStateToast = Ball.State.STATIONARY;
     private boolean showClubInfo = false;
     private TutorialSession tutorialSession = null;
     private SubmissionCoordinator submissionCoordinator;
     private final RoundHistoryService profileHistoryService = new RoundHistoryService();
+    // The encoded export string for the most recently fired shot. Never cleared between
+    // holes or game modes so the user can pause on hole N+1 and still export hole N's shot.
+    private String lastShotExport = null;
+    private ShotExportPacket.ShotReplayData pendingShotReplay = null;
+    private boolean shotReplayReady = false;
     private Model highlightModel;
     private ModelInstance highlightInstance;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
@@ -471,6 +479,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             exitToMainMenu();
             return;
         }
+        if (hud.wasImportShotRequested()) {
+            importShotFromClipboard();
+            return;
+        }
         if (submissionCoordinator.isSubmissionInProgress()) return;
 
         switch (currentState) {
@@ -570,6 +582,27 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             return;
         }
 
+        // Shot replay: waiting for launch trigger before normal gameplay begins
+        if (gameplayState == GameState.SHOT_REPLAY && shotReplayReady && pendingShotReplay != null) {
+            boolean fire = inputProcessor.isActionJustPressed(GameInputProcessor.Action.CHARGE_SHOT)
+                    || (Platform.isAndroid() && Gdx.input.justTouched());
+            if (fire) {
+                ball.launchReplay(pendingShotReplay.vx, pendingShotReplay.vy, pendingShotReplay.vz,
+                        pendingShotReplay.wx, pendingShotReplay.wy, pendingShotReplay.wz);
+                hazardManager.setBallHit(true);
+                shotReplayReady = false;
+                if (soundManager != null) {
+                    String cat = currentClub == Club.DRIVER ? "driver"
+                            : currentClub == Club.PUTTER ? "putter"
+                            : currentClub.name().contains("WEDGE") ? "wedge" : "iron";
+                    soundManager.playBallStrike(cat, 1.0f);
+                    soundManager.startFlightSound(com.gearygolf.golf.ball.MinigameResult.Rating.GREAT);
+                }
+            }
+            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) changeState(GameState.PAUSED);
+            return;
+        }
+
         if (tutorialSession != null) {
             handleTutorialInput();
             // No early return — club changes and normal input continue.
@@ -586,10 +619,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 !inputProcessor.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) {
 
             int direction = 0;
-            if (!Platform.isAndroid()) {
+            if (!Platform.isAndroid() && !config.cinematicMode) {
                 float scroll = inputProcessor.getActionValue(GameInputProcessor.Action.SCROLL_Y);
                 if (scroll != 0) direction = scroll > 0 ? 1 : -1;
-            } else {
+            } else if (Platform.isAndroid()) {
                 if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) direction = -1;
                 else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) direction = 1;
             }
@@ -611,6 +644,23 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) config.adjustGameSpeed(true);
         if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_DOWN)) config.adjustGameSpeed(false);
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.TRAILER_MODE) && !Platform.isAndroid()) {
+            config.cinematicMode = !config.cinematicMode;
+            if (cameraController != null) cameraController.setDetached(config.cinematicMode);
+        }
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.REPLAY_SHOT) && config.cinematicMode) {
+            if (ball != null) ball.replayShot();
+        }
+        if (config.cinematicMode && cameraController != null && cameraController.isDetached()) {
+            float fwd   = inputProcessor.isActionPressed(GameInputProcessor.Action.CLUB_UP)          ?  1f : 0f;
+            float back  = inputProcessor.isActionPressed(GameInputProcessor.Action.CLUB_DOWN)         ?  1f : 0f;
+            float right = inputProcessor.isActionPressed(GameInputProcessor.Action.TRAILER_PAN_RIGHT) ?  1f : 0f;
+            float left  = inputProcessor.isActionPressed(GameInputProcessor.Action.TRAILER_PAN_LEFT)  ?  1f : 0f;
+            float fwdInput   = fwd  - back;
+            float rightInput = right - left;
+            if (fwdInput != 0 || rightInput != 0)
+                cameraController.panFocalPoint(fwdInput, rightInput, Gdx.graphics.getDeltaTime());
+        }
     }
 
     private void handlePauseInput() {
@@ -819,6 +869,13 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             return new LevelFactory.LevelCreationResult(new TutorialGenerator(), tutorialData, Club.DRIVER, -1f, 250);
         }
 
+        if (gameplayState == GameState.SHOT_REPLAY && pendingShotReplay != null) {
+            LevelData data = LevelDataGenerator.createFixedLevelData(pendingShotReplay.holeSeed, pendingShotReplay.archetype);
+            ITerrainGenerator generator = LevelFactory.createGeneratorForData(data);
+            hud.resetShots();
+            return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
+        }
+
         LevelFactory.GameMode mode = switch (gameplayState) {
             case START -> LevelFactory.GameMode.START;
             case PRACTICE_RANGE -> LevelFactory.GameMode.PRACTICE_RANGE;
@@ -830,12 +887,12 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (gameplayState == GameState.COMPETITIVE && active != null) {
             hud.setActiveSession(active);
             LevelData data = active.getCourseLayout().get(active.getCurrentHoleIndex());
-            ITerrainGenerator generator = new ClassicGenerator(data);
+            ITerrainGenerator generator = LevelFactory.createGeneratorForData(data);
             return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
         } else if (mode == LevelFactory.GameMode.PLAYING && selectedArchetype != null) {
             long seed = (manualSeed == -1) ? System.nanoTime() : manualSeed;
             LevelData data = LevelDataGenerator.createFixedLevelData(seed, selectedArchetype);
-            ITerrainGenerator generator = new ClassicGenerator(data);
+            ITerrainGenerator generator = LevelFactory.createGeneratorForData(data);
             hud.resetShots();
             return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
         } else {
@@ -851,7 +908,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Vector3 hole = terrain.getHolePosition();
         if (soundManager != null) soundManager.setWindGroundLevel((tee.y + hole.y) * 0.5f);
 
-        if (gameplayState == GameState.PUTTING_GREEN) {
+        if (gameplayState == GameState.SHOT_REPLAY && pendingShotReplay != null) {
+            // Spawn at the exported shot position — ball is STATIONARY, user fires it manually
+            ball = new Ball(new Vector3(pendingShotReplay.sx, pendingShotReplay.sy, pendingShotReplay.sz),
+                    particleManager, config, pendingShotReplay.holeSeed);
+        } else if (gameplayState == GameState.PUTTING_GREEN) {
             terrain.setTeePosition(new Vector3(tee.x, terrain.getHeightAt(tee.x, tee.z), tee.z));
             terrain.setHolePosition(new Vector3(hole.x, terrain.getHeightAt(hole.x, hole.z), hole.z));
             ball = new Ball(new Vector3(tee.x, tee.y + 0.5f, tee.z), particleManager, config, 100L);
@@ -868,7 +929,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             }
             ball = new Ball(spawnPos, particleManager, config, seed);
         }
-        prevBallState = Ball.State.STATIONARY; // suppress spurious save on first frame
+        prevBallState      = Ball.State.STATIONARY; // suppress spurious save on first frame
+        prevBallStateToast = (gameplayState == GameState.SHOT_REPLAY)
+                ? Ball.State.STATIONARY : Ball.State.AIR; // AIR triggers TEE toast; skip in replay
         ambientPosTimer = 0f; // recompute water/foliage positions immediately on new hole
         hazardManager.setBallHit(false);
         refreshCameraController(hole);
@@ -1074,7 +1137,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     null);
             }
 
-            if (!isVictory) {
+            if (!isVictory && !(gameplayState == GameState.SHOT_REPLAY && shotReplayReady)) {
                 updateShotLogic(delta, terrain);
             }
 
@@ -1165,6 +1228,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             prevBallState = currentBallState;
         }
 
+        // Terrain toast: show label on rest, dismiss on shot (all game modes).
+        Ball.State toastState = ball.getState();
+        if (!isVictory && toastState == Ball.State.STATIONARY && prevBallStateToast != Ball.State.STATIONARY) {
+            com.gearygolf.golf.terrain.Terrain.TerrainType restType =
+                    terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
+            hud.triggerTerrainToast(restType, ball.getPosition(), camera);
+        } else if (toastState != Ball.State.STATIONARY && prevBallStateToast == Ball.State.STATIONARY) {
+            hud.dismissTerrainToast();
+        }
+        prevBallStateToast = toastState;
+
         // Continuous 500ms shot poll + per-ball physics (multiplayer only).
         if (isMultiplayer && !remoteBalls.isEmpty()) {
             Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
@@ -1241,6 +1315,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         PhysicsProfiler.startSection("ShotControllerCharge");
         shotController.setGuidelineAvailable(config.difficulty.hasShotProjection());
         if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
+            ball.snapshotShotStart(); // trailer mode: capture initial state for replay
+            captureLastShot();
             if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
             hazardManager.setBallHit(true);
             if (gameplayState == GameState.COMPETITIVE) {
@@ -1259,6 +1335,32 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             }
         }
         PhysicsProfiler.endSection("ShotControllerCharge");
+    }
+
+    private void captureLastShot() {
+        if (ball == null || currentLevelData == null) return;
+        LevelData.Archetype archetype = currentLevelData.getArchetype();
+        GameSession active = sessionManager.getActive();
+        int holeIndex = (active != null) ? active.getCurrentHoleIndex() : 0;
+        lastShotExport = ShotExportPacket.encode(
+            TerrainGenVersion.CURRENT, archetype,
+            currentLevelData.getSeed(), holeIndex,
+            ball.getPosition().x, ball.getPosition().y, ball.getPosition().z,
+            ball.getVelocity().x, ball.getVelocity().y, ball.getVelocity().z,
+            ball.getSpin().x, ball.getSpin().y, ball.getSpin().z
+        );
+    }
+
+    private void importShotFromClipboard() {
+        String clip = Gdx.app.getClipboard().getContents();
+        ShotExportPacket.ShotReplayData data = ShotExportPacket.decode(clip != null ? clip.trim() : null);
+        if (data == null) {
+            hud.showGameNotification("INVALID SHOT STRING", Color.RED, 2.5f);
+            return;
+        }
+        pendingShotReplay = data;
+        shotReplayReady = true;
+        startLoadingLevel(GameState.SHOT_REPLAY, -1);
     }
 
     private void updateDetermTest(float effDelta, Terrain terrain) {
@@ -1457,7 +1559,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         } else if (isVictory && !(isMultiplayer && mpScoreboardVisible)) {
             hud.renderVictory(hud.getShotCount(), currentLevelData, active, standard18UploadDone || standard18UploadInProgress);
         } else if (currentState == GameState.PAUSED) {
-            hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionCoordinator.isSubmissionInProgress());
+            hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionCoordinator.isSubmissionInProgress(), lastShotExport);
+        } else if (currentState == GameState.SHOT_REPLAY && shotReplayReady) {
+            hud.renderShotReplayReadyHUD(pendingShotReplay);
         } else {
             if (!config.difficulty.hasClubInfo()) showClubInfo = false;
             Terrain terrain = levelManager.getTerrain();
@@ -1878,7 +1982,20 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private void enterProfileScreen() {
         hud.resetProfileScreen();
-        changeState(GameState.PROFILE_SCREEN);
+        if (authService != null && userSession.isIdTokenExpired()) {
+            authService.refreshToken(userSession.getRefreshToken(), new AuthService.AuthCallback() {
+                @Override public void onSuccess(AuthService.AuthResult r) {
+                    userSession.updateIdToken(r.idToken, r.refreshToken);
+                    changeState(GameState.PROFILE_SCREEN);
+                }
+                @Override public void onFailure(String msg) {
+                    Gdx.app.log("GolfGame", "Token refresh failed before profile open: " + msg);
+                    changeState(GameState.PROFILE_SCREEN);
+                }
+            });
+        } else {
+            changeState(GameState.PROFILE_SCREEN);
+        }
     }
 
     private void enterInstructions() {
@@ -2072,7 +2189,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private boolean isGameplayState(GameState state) {
         return state == GameState.PLAYING || state == GameState.COMPETITIVE ||
                 state == GameState.PRACTICE_RANGE || state == GameState.PUTTING_GREEN ||
-                state == GameState.DETERM_TEST;
+                state == GameState.DETERM_TEST || state == GameState.SHOT_REPLAY;
     }
 
     private boolean isGameplayState() {

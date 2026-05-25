@@ -65,6 +65,11 @@ public class Terrain {
     private int gridCols, gridRows;
     private final Vector3 tempRayDir = new Vector3();
 
+    // Pre-allocated buffers for getTreesAt / getMonolithsAt — callers consume immediately via for-each.
+    private final List<TerrainObject> nearbyBuffer = new ArrayList<>(50);
+    private final List<Tree> treeBuffer = new ArrayList<>(20);
+    private final List<Monolith> monolithBuffer = new ArrayList<>(10);
+
     public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
         this.SIZE_Z = dynamicSizeZ;
         this.waterLevel = initialWaterLevel;
@@ -261,35 +266,35 @@ public class Terrain {
     }
 
     public List<Tree> getTreesAt(float worldX, float worldZ) {
-        List<Tree> result = new ArrayList<>();
+        treeBuffer.clear();
         for (TerrainObject obj : getNearbyObjects(worldX, worldZ)) {
-            if (obj instanceof Tree) result.add((Tree) obj);
+            if (obj instanceof Tree) treeBuffer.add((Tree) obj);
         }
-        return result;
+        return treeBuffer;
     }
 
     public List<Monolith> getMonolithsAt(float worldX, float worldZ) {
-        List<Monolith> result = new ArrayList<>();
+        monolithBuffer.clear();
         for (TerrainObject obj : getNearbyObjects(worldX, worldZ)) {
-            if (obj instanceof Monolith) result.add((Monolith) obj);
+            if (obj instanceof Monolith) monolithBuffer.add((Monolith) obj);
         }
-        return result;
+        return monolithBuffer;
     }
 
     private List<TerrainObject> getNearbyObjects(float worldX, float worldZ) {
         int gx = MathUtils.clamp((int) ((worldX + (SIZE_X * SCALE / 2f)) / CELL_SIZE), 0, gridCols - 1);
         int gz = MathUtils.clamp((int) ((worldZ + (SIZE_Z * SCALE / 2f)) / CELL_SIZE), 0, gridRows - 1);
-        List<TerrainObject> nearby = new ArrayList<>();
+        nearbyBuffer.clear();
         int radius = 2;
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
                 int nx = gx + x, nz = gz + z;
                 if (nx >= 0 && nx < gridCols && nz >= 0 && nz < gridRows) {
-                    nearby.addAll(objectGrid[nx][nz]);
+                    nearbyBuffer.addAll(objectGrid[nx][nz]);
                 }
             }
         }
-        return nearby;
+        return nearbyBuffer;
     }
 
     public float getSurfaceHeightAt(float worldX, float worldZ) {

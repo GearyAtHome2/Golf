@@ -257,7 +257,7 @@ public class TutorialOverlayRenderer {
             case STEP_5_POWER    -> "Hold Ctrl + Space";
             case STEP_6_HIT      -> "Press Space to stop the needle";
             case STEP_8_PUTTER -> "Scroll to Putter, then aim and press Space";
-            case STEP_9_PROJECT -> "Press R to view shot projection";
+            case STEP_9_PROJECT -> "Press P to view shot projection";
             case STEP_10_AIM      -> "Aim at the flag, hold SPACE to pick shot power";
             case STEP_12_COMPLETE_1, STEP_13_COMPLETE_2 -> "Press N to continue";
             default              -> null;

@@ -13,7 +13,7 @@ import com.gearygolf.golf.session.GameSession;
 public class PauseMenuRenderer {
     private final GlyphLayout layout = new GlyphLayout();
 
-    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, GameConfig config, float seedFeedbackTimer, GameSession session) {
+    public void render(SpriteBatch batch, BitmapFont font, Viewport viewport, GameConfig config, float seedFeedbackTimer, float shotExportFeedbackTimer, boolean hasLastShot, GameSession session) {
         float screenW = viewport.getWorldWidth();
         float screenH = viewport.getWorldHeight();
         float centerX = screenW / 2f;
@@ -59,6 +59,11 @@ public class PauseMenuRenderer {
                 font.setColor(0, 1, 0, alpha);
                 drawCenteredText(batch, font, "SEED COPIED TO CLIPBOARD", centerX, currentY - 5);
             }
+            if (shotExportFeedbackTimer > 0) {
+                float alpha = MathUtils.clamp(shotExportFeedbackTimer, 0, 1f);
+                font.setColor(0, 1, 0, alpha);
+                drawCenteredText(batch, font, "SHOT COPIED TO CLIPBOARD", centerX, currentY - 5);
+            }
 
             currentY -= (spacing * 0.5f);
             drawCenteredShadowedText(batch, font, "----------------", centerX, currentY, Color.GRAY);
@@ -74,6 +79,13 @@ public class PauseMenuRenderer {
             currentY -= spacing;
 
             drawCenteredShadowedText(batch, font, "[C] COPY SEED", centerX, currentY, Color.WHITE);
+            currentY -= spacing;
+
+            Color exportColor = hasLastShot ? Color.WHITE : Color.GRAY;
+            drawCenteredShadowedText(batch, font, "[E] EXPORT SHOT", centerX, currentY, exportColor);
+            currentY -= spacing;
+
+            drawCenteredShadowedText(batch, font, "[P] IMPORT SHOT", centerX, currentY, Color.WHITE);
             currentY -= spacing;
 
             drawCenteredShadowedText(batch, font, "[M] EXIT TO MAIN MENU", centerX, currentY, Color.WHITE);

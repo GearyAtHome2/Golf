@@ -30,6 +30,7 @@ public class UserSession {
     private static final String KEY_REFRESH_TOKEN  = "refreshToken";
     private static final String KEY_ID_TOKEN       = "idToken";
     private static final String KEY_ID_TOKEN_EXPIRY = "idTokenExpiry";
+    private static final String KEY_GUEST           = "guest";
 
     private static final long TOKEN_LIFETIME_MS = 3_600_000L; // 1 hour
 
@@ -40,6 +41,7 @@ public class UserSession {
     private String refreshToken = "";
     private String idToken      = "";
     private long   idTokenExpiry = 0L;
+    private boolean guest       = false;
 
     // -------------------------------------------------------------------------
     // Load / Save / Clear
@@ -54,6 +56,7 @@ public class UserSession {
         refreshToken  = prefs.getString(KEY_REFRESH_TOKEN,  "");
         idToken       = prefs.getString(KEY_ID_TOKEN,       "");
         idTokenExpiry = prefs.getLong(KEY_ID_TOKEN_EXPIRY,  0L);
+        guest         = prefs.getBoolean(KEY_GUEST,         false);
     }
 
     /** Saves a successful auth result to disk and updates in-memory state. */
@@ -83,9 +86,19 @@ public class UserSession {
         refreshToken  = "";
         idToken       = "";
         idTokenExpiry = 0L;
+        guest         = false;
 
         Preferences prefs = Gdx.app.getPreferences(PREFS_NAME);
         prefs.clear();
+        prefs.flush();
+    }
+
+    /** Like save(), but marks this session as a guest (anonymous) account. */
+    public void saveAsGuest(AuthService.AuthResult result) {
+        save(result);
+        guest = true;
+        Preferences prefs = Gdx.app.getPreferences(PREFS_NAME);
+        prefs.putBoolean(KEY_GUEST, true);
         prefs.flush();
     }
 
@@ -156,6 +169,9 @@ public class UserSession {
 
     /** True if a refresh token is stored — does NOT guarantee the token is still valid. */
     public boolean isLoggedIn()       { return !refreshToken.isEmpty(); }
+
+    /** True if this is an anonymous guest account that cannot be recovered after logout. */
+    public boolean isGuest()          { return guest; }
 
     public String getRefreshToken()   { return refreshToken; }
 

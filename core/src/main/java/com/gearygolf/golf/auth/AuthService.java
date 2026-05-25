@@ -133,6 +133,25 @@ public class AuthService {
     }
 
     // -------------------------------------------------------------------------
+    // Sign in anonymously (guest account — no email or password required)
+    // -------------------------------------------------------------------------
+
+    public void signInAnonymously(AuthCallback callback) {
+        String body = "{\"returnSecureToken\":true}";
+
+        post(AUTH_BASE + "signUp", body, response -> {
+            AuthResult result = new AuthResult(
+                response.getString("localId",      ""),
+                response.getString("idToken",      ""),
+                response.getString("refreshToken", ""),
+                "",
+                ""
+            );
+            Gdx.app.postRunnable(() -> callback.onSuccess(result));
+        }, msg -> callback.onFailure(msg));
+    }
+
+    // -------------------------------------------------------------------------
     // Sign in with Google (exchange a Google ID token for a Firebase session)
     // -------------------------------------------------------------------------
 

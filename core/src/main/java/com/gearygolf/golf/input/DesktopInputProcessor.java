@@ -45,6 +45,12 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
         keyMap.put(Action.MENU_SELECT, Input.Keys.ENTER);
         keyMap.put(Action.CANCEL_MENU, Input.Keys.ESCAPE);
         keyMap.put(Action.OPEN_SOUND_SETTINGS, Input.Keys.V);
+        keyMap.put(Action.TRAILER_MODE,       Input.Keys.F5);
+        keyMap.put(Action.REPLAY_SHOT,        Input.Keys.T);
+        keyMap.put(Action.TRAILER_PAN_LEFT,   Input.Keys.LEFT);
+        keyMap.put(Action.TRAILER_PAN_RIGHT,  Input.Keys.RIGHT);
+        keyMap.put(Action.EXPORT_SHOT,        Input.Keys.E);
+        keyMap.put(Action.IMPORT_SHOT,        Input.Keys.P);
     }
 
     public void setInputBlocked(boolean blocked) {

@@ -1,5 +1,6 @@
 package com.gearygolf.golf.ball;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
@@ -23,6 +24,8 @@ public class ShotController {
     private static final float BASE_VERTICAL_GAP = 0.2f;
     private static final float GAP_SCALE_MODIFIER = 0.4f;
 
+    private static final boolean DEBUG_SHOT = true;
+
     private Model powerBarModel;
     private ModelInstance powerBarInstance;
     private ModelInstance maxPowerGhost;
@@ -33,7 +36,6 @@ public class ShotController {
     private ModelInstance targetDotInstance;
 
     private float spaceHoldTime = 0f;
-    private float shotPower = 0f;
     private boolean isCharging = false;
     private final float MAX_POWER = 3f;
 
@@ -64,6 +66,7 @@ public class ShotController {
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
     private final Vector3 projectionVector = new Vector3();
+    private final Vector2 tempSpin = new Vector2();
 
     private Vector3 lastBallPos = new Vector3();
     private boolean ballIsStationary = false;
@@ -229,10 +232,6 @@ public class ShotController {
             return false;
         }
 
-        if (shotPower > 0) {
-            shotPower -= delta * 6f;
-            if (shotPower < 0) shotPower = 0;
-        }
         return false;
     }
 
@@ -242,10 +241,27 @@ public class ShotController {
     }
 
     private void executeShot(Ball ball, Vector3 aimDirFreeform, Club club, float power, Vector2 spin, Terrain terrain, MinigameResult result) {
+        float rawR = MathUtils.clamp(spin.len(), 0f, 1f);
+
+        // Edge-of-face mis-hit factor: essentially zero until the last 8% of spindicator radius,
+        // then rises sharply to 1.0 at the rim. Simulates topping, toeing, and heeling.
+        float edgeNorm = MathUtils.clamp((rawR - 0.92f) / 0.08f, 0f, 1f);
+        float edgeFactor = (float) Math.pow(edgeNorm, 5);
+
         calculateShotVector(tempV1, aimDirFreeform, club, spin, terrain, result.accuracy);
 
-        float rawR = MathUtils.clamp(spin.len(), 0f, 1f);
-        float powerPenalty = (float) Math.pow(rawR, 6) * 0.40f;
+        // Amplify direction deviation at the edge: heel/toe push (yaw) and over/deloft (pitch)
+        if (edgeFactor > 0.001f && rawR > 0.001f) {
+            tempV2.set(aimDirFreeform.x, 0, aimDirFreeform.z).nor();
+            projectionVector.set(tempV2).crs(Vector3.Y).nor();
+            tempSpin.set(spin).nor();
+            tempV1.rotate(Vector3.Y, tempSpin.x * edgeFactor * 20f);
+            tempV1.rotate(projectionVector, tempSpin.y * edgeFactor * 15f);
+            tempV1.nor();
+        }
+
+        // Power: smooth base off-centre penalty + sharp edge penalty, capped at 75%
+        float powerPenalty = Math.min(0.75f, (float) Math.pow(rawR, 6) * 0.40f + edgeFactor * 0.75f);
         float finalPowerMult = club.powerMult * (1.0f - powerPenalty) * result.powerMod;
 
         // Terrain penalties: scale power and spin based on surface type and shot quality
@@ -260,8 +276,8 @@ public class ShotController {
         ball.hit(tempV1, power, launchLoft, finalPowerMult, result.rating);
         if (soundManager != null) soundManager.startFlightSound(result.rating);
 
-        Vector3 aimDir = new Vector3(aimDirFreeform.x, 0, aimDirFreeform.z).nor();
-        Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
+        tempV2.set(aimDirFreeform.x, 0, aimDirFreeform.z).nor();
+        projectionVector.set(tempV2).crs(Vector3.Y).nor();
 
         Vector2 quadOffset = getQuadraticSpinOffset(spin);
         float attackAngle = quadOffset.y * -20.0f;
@@ -269,10 +285,48 @@ public class ShotController {
         float spinCurve = (float) Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
         float quality = getQualityFactor(result.rating);
 
-        float backspin = (power * finalPowerMult) * sForce * 14.5f * (1.0f + (quadOffset.y * 1.8f)) * quality * spinCurve * terrainSpinMult;
-        float sidespin = ((quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 60.0f * spinCurve)) * terrainSpinMult;
+        // As contact drifts off-centre, clean groove contact degrades and the attack-angle
+        // backspin bonus diminishes — even a steep downward strike loses spin transfer.
+        // rawR^4 * 0.70 means ~41% bonus reduction at rawR=0.8, ~82% at rawR=0.95.
+        float attackAngleDamping = 1f - (float) Math.pow(rawR, 4) * 0.70f;
 
-        ball.getSpin().set(rightOfAim).scl(backspin);
+        // Low-loft clubs (long irons) benefit strongly from steep attack angles — stinger effect.
+        // High-loft clubs generate spin naturally from loft alone; attack angle adds little extra.
+        // loftFactor^2 gives a sharp curve: 2i/3i/4i keep high bonus, 9i/wedges nearly lose it.
+        float loftFactor = MathUtils.clamp(1f - (club.loft - 10f) / 45f, 0f, 1f);
+        // Long irons benefit strongly from attack angle (stinger effect, high loftFactor → high coeff).
+        // Wedges also benefit — groove engagement on a downward strike — but this was near-zero before.
+        // lerp gives a floor of 0.4 for high-loft clubs so pressing forward is meaningfully rewarded.
+        float attackAngleCoeff = MathUtils.lerp(0.4f, 1.4f, loftFactor * loftFactor);
+
+        // Per-club optimal attack angle sweet spot. Rising to the peak gives maximum backspin
+        // efficiency; pushing past it has diminishing returns (over-steep = loss of groove contact).
+        // Long irons peak later (~0.50) to reward the stinger zone; short irons peak earlier (~0.28).
+        float optimalAttack = MathUtils.lerp(0.28f, 0.50f, loftFactor);
+        float attackEfficiency;
+        if (quadOffset.y <= 0f) {
+            attackEfficiency = 0f; // ascending blow — no backspin bonus
+        } else if (quadOffset.y <= optimalAttack) {
+            attackEfficiency = quadOffset.y / optimalAttack; // linear rise to peak
+        } else {
+            attackEfficiency = 1f - 0.65f * (quadOffset.y - optimalAttack) / (1f - optimalAttack);
+        }
+        attackEfficiency = MathUtils.clamp(attackEfficiency, 0f, 1f);
+
+        float backspin = (power * finalPowerMult) * sForce * 9.0f * (1.0f + (quadOffset.y * attackAngleCoeff * attackAngleDamping * attackEfficiency)) * quality * spinCurve * terrainSpinMult * club.spinMult;
+        float sidespin = ((quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 60.0f * spinCurve)) * terrainSpinMult * club.spinMult;
+
+        // Edge spin reversal: crosses zero at edgeFactor=0.5, fully reversed at edgeFactor=1.
+        // At the rim, backspin becomes topspin (topping the ball).
+        float spinReversalFactor = 1f - (2f * edgeFactor);
+        backspin *= spinReversalFactor;
+        sidespin *= spinReversalFactor;
+
+        if (DEBUG_SHOT) Gdx.app.log("ShotDebug", String.format(
+            "[%s] pwr=%.2f finalPwr=%.1f sForce=%.3f spinMult=%.2f atkCoeff=%.2f atkEff=%.2f back=%.1f side=%.1f",
+            club.name, power, finalPowerMult, sForce, club.spinMult, attackAngleCoeff, attackEfficiency, backspin, sidespin));
+
+        ball.getSpin().set(projectionVector).scl(backspin);
         ball.getSpin().add(tempV2.set(Vector3.Y).scl(-sidespin));
     }
 
@@ -373,7 +427,7 @@ public class ShotController {
             batch.render(targetDotInstance, env);
         }
 
-        float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : shotPower);
+        float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : 0f);
         if (height <= 0 && !isCharging && !isPowerLocked && !waitingForMinigame) return;
 
         float dist = camPos.dst(ballPos);

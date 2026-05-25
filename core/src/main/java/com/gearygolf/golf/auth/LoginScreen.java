@@ -149,6 +149,14 @@ public class LoginScreen {
         innerPanel.add(errorLbl).width(fieldW + 40f).padTop(sp).row();
         activeErrorLabel = errorLbl;
 
+        TextButton privacyBtn = makeLinkBtn("Privacy Policy", labelScale * 0.72f);
+        privacyBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                Gdx.net.openURI("https://gearyathome2.github.io/");
+            }
+        });
+        innerPanel.add(privacyBtn).center().padTop(sp * 0.5f).row();
+
         root.add(innerPanel).width(panelW).expand().center();
         stage.addActor(root);
 
@@ -186,6 +194,8 @@ public class LoginScreen {
         links.add(forgotBtn).expandX().right();
         t.add(links).width(fw).padTop(sp).row();
 
+        TextButton guestBtn = makeLinkBtn("Play as Guest", ls * 0.82f);
+
         if (googleSignInProvider != null) {
             Label orLbl = new Label("— or —", skin, "default");
             orLbl.setFontScale(ls * 0.72f);
@@ -194,7 +204,8 @@ public class LoginScreen {
             t.add(orLbl).expandX().padTop(pad * 0.8f).padBottom(pad * 0.5f).row();
 
             TextButton googleBtn = makeButton("SIGN IN WITH GOOGLE", bs * 0.90f);
-            t.add(googleBtn).width(fw).height(bh).row();
+            t.add(googleBtn).width(fw).height(bh).padBottom(sp * 0.5f).row();
+            t.add(guestBtn).center().row();
 
             googleBtn.addListener(new ChangeListener() {
                 @Override public void changed(ChangeEvent e, Actor a) {
@@ -215,6 +226,13 @@ public class LoginScreen {
                     });
                 }
             });
+        } else {
+            Label orLbl = new Label("— or —", skin, "default");
+            orLbl.setFontScale(ls * 0.72f);
+            orLbl.setColor(Color.GRAY);
+            orLbl.setAlignment(Align.center);
+            t.add(orLbl).expandX().padTop(pad * 0.8f).padBottom(pad * 0.5f).row();
+            t.add(guestBtn).center().row();
         }
 
         Runnable doLogin = () -> {
@@ -247,6 +265,23 @@ public class LoginScreen {
         forgotBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (!busy) { currentView = View.FORGOT_PASSWORD; buildUI(); }
+            }
+        });
+        guestBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                if (busy) return;
+                showStatus("Creating guest account...");
+                setBusy(true);
+                authService.signInAnonymously(new AuthService.AuthCallback() {
+                    @Override public void onSuccess(AuthService.AuthResult r) {
+                        String name = "Guest_" + r.uid.substring(0, Math.min(6, r.uid.length()));
+                        AuthService.AuthResult named = new AuthService.AuthResult(
+                            r.uid, r.idToken, r.refreshToken, "", name);
+                        userSession.saveAsGuest(named);
+                        callback.onLoginSuccess(named);
+                    }
+                    @Override public void onFailure(String msg) { setBusy(false); showError(msg); }
+                });
             }
         });
     }

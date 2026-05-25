@@ -11,8 +11,10 @@ public class ClubInfoManager {
             case WOOD_3 ->
                     "A versatile long-range option. Ideal for reaching par 5s in two or safe tee shots on narrow fairways.";
             case WOOD_5 -> "Much more predictable and consistent than the 3-Wood, with a higher loft and lower power.";
-            case IRON_2 -> "The specialist's choice. Can hit some expertly shaped shots in the right hands.";
+            case IRON_2 -> "The lowest, longest iron with excellent spin and a high skill ceiling";
             case HYBRID_3 -> "A rescue club designed for versatility. Easy to launch, considering the distance.";
+            case IRON_3 -> "A challenging club that can hit a long, low, piercing flight path under the wind";
+            case IRON_4 -> "Enough power to get good distance with enough spin to hold the green - ideal for the longest par-3's";
             case IRON_5 ->
                     "The bridge between power and precision. Good for long approaches where you still need a bit of stop.";
             case IRON_6 -> "Geary's favourite club. Reliable for finding the green from a decent distance out.";
@@ -32,20 +34,22 @@ public class ClubInfoManager {
 
     public static String getCarryDistanceInfo(Club club) {
         return switch (club) {
-            case DRIVER -> "350 yds";
-            case IRON_2 -> "340 yds";
-            case WOOD_3 -> "330 yds";
-            case WOOD_5 -> "285 yds";
-            case HYBRID_3 -> "280 yds";
-            case IRON_5 -> "255 yds";
-            case IRON_6 -> "240 yds";
-            case IRON_7 -> "200 yds";
-            case IRON_8 -> "180 yds";
+            case DRIVER -> "360 yds";
+            case WOOD_3 -> "340 yds";
+            case WOOD_5 -> "305 yds";
+            case HYBRID_3 -> "275 yds";
+            case IRON_2 -> "300 yds";
+            case IRON_3 -> "285 yds";
+            case IRON_4 -> "268 yds";
+            case IRON_5 -> "250 yds";
+            case IRON_6 -> "236 yds";
+            case IRON_7 -> "215 yds";
+            case IRON_8 -> "190 yds";
             case IRON_9 -> "165 yds";
-            case PWEDGE -> "130 yds";
-            case GWEDGE -> "109 yds";
-            case SWEDGE -> "88 yds";
-            case LWEDGE -> "71 yds";
+            case PWEDGE -> "135 yds";
+            case GWEDGE -> "115 yds";
+            case SWEDGE -> "92 yds";
+            case LWEDGE -> "72 yds";
             case PUTTER -> "20 yds";
             default -> "Typical Distance: --";
         };

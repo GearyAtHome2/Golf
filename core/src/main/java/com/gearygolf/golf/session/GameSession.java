@@ -42,6 +42,7 @@ public class GameSession implements Json.Serializable {
 
     private transient List<LevelData> courseLayout = new ArrayList<>();
     private transient Runnable onStateChanged;
+    private transient boolean roundHistorySaved;
 
     public GameSession() {}
 
@@ -199,4 +200,6 @@ public class GameSession implements Json.Serializable {
     public boolean isSubmitted() { return submitted; }
     /** Marks this session as successfully submitted and triggers a save. */
     public void markSubmitted() { this.submitted = true; notifyStateChanged(); }
+    public boolean isRoundHistorySaved() { return roundHistorySaved; }
+    public void markRoundHistorySaved() { this.roundHistorySaved = true; }
 }

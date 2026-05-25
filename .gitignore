@@ -56,3 +56,8 @@ signing.properties
 
 ### Local save files ###
 assets/save_*.json
+
+### Claude Code tooling ###
+.claude/
+*.md
+.idea/claudeCodeTabState.xml

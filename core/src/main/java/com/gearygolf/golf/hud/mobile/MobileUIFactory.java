@@ -462,6 +462,24 @@ public static class MobileUIPackage {
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();
 
         pauseTable.top().padTop(viewport.getWorldHeight() * 0.355f);
+
+        // Seed + shot export buttons anchored to bottom-right, slightly smaller
+        Table bottomRightTable = new Table();
+        bottomRightTable.setFillParent(true);
+        float sBtnW = viewport.getWorldWidth() * 0.2f, sBtnH = viewport.getWorldHeight() * 0.07f;
+        float smallFont = scaledFont * 0.75f;
+        float padRight  = viewport.getWorldWidth()  * 0.02f;
+        float padBottom = viewport.getWorldHeight() * 0.02f;
+
+        bottomRightTable.bottom().right().padRight(padRight).padBottom(padBottom);
+        bottomRightTable.add(createMenuButton("COPY SEED", menuStyle, input, GameInputProcessor.Action.COPY_SEED, smallFont))
+                .width(sBtnW).height(sBtnH).padBottom(viewport.getWorldHeight() * 0.01f).row();
+        bottomRightTable.add(createMenuButton("EXPORT SHOT", menuStyle, input, GameInputProcessor.Action.EXPORT_SHOT, smallFont))
+                .width(sBtnW).height(sBtnH).padBottom(viewport.getWorldHeight() * 0.01f).row();
+        bottomRightTable.add(createMenuButton("IMPORT SHOT", menuStyle, input, GameInputProcessor.Action.IMPORT_SHOT, smallFont))
+                .width(sBtnW).height(sBtnH);
+
+        ui.pauseMenuStage.addActor(bottomRightTable);
     }
 
     private static void setupVictoryMenu(MobileUIPackage ui, MobileInputProcessor input, TextButton.TextButtonStyle style, Viewport viewport) {
