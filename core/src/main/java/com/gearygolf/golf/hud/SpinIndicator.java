@@ -293,7 +293,7 @@ public class SpinIndicator extends Actor {
         }
     }
 
-    public void reset() { this.spinDot.set(0, 0); }
+    public void reset() { this.spinDot.set(0, 0); this.bigModeActive = false; }
 
     public Vector2 getSpinDot() { return spinDot; }
 }

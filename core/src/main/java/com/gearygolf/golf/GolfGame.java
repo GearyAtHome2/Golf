@@ -57,6 +57,8 @@ import com.gearygolf.golf.terrain.level.LevelData;
 import com.gearygolf.golf.terrain.level.LevelDataGenerator;
 import com.gearygolf.golf.terrain.level.LevelFactory;
 import com.gearygolf.golf.terrain.tutorial.TutorialGenerator;
+import com.gearygolf.golf.terrain.tutorial.TutorialGenerator2;
+import com.gearygolf.golf.terrain.tutorial.TutorialGenerator3;
 import com.gearygolf.golf.shot.ShotExportPacket;
 import com.gearygolf.golf.terrain.TerrainGenVersion;
 import com.gearygolf.golf.tutorial.TutorialController;
@@ -78,7 +80,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private GameState previousState = GameState.START;
     private GameState gameplayState = GameState.PLAYING;
     private LevelData.Archetype selectedArchetype = null;
-    private boolean pendingTutorial = false;
+    private boolean pendingTutorial  = false;
+    private boolean tutorialCompletionTapConsumed = false;
 
     private GhostManager ghostManager;
     private MenuManager menuManager;
@@ -529,8 +532,20 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
             case STEP_2_AIM:
                 if (cameraController != null && !Float.isNaN(tutorialSession.aimStartYaw)) {
-                    float delta = Math.abs(cameraController.getYaw() - tutorialSession.aimStartYaw);
-                    if (delta > 4.5f) {
+                    float delta = cameraController.getYaw() - tutorialSession.aimStartYaw;
+                    while (delta >  180f) delta -= 360f;
+                    while (delta < -180f) delta += 360f;
+                    com.badlogic.gdx.math.Vector3 aimWind = (currentLevelData != null) ? currentLevelData.getWind() : null;
+                    boolean aimed;
+                    if (aimWind != null && aimWind.len() >= 0.3f
+                            && Math.abs(aimWind.x) >= Math.abs(aimWind.z)) {
+                        // Lateral wind: must rotate toward the correct side
+                        aimed = aimWind.x > 0 ? delta > 4.5f : delta < -4.5f;
+                    } else {
+                        // Straight/calm wind: any rotation counts
+                        aimed = Math.abs(delta) > 4.5f;
+                    }
+                    if (aimed) {
                         tutorialSession.controller.advance(); // → STEP_3_INFO
                     }
                 }
@@ -558,15 +573,54 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 break;
 
             case STEP_8_PUTTER:
-                // Advance once the shot controller starts charging (MAX was triggered)
                 if (currentClub == Club.PUTTER) {
                     tutorialSession.controller.advance();
                 }
                 break;
 
             case STEP_9_PROJECT:
-                // Advance once the shot controller starts charging (MAX was triggered)
                 if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PROJECTION)) {
+                    tutorialSession.controller.advance();
+                }
+                break;
+
+            // --- Level 2 ---
+            case STEP_L2_1_SPINDICATOR:
+                if (hud.isSpinBigMode()) {
+                    tutorialSession.controller.advance(); // → STEP_L2_1B_AIM
+                }
+                break;
+
+            case STEP_L2_1B_AIM:
+                hud.setSpinBigMode(true);
+                {
+                    com.badlogic.gdx.math.Vector2 spin = hud.getSpinOffset();
+                    if (spin.x < -0.2f && spin.y < -0.2f) {
+                        tutorialSession.controller.advance(); // → STEP_L2_2_HIT
+                    }
+                }
+                break;
+
+            case STEP_L2_2_HIT:
+            case STEP_L2_4_APPROACH:
+                // Overlay disappears as soon as the player starts charging their shot
+                if (shotController.isCharging()) {
+                    tutorialSession.controller.advance();
+                }
+                break;
+
+            // --- Level 3 ---
+            case STEP_L3_1_SPINDICATOR:
+                if (hud.isSpinBigMode()) {
+                    tutorialSession.controller.advance(); // → STEP_L3_2_WATCH
+                }
+                break;
+
+            case STEP_L3_3_LIE:
+            case STEP_L3_4_TIP:
+                if (!Gdx.input.isTouched()) tutorialCompletionTapConsumed = false;
+                if (Gdx.input.justTouched() && !tutorialCompletionTapConsumed) {
+                    tutorialCompletionTapConsumed = true;
                     tutorialSession.controller.advance();
                 }
                 break;
@@ -718,18 +772,39 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private void handleVictoryInput() {
         if (isMultiplayer && mpScoreboardVisible) return; // scoreboard stage handles input
-        // Tutorial completion steps — intercept Next Map tap to advance info boxes
+        // Tutorial: intercept input during post-hole info boxes and handle level transitions.
         if (tutorialSession != null) {
             TutorialController.Step ts = tutorialSession.controller.getCurrentStep();
-            if (ts == TutorialController.Step.STEP_12_COMPLETE_1 || ts == TutorialController.Step.STEP_13_COMPLETE_2) {
-                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) {
+            if (!tutorialSession.controller.isActive()) {
+                TutorialPrefs.markComplete();
+                exitToMainMenu();
+                return;
+            }
+            if (ts.isCompletionStep()) {
+                if (!Gdx.input.isTouched()) tutorialCompletionTapConsumed = false;
+                boolean advance = inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)
+                        || (Platform.isAndroid() && Gdx.input.justTouched() && !tutorialCompletionTapConsumed);
+                if (advance) {
+                    tutorialCompletionTapConsumed = true;
                     tutorialSession.controller.advance();
-                    if (!tutorialSession.controller.isActive()) {
+                    TutorialController.Step next = tutorialSession.controller.getCurrentStep();
+                    if (next.isNewLevelStep()) {
+                        startLoadingLevel(GameState.PLAYING, -1);
+                    } else if (next == TutorialController.Step.STEP_L3_7_DAILY_PROMPT
+                            && dailySubmissionCache.hasSubmitted(com.gearygolf.golf.scoreBoard.CourseType.HOLES_1)) {
+                        // Daily 1-hole already submitted today — skip the prompt
+                        tutorialSession.controller.advance(); // → DONE
                         TutorialPrefs.markComplete();
+                        exitToMainMenu();
+                    } else if (!tutorialSession.controller.isActive()) {
+                        TutorialPrefs.markComplete();
+                        exitToMainMenu();
                     }
                 }
                 return;
             }
+            // Tutorial active but not at a completion step — block all other victory input
+            return;
         }
         if (isVictoryCourseComplete()) {
             if (sessionManager.isDailyActive() && inputProcessor.isActionJustPressed(GameInputProcessor.Action.SUBMIT_SCORE)) {
@@ -867,6 +942,28 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             tutorialData.setPar(3);
             tutorialData.setDistance(250);
             return new LevelFactory.LevelCreationResult(new TutorialGenerator(), tutorialData, Club.DRIVER, -1f, 250);
+        }
+
+        if (tutorialSession != null) {
+            TutorialController.Step ts = tutorialSession.controller.getCurrentStep();
+            if (ts == TutorialController.Step.STEP_L2_1_SPINDICATOR) {
+                hud.resetShots();
+                LevelData tutorialData2 = new LevelData();
+                tutorialData2.setWind(new Vector3(4.5f, 0f, 7.8f));  // ~9 m/s from back-right, blowing left
+                tutorialData2.setWaterLevel(-1f);
+                tutorialData2.setPar(4);
+                tutorialData2.setDistance(700);
+                return new LevelFactory.LevelCreationResult(new TutorialGenerator2(), tutorialData2, Club.DRIVER, -1f, 700);
+            }
+            if (ts == TutorialController.Step.STEP_L3_1_SPINDICATOR) {
+                hud.resetShots();
+                LevelData tutorialData3 = new LevelData();
+                tutorialData3.setWind(new Vector3(0f, 0f, -8f));  // 8 m/s pure headwind
+                tutorialData3.setWaterLevel(-10f);
+                tutorialData3.setPar(4);
+                tutorialData3.setDistance(700);
+                return new LevelFactory.LevelCreationResult(new TutorialGenerator3(), tutorialData3, Club.DRIVER, -10f, 700);
+            }
         }
 
         if (gameplayState == GameState.SHOT_REPLAY && pendingShotReplay != null) {
@@ -1035,7 +1132,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
 
         if (tutorialSession != null) {
-            tutorialSession.controller.advance(); // STEP_11_PUTT → STEP_12_COMPLETE_1
+            // Advance once. For L3: if victory fires while hint steps are still showing,
+            // keep advancing past them so we land on STEP_L3_6_CONGRATS directly.
+            TutorialController.Step cur;
+            do {
+                tutorialSession.controller.advance();
+                cur = tutorialSession.controller.getCurrentStep();
+            } while (cur == TutorialController.Step.STEP_L3_3_LIE
+                  || cur == TutorialController.Step.STEP_L3_4_TIP
+                  || cur == TutorialController.Step.STEP_L3_5_WAIT_HOLE);
         }
     }
 
@@ -1100,7 +1205,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
         terrain.updateFlag(camera.position, ball.getPosition());
 
-        // Tutorial: once ball is stationary on the green, prompt the putt
+        // Tutorial L1: once ball is stationary on the green, prompt the putt
         if (tutorialSession != null
                 && tutorialSession.controller.getCurrentStep() == TutorialController.Step.STEP_7_WATCH
                 && ball != null && ball.getState() == com.gearygolf.golf.ball.Ball.State.STATIONARY) {
@@ -1109,6 +1214,22 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 tutorialSession.controller.advance();
             }
         }
+
+        // Tutorial L2/L3: tee shot landed anywhere except green/tee
+        if (tutorialSession != null && ball != null
+                && ball.getState() == com.gearygolf.golf.ball.Ball.State.STATIONARY) {
+            TutorialController.Step watchStep = tutorialSession.controller.getCurrentStep();
+            if (watchStep == TutorialController.Step.STEP_L2_3_WATCH
+                    || watchStep == TutorialController.Step.STEP_L3_2_WATCH) {
+                com.gearygolf.golf.terrain.Terrain.TerrainType type =
+                        terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
+                if (type != com.gearygolf.golf.terrain.Terrain.TerrainType.GREEN
+                        && type != com.gearygolf.golf.terrain.Terrain.TerrainType.TEE) {
+                    tutorialSession.controller.advance();
+                }
+            }
+        }
+        // STEP_L2_5_WATCH is silent until triggerVictory fires (ball goes in hole).
     }
 
     /**
@@ -1328,10 +1449,13 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 broadcastMultiplayerShot();
                 pollRemoteShots();
             }
-            // Tutorial: shot has fired — move to the "watch" step
-            if (tutorialSession != null
-                    && (tutorialSession.controller.getCurrentStep() == TutorialController.Step.STEP_6_HIT || tutorialSession.controller.getCurrentStep() == TutorialController.Step.STEP_10_AIM)) {
-                tutorialSession.controller.advance(); // → STEP_7_WATCH
+            // Tutorial: shot has fired — advance to the next step
+            if (tutorialSession != null) {
+                TutorialController.Step ts = tutorialSession.controller.getCurrentStep();
+                if (ts == TutorialController.Step.STEP_6_HIT
+                        || ts == TutorialController.Step.STEP_10_AIM) {
+                    tutorialSession.controller.advance();
+                }
             }
         }
         PhysicsProfiler.endSection("ShotControllerCharge");
@@ -1557,7 +1681,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (currentState == GameState.DETERM_TEST) {
             hud.showDetermTestOverlay(determResultText, determPhase);
         } else if (isVictory && !(isMultiplayer && mpScoreboardVisible)) {
-            hud.renderVictory(hud.getShotCount(), currentLevelData, active, standard18UploadDone || standard18UploadInProgress);
+            hud.renderVictory(hud.getShotCount(), currentLevelData, active, standard18UploadDone || standard18UploadInProgress, tutorialSession != null);
         } else if (currentState == GameState.PAUSED) {
             hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionCoordinator.isSubmissionInProgress(), lastShotExport);
         } else if (currentState == GameState.SHOT_REPLAY && shotReplayReady) {
@@ -1593,8 +1717,18 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
 
         if (tutorialSession != null && tutorialSession.controller.getCurrentStep().isOverlayVisible()) {
+            TutorialController.Step tutStep = tutorialSession.controller.getCurrentStep();
             com.badlogic.gdx.math.Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : null;
-            hud.renderTutorialOverlay(tutorialSession.controller.getCurrentStep(), wind);
+            float aimYawDelta = Float.NaN;
+            if (tutStep == TutorialController.Step.STEP_2_AIM
+                    && cameraController != null && !Float.isNaN(tutorialSession.aimStartYaw)) {
+                float delta = cameraController.getYaw() - tutorialSession.aimStartYaw;
+                // Normalise to ±180° to handle yaw wrap-around
+                while (delta >  180f) delta -= 360f;
+                while (delta < -180f) delta += 360f;
+                aimYawDelta = delta;
+            }
+            hud.renderTutorialOverlay(tutStep, wind, aimYawDelta);
         }
 
         if (isMultiplayer && !remoteBalls.isEmpty()) {
@@ -1970,6 +2104,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             config.setDifficulty(tutorialSession.preDifficulty);
             tutorialSession = null;
             selectedArchetype = null;
+            pendingTutorial  = false;
+            tutorialCompletionTapConsumed = false;
             hud.clearTutorialBlock();
             hud.invalidateMobileMenuState();
         }
@@ -2152,7 +2288,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         config.setDifficulty(GameConfig.Difficulty.NOVICE);
         tutorialSession = new TutorialSession(new TutorialController(), config.difficulty);
         selectedArchetype = null;
-        pendingTutorial = true;
+        pendingTutorial  = true;
         startLoadingLevel(GameState.PLAYING, -1);
     }
 

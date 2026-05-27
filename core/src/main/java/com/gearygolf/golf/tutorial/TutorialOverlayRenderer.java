@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
@@ -23,12 +24,14 @@ public class TutorialOverlayRenderer {
     private final GlyphLayout layout = new GlyphLayout();
 
     /**
-     * @param btnBounds  Stage-coord bounds of the button to spotlight, or null if no spotlight.
-     * @param wind       Current level wind vector (used for STEP_2_AIM hint text), may be null.
+     * @param btnBounds   Stage-coord bounds of the button to spotlight, or null if no spotlight.
+     * @param wind        Current level wind vector (used for STEP_2_AIM hint text), may be null.
+     * @param aimYawDelta Current camera yaw minus the yaw recorded at STEP_2_AIM start, in degrees.
+     *                    Pass Float.NaN when not at STEP_2_AIM.
      */
     public void render(SpriteBatch batch, ShapeRenderer sr, BitmapFont font,
                        Viewport viewport, TutorialController.Step step,
-                       Rectangle btnBounds, Vector3 wind) {
+                       Rectangle btnBounds, Vector3 wind, float aimYawDelta) {
         if (step == null || !step.isOverlayVisible()) return;
 
         boolean mobile  = Platform.isAndroid();
@@ -39,7 +42,9 @@ public class TutorialOverlayRenderer {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         sr.setProjectionMatrix(viewport.getCamera().combined);
 
-        if (mobile && step.isSpotlightStyle() && btnBounds != null) {
+        if (step.isDimHandledExternally() || step.isNoDimHint()) {
+            // No dim: big spin overlay handles it, or hint-only step that shouldn't obscure the course
+        } else if (mobile && step.isSpotlightStyle() && btnBounds != null) {
             Rectangle mgBounds = (step == TutorialController.Step.STEP_6_HIT)
                     ? minigameBarBounds(w, h) : null;
             drawSpotlight(sr, w, h, btnBounds, mgBounds);
@@ -55,13 +60,16 @@ public class TutorialOverlayRenderer {
         }
         // Desktop: no dim at all — just show the text hint bar
 
-
         String mainText  = mainText(step, wind);
         String hintText  = mobile ? null : desktopHint(step);
         drawTextBox(batch, sr, font, viewport, w, h, step, mainText, hintText, btnBounds);
 
         if (step == TutorialController.Step.STEP_6_HIT) {
             drawMinigameHighlight(sr, w, h);
+        }
+
+        if (step == TutorialController.Step.STEP_2_AIM && !Float.isNaN(aimYawDelta)) {
+            drawAimBar(sr, w, h, aimYawDelta, wind);
         }
     }
 
@@ -153,6 +161,94 @@ public class TutorialOverlayRenderer {
         sr.end();
     }
 
+    // ----------------------------------------------------------------- Aim direction bar (STEP_2_AIM)
+
+    private static final float BAR_RANGE_DEG  = 30f;  // ±30° shown across the full bar width
+    private static final float AIM_THRESHOLD  = 4.5f; // degrees before the zone begins
+    private static final float AIM_ZONE_MAX   = 22f;  // degrees at the far edge of the target zone
+
+    /**
+     * Draws a horizontal aim indicator above the text box.
+     * The bar spans ±BAR_RANGE_DEG. A gold zone marks where the player should drag;
+     * it turns green once the needle enters it.
+     */
+    private void drawAimBar(ShapeRenderer sr, float w, float h, float aimYawDelta, Vector3 wind) {
+        // Determine target direction from wind: +1 = aim right, -1 = aim left, 0 = straight/calm
+        int targetDir = 0;
+        if (wind != null && wind.len() >= 0.3f) {
+            float ax = Math.abs(wind.x), az = Math.abs(wind.z);
+            if (ax >= az) targetDir = wind.x > 0 ? 1 : -1;
+            // az > ax → headwind/tailwind → aim straight, targetDir stays 0
+        }
+
+        float barW = w * 0.65f;
+        float barH = h * 0.022f;
+        float barX = (w - barW) / 2f;
+        // Position above the hint text box (which sits at h*0.05 and is h*0.17 tall on mobile)
+        float boxH  = Platform.isAndroid() ? h * 0.17f : h * 0.12f;
+        float barY  = h * 0.05f + boxH + h * 0.018f;
+
+        float midX       = barX + barW / 2f;
+        float pxPerDeg   = barW / (2f * BAR_RANGE_DEG);
+
+        // Zone bounds in degrees
+        float zoneLeft, zoneRight;
+        if (targetDir > 0) {
+            zoneLeft  = AIM_THRESHOLD;
+            zoneRight = AIM_ZONE_MAX;
+        } else if (targetDir < 0) {
+            zoneLeft  = -AIM_ZONE_MAX;
+            zoneRight = -AIM_THRESHOLD;
+        } else {
+            // Straight: show a symmetric zone — any small rotation in either direction is fine
+            zoneLeft  = -AIM_THRESHOLD - 1f;
+            zoneRight =  AIM_THRESHOLD + 1f;
+        }
+
+        // Has the needle entered the target zone?
+        boolean inZone = targetDir > 0  ? aimYawDelta >= AIM_THRESHOLD
+                       : targetDir < 0  ? aimYawDelta <= -AIM_THRESHOLD
+                       : Math.abs(aimYawDelta) >= AIM_THRESHOLD;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Background
+        sr.setColor(0.1f, 0.1f, 0.1f, 0.88f);
+        sr.rect(barX, barY, barW, barH);
+
+        // Target zone
+        float zx = midX + zoneLeft  * pxPerDeg;
+        float zw = (zoneRight - zoneLeft) * pxPerDeg;
+        float clampedZx = Math.max(barX, zx);
+        float clampedZw = Math.min(zw - (clampedZx - zx), barX + barW - clampedZx);
+        if (clampedZw > 0) {
+            if (inZone) sr.setColor(0.15f, 0.80f, 0.25f, 0.75f); // green — reached
+            else        sr.setColor(1.00f, 0.82f, 0.08f, 0.60f); // gold  — not yet
+            sr.rect(clampedZx, barY, clampedZw, barH);
+        }
+
+        // Centre tick
+        sr.setColor(0.7f, 0.7f, 0.7f, 1f);
+        sr.rect(midX - 1f, barY - barH * 0.3f, 2f, barH * 1.6f);
+
+        // Needle
+        float needleX = MathUtils.clamp(midX + aimYawDelta * pxPerDeg, barX + 2f, barX + barW - 2f);
+        float needleH = barH * 2.2f;
+        sr.setColor(Color.WHITE);
+        sr.rect(needleX - 1.5f, barY - barH * 0.15f, 3f, needleH);
+        sr.circle(needleX, barY + needleH * 0.9f, barH * 0.6f, 10);
+
+        sr.end();
+
+        // Gold border around the whole bar
+        sr.begin(ShapeRenderer.ShapeType.Line);
+        sr.setColor(HIGHLIGHT);
+        sr.rect(barX, barY, barW, barH);
+        sr.end();
+    }
+
     // ----------------------------------------------------------------- Text box
 
     private void drawTextBox(SpriteBatch batch, ShapeRenderer sr, BitmapFont font,
@@ -213,6 +309,9 @@ public class TutorialOverlayRenderer {
 
     /** Place the text box above or below the spotlight button, or centred for non-spotlight steps. */
     private float chooseBoxY(float h, TutorialController.Step step, Rectangle btnBounds, float boxH) {
+        if (step.isDimHandledExternally()) {
+            return h - boxH - h * 0.04f; // top of screen, above the large spin overlay
+        }
         if (!step.isSpotlightStyle() || btnBounds == null) {
             return h * 0.05f; // bottom strip for hint-only / desktop
         }
@@ -236,14 +335,27 @@ public class TutorialOverlayRenderer {
             case STEP_1_DISTANCE -> "Check the distance to the hole";
             case STEP_2_AIM      -> windAimText(wind);
             case STEP_3_INFO     -> "Check your club distances";
-            case STEP_4_CLUB     -> "Switch to the 9 Iron";
+            case STEP_4_CLUB     -> "Distance: 180 - switch to the 9 Iron";
             case STEP_5_POWER    -> "Take a full swing";
-            case STEP_6_HIT      -> "Hit the ball at the right time!";
-            case STEP_8_PUTTER -> "Press >> to select the putter";
-            case STEP_9_PROJECT -> "View shot projection";
-            case STEP_10_AIM      -> "Aim at the flag, hold HIT to pick shot power";
+            case STEP_6_HIT      -> "Stop the needle in the sweet spot!";
+            case STEP_8_PUTTER   -> "Press >> to select the putter";
+            case STEP_9_PROJECT  -> "View shot projection";
+            case STEP_10_AIM     -> "Aim at the flag, hold HIT to pick shot power";
             case STEP_12_COMPLETE_1 -> "At higher difficulties, you'll lose utilities such as distance and shot projection.";
-            case STEP_13_COMPLETE_2 -> "Some courses and holes are a lot harder than others. Do your daily challenges, and good luck!";
+            case STEP_13_COMPLETE_2 -> "Some courses and holes are a lot harder than others.";
+            // Level 2
+            case STEP_L2_1_SPINDICATOR -> "This is the spin indicator - it controls where you strike the ball. Tap it to see the full view.";
+            case STEP_L2_1B_AIM        -> "Move your aim point to the lower-left of the ball. This adds loft for extra carry and draws the ball to hold your line against the wind.";
+            case STEP_L2_2_HIT         -> "Take your shot";
+            case STEP_L2_4_APPROACH    -> "Check your distance and pick the right club to reach the green with the wind.";
+            case STEP_L2_6_COMPLETE_1  -> "Hitting upwards on a driver from under the ball is key to massive distance";
+            case STEP_L2_7_COMPLETE_2  -> "On longer holes, pick your approach club carefully. Getting close to the flag makes putting much easier .";
+            // Level 3
+            case STEP_L3_1_SPINDICATOR -> "There's a strong headwind - hit the ball from the top to keep your flight path low.";
+            case STEP_L3_3_LIE         -> "Observe the shot projection to see how the slope affects your ball's trajectory after landing.";
+            case STEP_L3_4_TIP         -> "Consider using a longer iron or wood - it's more forgiving in the fairway. Make sure to hit low under the wind for maximum distance.";
+            case STEP_L3_6_CONGRATS    -> "Congrats! You've got all the basics down.";
+            case STEP_L3_7_DAILY_PROMPT -> "Try today's Daily 1-Hole challenge to compete against other players on the leaderboard!";
             default              -> "";
         };
     }
@@ -253,31 +365,38 @@ public class TutorialOverlayRenderer {
             case STEP_1_DISTANCE -> "Press F";
             case STEP_2_AIM      -> "Drag to rotate the camera";
             case STEP_3_INFO     -> "Press I";
-            case STEP_4_CLUB     -> "Scroll to select 69 Iron";
+            case STEP_4_CLUB     -> "Scroll to select 9 Iron";
             case STEP_5_POWER    -> "Hold Ctrl + Space";
             case STEP_6_HIT      -> "Press Space to stop the needle";
-            case STEP_8_PUTTER -> "Scroll to Putter, then aim and press Space";
-            case STEP_9_PROJECT -> "Press P to view shot projection";
-            case STEP_10_AIM      -> "Aim at the flag, hold SPACE to pick shot power";
+            case STEP_8_PUTTER   -> "Scroll to Putter, then aim and press Space";
+            case STEP_9_PROJECT  -> "Press P to view shot projection";
+            case STEP_10_AIM     -> "Aim at the flag, hold SPACE to pick shot power";
             case STEP_12_COMPLETE_1, STEP_13_COMPLETE_2 -> "Press N to continue";
+            // Level 2
+            case STEP_L2_1_SPINDICATOR -> "Click the spin indicator to open it";
+            case STEP_L2_1B_AIM        -> "Use arrow keys to move the aim dot lower-left";
+            case STEP_L2_2_HIT         -> "Press Space to stop the needle";
+            case STEP_L2_4_APPROACH    -> "Press F to check distance, scroll to select club";
+            case STEP_L2_6_COMPLETE_1, STEP_L2_7_COMPLETE_2 -> "Press N to continue";
+            case STEP_L3_6_CONGRATS, STEP_L3_7_DAILY_PROMPT -> "Press N to continue";
             default              -> null;
         };
     }
 
     private String windAimText(Vector3 wind) {
         if (wind == null || wind.len() < 0.3f) {
-            return "Wind is calm — aim directly at the hole";
+            return "Wind is calm - aim directly at the hole";
         }
         float ax = Math.abs(wind.x);
         float az = Math.abs(wind.z);
         if (ax >= az) {
             return wind.x > 0
-                ? "Wind blowing left — aim right of the hole"
-                : "Wind blowing right — aim left of the hole";
+                ? "Wind blowing left -> drag to aim right of the hole"
+                : "Wind blowing right -> drag to aim left of the hole";
         } else {
             return wind.z > 0
-                ? "Tailwind — aim straight, you have extra distance"
-                : "Headwind — aim straight, take a little extra power";
+                ? "Tailwind - aim straight, you have extra distance"
+                : "Headwind - aim straight, take a little extra power";
         }
     }
 }

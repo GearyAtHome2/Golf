@@ -513,7 +513,7 @@ public class HUD {
         notificationManager.showHazard(text, color, duration);
     }
 
-    public void renderVictory(int shots, LevelData levelData, GameSession session, boolean uploadDone) {
+    public void renderVictory(int shots, LevelData levelData, GameSession session, boolean uploadDone, boolean isTutorial) {
         if (gameplayTable != null) gameplayTable.setVisible(false);
         if (infoToggleBtn != null) infoToggleBtn.setVisible(false);
         if (victoryTable != null) victoryTable.setVisible(true);
@@ -524,10 +524,10 @@ public class HUD {
             boolean isFinished  = (session != null && session.isFinished());
             boolean isDaily     = (session != null && isDailyMode(session.getMode()));
             boolean isStandard18 = (session != null && session.getMode() == GameSession.GameMode.STANDARD_18);
-            mobileUIPackage.nextLevelBtn.setVisible(!isFinished);
-            mobileUIPackage.submitScoreBtn.setVisible(isFinished && isDaily);
-            mobileUIPackage.uploadScoreBtn.setVisible(isFinished && isStandard18 && !uploadDone);
-            mobileUIPackage.mainMenuBtn.setVisible(isFinished);
+            mobileUIPackage.nextLevelBtn.setVisible(!isTutorial && !isFinished);
+            mobileUIPackage.submitScoreBtn.setVisible(!isTutorial && isFinished && isDaily);
+            mobileUIPackage.uploadScoreBtn.setVisible(!isTutorial && isFinished && isStandard18 && !uploadDone);
+            mobileUIPackage.mainMenuBtn.setVisible(!isTutorial && isFinished);
         }
 
         batch.begin();
@@ -837,6 +837,9 @@ public void renderInstructions(GameInputProcessor input) {
         return spinDot;
     }
 
+    public boolean isSpinBigMode() { return spinIndicator.isBigModeActive(); }
+    public void setSpinBigMode(boolean active) { spinIndicator.setBigModeActive(active); }
+
     public void resetSpin() {
         this.spinDot.set(0, 0);
         spinIndicator.reset();
@@ -937,9 +940,9 @@ public void renderInstructions(GameInputProcessor input) {
      *
      * @param wind Current level wind (for aim-hint text), may be null.
      */
-    public void renderTutorialOverlay(TutorialController.Step step, com.badlogic.gdx.math.Vector3 wind) {
+    public void renderTutorialOverlay(TutorialController.Step step, com.badlogic.gdx.math.Vector3 wind, float aimYawDelta) {
         com.badlogic.gdx.math.Rectangle bounds = getTutorialHighlightBounds(step);
-        tutorialOverlayRenderer.render(batch, shapeRenderer, font, viewport, step, bounds, wind);
+        tutorialOverlayRenderer.render(batch, shapeRenderer, font, viewport, step, bounds, wind, aimYawDelta);
     }
 
     /**
@@ -956,6 +959,7 @@ public void renderInstructions(GameInputProcessor input) {
             case STEP_6_HIT, STEP_10_AIM -> mobileUIPackage.hitBtn;
             case STEP_8_PUTTER -> mobileUIPackage.clubArrowRow;
             case STEP_9_PROJECT -> mobileUIPackage.projectBtn;
+            case STEP_L2_1_SPINDICATOR -> spinIndicator;
             default -> null;
         };
         if (actor == null) return null;
@@ -985,14 +989,14 @@ public void renderInstructions(GameInputProcessor input) {
     public void applyTutorialButtonBlock(TutorialController.Step step) {
         if (!Platform.isAndroid() || mobileUIPackage == null) return;
 
-        // IF STEP 7 or 11, TREAT LIKE NORMAL GAMEPLAY AND EXIT.
-        // This prevents the "Disable All" line below from flickering the touch state.
-        if (step == null || step == TutorialController.Step.STEP_7_WATCH || step == TutorialController.Step.STEP_11_PUTT) {
+        // Non-blocking steps (silent watch steps, hint-bar steps, info steps):
+        // re-enable all buttons so the player can interact freely.
+        if (step == null || !step.isBlockingInput()) {
             setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
             return;
         }
 
-        // This part ONLY runs for "Restricted" tutorial steps (1-6, 8-10)
+        // Blocking steps only — disable all buttons first, then re-enable the target.
         setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
 
         switch (step) {
@@ -1003,6 +1007,11 @@ public void renderInstructions(GameInputProcessor input) {
             case STEP_3_INFO:
                 if (mobileUIPackage.infoToggleBtn != null)
                     mobileUIPackage.infoToggleBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+                break;
+            case STEP_L2_1_SPINDICATOR:
+            case STEP_L2_1B_AIM:
+                // SpinIndicator is not in the standard button set — stays touchable automatically.
+                // All other gameplay buttons remain disabled so the player focuses on the spindicator.
                 break;
             case STEP_4_CLUB:
             case STEP_8_PUTTER:
