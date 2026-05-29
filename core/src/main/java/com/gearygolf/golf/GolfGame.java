@@ -116,6 +116,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private static final float AMBIENT_WATER_RADIUS  = 80f;
     private boolean isVictory = false;
     private boolean standard18UploadDone = false;
+    private boolean wasChargingShot   = false; // tracks swing-view camera transition
+    private boolean wasImpactCaptured = false; // guards one-shot divot particle spawn
     private boolean standard18UploadInProgress = false;
     private Ball.State prevBallState      = Ball.State.STATIONARY;
     private Ball.State prevBallStateToast = Ball.State.STATIONARY;
@@ -1307,7 +1309,38 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
 
         if (cameraController != null) {
+            boolean chargingNow = shotController != null && shotController.isCharging();
+            if (chargingNow && !wasChargingShot) {
+                // Capture aim direction and terrain type at the moment charging starts.
+                cameraController.setSwingAimDir(camera.direction);
+                hud.setSwingTerrainType(terrain.getTerrainTypeAt(
+                        ball.getPosition().x, ball.getPosition().z));
+                hud.setSwingDivotEnabled(clubMakesDivot(currentClub));
+                wasImpactCaptured = false;
+                // Set tempo tolerance based on difficulty level + club type.
+                hud.getSwingAnalyser().setTempoWindows(
+                        swingPerfectFraction(config.difficulty, currentClub),
+                        swingMaxFraction(config.difficulty, currentClub));
+            }
+            if (!chargingNow) wasImpactCaptured = false;
+            wasChargingShot = chargingNow;
+            cameraController.setSwingViewActive(chargingNow);
             cameraController.update(ball.getPosition(), inputProcessor);
+        }
+
+        boolean inSwingView = cameraController != null && cameraController.isInSwingView();
+        hud.updateSwingOverlay(inSwingView);
+
+        // Fire divot particles exactly once when the gesture crosses the ball.
+        if (inSwingView && config.particlesEnabled) {
+            boolean nowCaptured = hud.getSwingAnalyser().isImpactCaptured();
+            if (nowCaptured && !wasImpactCaptured) {
+                particleManager.spawnDivot(
+                        ball.getPosition().cpy(),
+                        cameraController.getSwingAimDir(),
+                        terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z));
+            }
+            wasImpactCaptured = nowCaptured;
         }
 
         if (config.particlesEnabled) particleManager.handleBallInteraction(ball, terrain, camera.position);
@@ -1693,6 +1726,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             if (terrain != null && !cinematicHide) {
                 hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, terrain, active, inputProcessor, showClubInfo, shotController);
             }
+            hud.renderSwingOverlay(camera, ball.getPosition());
             if (terrain != null) {
                 hud.renderNotifications();
             }
@@ -2423,6 +2457,55 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         } else {
             foliagePosValid = false;
         }
+    }
+
+    // ── Swing tempo tolerance helpers ────────────────────────────────────────
+
+    /**
+     * "Perfect" window as a fraction of the expected forward-swing duration,
+     * scaled by game difficulty and club type.
+     * NOVICE is 3× more forgiving than TOUR_PRO; driver/putter get an extra 40% grace.
+     */
+    private static float swingPerfectFraction(GameConfig.Difficulty diff, Club club) {
+        float base = switch (diff) {
+            case NOVICE       -> 0.30f;
+            case INTERMEDIATE -> 0.22f;
+            case ADVANCED     -> 0.16f;
+            case PRO          -> 0.12f;
+            case TOUR_PRO     -> 0.10f;
+        };
+        return base * clubTempoModifier(club);
+    }
+
+    /** Outer edge of the graded tempo window (beyond this → quality = 0). */
+    private static float swingMaxFraction(GameConfig.Difficulty diff, Club club) {
+        float base = switch (diff) {
+            case NOVICE       -> 1.20f;
+            case INTERMEDIATE -> 0.90f;
+            case ADVANCED     -> 0.70f;
+            case PRO          -> 0.55f;
+            case TOUR_PRO     -> 0.50f;
+        };
+        return base * clubTempoModifier(club);
+    }
+
+    /** Extra tempo forgiveness per club category. */
+    private static float clubTempoModifier(Club club) {
+        if (club == Club.DRIVER || club == Club.PUTTER) return 1.40f;
+        if (club.name().contains("WEDGE"))              return 0.85f;
+        return 1.0f;  // irons / woods / hybrids
+    }
+
+    /**
+     * Returns true if this club type produces a divot on contact.
+     * Driver and fairway woods use a sweeping/upward strike — no divot.
+     * Putter is handled separately (no swing overlay divot mechanic).
+     * Everything else (irons, hybrids, wedges) takes a descending strike and makes a divot.
+     */
+    private static boolean clubMakesDivot(Club club) {
+        return club != Club.DRIVER
+            && !club.name().startsWith("WOOD_")
+            && club != Club.PUTTER;
     }
 
     @Override

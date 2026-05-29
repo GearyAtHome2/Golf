@@ -90,6 +90,7 @@ public class HUD {
     private Stage pauseMenuStage;
     private Table gameplayTable;
     private Table victoryTable;
+    private final SwingOverlay swingOverlay = new SwingOverlay();
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
     private TextButton infoToggleBtn;
@@ -1171,6 +1172,42 @@ public void renderInstructions(GameInputProcessor input) {
 
         font.getData().setScale(1f);
         font.setColor(com.badlogic.gdx.graphics.Color.WHITE);
+    }
+
+    public void updateSwingOverlay(boolean inSwingView) {
+        swingOverlay.setActive(inSwingView);
+        swingOverlay.update();
+    }
+
+    public void renderSwingOverlay(com.badlogic.gdx.graphics.Camera gameCamera, Vector3 ballWorldPos) {
+        if (!swingOverlay.isActive()) return;
+        viewport.apply();
+        swingOverlay.render(shapeRenderer, batch, font, viewport, gameCamera, ballWorldPos);
+    }
+
+    public void setSwingTerrainType(com.gearygolf.golf.terrain.Terrain.TerrainType type) {
+        swingOverlay.setTerrainType(type);
+    }
+
+    public void setSwingDivotEnabled(boolean enabled) {
+        swingOverlay.setDivotEnabled(enabled);
+    }
+
+    public SwingGestureAnalyser getSwingAnalyser() {
+        return swingOverlay.getAnalyser();
+    }
+
+    /** Returns true while the swing gesture overlay is the active minigame. */
+    public boolean isSwingViewActive() {
+        return swingOverlay.isActive();
+    }
+
+    /**
+     * Returns the completed swing result and clears it, or null if not ready.
+     * Consume-once: calling twice in the same frame returns null on the second call.
+     */
+    public SwingResult consumeSwingResult() {
+        return swingOverlay.consumeResult();
     }
 
     public void dispose() {

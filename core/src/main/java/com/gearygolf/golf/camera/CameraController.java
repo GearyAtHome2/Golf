@@ -35,6 +35,19 @@ public class CameraController {
 
     private float zoomSensScale = 1f; // 0.1–1.0, updated each normal-mode frame
 
+    // Swing view (Step 1): animated top-down zoom when a shot is being taken.
+    // The camera sits to the LEFT of the ball relative to ball motion (golfer's stance side),
+    // offset by SWING_SIDE_DIST. Looking at the ball from this position creates a natural tilt.
+    // Left of aimDir (horizontal) = (aimDir.z, 0, -aimDir.x).
+    private static final float SWING_HEIGHT    = 3.2f; // units above ball
+    private static final float SWING_SIDE_DIST = 1.0f; // units to the left of ball (produces ~16° tilt)
+    private boolean swingViewActive = false;
+    private float swingProgress = 0f; // 0 = normal camera, 1 = fully in swing view
+    private final Vector3 swingAimDir = new Vector3(0, 0, -1); // horizontal aim direction when shot started
+    private final Vector3 swingCamTarget = new Vector3();
+    private final Vector3 swingUpTarget = new Vector3(1, 0, 0);
+    private final Vector3 tempSwing = new Vector3();
+
     private boolean isOverhead = false;
     private boolean isPaused = false;
     private boolean skipRotation = true; // discard stale mouse delta on first update after load
@@ -50,7 +63,9 @@ public class CameraController {
     }
 
     public void updateCursorState() {
-        if (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !isPaused) {
+        if (swingViewActive) {
+            Gdx.input.setCursorCatched(false); // release cursor so user can drag the swing gesture
+        } else if (config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE && !isPaused) {
             Gdx.input.setCursorCatched(true);
         } else {
             Gdx.input.setCursorCatched(false);
@@ -88,6 +103,21 @@ public class CameraController {
     }
 
 
+    public void setSwingViewActive(boolean active) {
+        this.swingViewActive = active;
+        updateCursorState();
+    }
+
+    /** Call once when charging starts, passing the camera's horizontal aim direction. */
+    public void setSwingAimDir(Vector3 dir) {
+        float len = (float) Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+        if (len > 0.001f) swingAimDir.set(dir.x / len, 0f, dir.z / len);
+    }
+
+    public boolean isInSwingView() { return swingProgress > 0.5f; }
+
+    public Vector3 getSwingAimDir() { return swingAimDir; }
+
     public void update(Vector3 ballPos, GameInputProcessor input) {
         if (isPaused) return;
         float delta = Gdx.graphics.getDeltaTime();
@@ -104,6 +134,40 @@ public class CameraController {
             }
             updateNormalMode(ballPos, delta, input);
             wasOverheadLastFrame = false;
+        }
+
+        // Swing view animation: blend camera toward top-down close-up over ~0.5s
+        float swingTarget = swingViewActive ? 1f : 0f;
+        swingProgress = MathUtils.lerp(swingProgress, swingTarget, 8f * delta);
+
+        if (swingProgress > 0.001f) {
+            // Left of aimDir (when facing the target) = (aimDir.z, 0, -aimDir.x)
+            float leftX = swingAimDir.z;
+            float leftZ = -swingAimDir.x;
+
+            // Camera is to the LEFT of the ball and above it
+            swingCamTarget.set(
+                    ballPos.x + leftX * SWING_SIDE_DIST,
+                    ballPos.y + SWING_HEIGHT,
+                    ballPos.z + leftZ * SWING_SIDE_DIST
+            );
+
+            // Derived direction and up so that: target (aimDir) appears to the LEFT of screen.
+            // With camera at (leftX*d, h, leftZ*d) relative to ball, looking at ball:
+            //   direction = (-leftX*d, -h, -leftZ*d).nor()
+            //   up        = (-aimDir.z * h/L,  d/L,  aimDir.x * h/L)
+            // where L = sqrt(h²+d²). Both derived analytically from the constraint
+            // that camera.right = direction × up = -aimDir.
+            float d = SWING_SIDE_DIST;
+            float h = SWING_HEIGHT;
+            float L = (float) Math.sqrt(h * h + d * d);
+
+            tempSwing.set(-leftX * d / L, -h / L, -leftZ * d / L); // direction toward ball
+            swingUpTarget.set(-swingAimDir.z * h / L, d / L, swingAimDir.x * h / L);
+
+            camera.position.lerp(swingCamTarget, swingProgress);
+            camera.direction.lerp(tempSwing, swingProgress).nor();
+            camera.up.lerp(swingUpTarget, swingProgress).nor();
         }
 
         camera.update();
@@ -199,7 +263,7 @@ public class CameraController {
         zoomSensScale = MathUtils.lerp(ZOOM_SENS_FLOOR, 1f,
                 MathUtils.clamp((distance - ZOOM_SENS_MIN_DIST) / (ZOOM_SENS_THRESHOLD - ZOOM_SENS_MIN_DIST), 0f, 1f));
 
-        if (canRotate && !skipRotation) {
+        if (canRotate && !skipRotation && swingProgress < 0.3f) {
             float sens = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION) && config.controlStyle == GameConfig.CameraConfig.ControlStyle.FREE
                     ? config.mouseSensitivity / config.fineTuneDivider
                     : config.mouseSensitivity;

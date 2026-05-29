@@ -14,6 +14,8 @@ import com.gearygolf.golf.terrain.Terrain;
 public class ParticleManager {
     private final Array<GameParticle> particles = new Array<>();
     private final Model boxModel;
+    /** 1/3-size model used for divot particles (zoomed-in swing view). */
+    private final Model divotBoxModel;
     private SoundManager soundManager;
     private boolean wasInWater = false;
 
@@ -34,6 +36,10 @@ public class ParticleManager {
     public ParticleManager() {
         ModelBuilder mb = new ModelBuilder();
         boxModel = mb.createBox(PARTICLE_SIZE, PARTICLE_SIZE, PARTICLE_SIZE,
+                new Material(ColorAttribute.createDiffuse(Color.WHITE)),
+                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+        float divotSize = PARTICLE_SIZE / 3f;
+        divotBoxModel = mb.createBox(divotSize, divotSize, divotSize,
                 new Material(ColorAttribute.createDiffuse(Color.WHITE)),
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
     }
@@ -116,6 +122,56 @@ public class ParticleManager {
         }
     }
 
+    /**
+     * Spawns a small divot burst at the ball's world position using 1/3-size particles.
+     * Called from GolfGame when the swing gesture crosses the ball in the swing view.
+     *
+     * @param pos      Ball world position.
+     * @param aimDir   Horizontal aim/forward direction (used to bias particle direction).
+     * @param type     Terrain type at impact (determines colour + stone sparks).
+     */
+    public void spawnDivot(Vector3 pos, Vector3 aimDir, Terrain.TerrainType type) {
+        Color baseColor = getDivotParticleColor(type);
+        // Particles fly mostly upward with a slight forward (target-direction) bias.
+        Vector3 baseDir = new Vector3(0, 1.4f, 0)
+                .add(aimDir.x * 0.35f, 0f, aimDir.z * 0.35f)
+                .nor();
+
+        int count = 12;
+        float spread = 0.65f;
+        for (int i = 0; i < count; i++) {
+            GameParticle p = new GameParticle(pos, baseColor, divotBoxModel, 0, 0.75f, DEFAULT_GRAVITY);
+            p.velocity.set(baseDir)
+                    .add(MathUtils.random(-spread, spread),
+                         MathUtils.random(-spread * 0.4f, spread * 0.4f),
+                         MathUtils.random(-spread, spread))
+                    .nor()
+                    .scl(MathUtils.random(1.5f, 3.8f));
+            particles.add(p);
+        }
+
+        // Stone: add a handful of fast orange/white sparks.
+        if (type == Terrain.TerrainType.STONE) {
+            for (int i = 0; i < 6; i++) {
+                Color spark = MathUtils.random() < 0.5f ? Color.ORANGE : Color.WHITE;
+                GameParticle p = new GameParticle(pos, spark, divotBoxModel, 0, 0.35f, DEFAULT_GRAVITY * 1.6f);
+                p.velocity.set(MathUtils.random(-1f, 1f), MathUtils.random(0.8f, 2f), MathUtils.random(-1f, 1f))
+                        .nor()
+                        .scl(MathUtils.random(3f, 7f));
+                particles.add(p);
+            }
+        }
+    }
+
+    private Color getDivotParticleColor(Terrain.TerrainType type) {
+        return switch (type) {
+            case SAND  -> Color.TAN;
+            case STONE -> COLOR_STONE;
+            case MUD   -> new Color(0.22f, 0.13f, 0.07f, 1f);
+            default    -> COLOR_DIRT;
+        };
+    }
+
     private ParticleParams getInteractionParams(Ball.Interaction interaction, Ball ball, Terrain terrain, float speed) {
         ParticleParams p = new ParticleParams();
         switch (interaction) {
@@ -187,6 +243,7 @@ public class ParticleManager {
 
     public void dispose() {
         boxModel.dispose();
+        divotBoxModel.dispose();
     }
 
     private static class ParticleParams {

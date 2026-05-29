@@ -13,6 +13,8 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.gearygolf.golf.Club;
 import com.gearygolf.golf.hud.HUD;
+import com.gearygolf.golf.hud.SwingGestureAnalyser;
+import com.gearygolf.golf.hud.SwingResult;
 import com.gearygolf.golf.input.GameInputProcessor;
 import com.gearygolf.golf.terrain.Terrain;
 
@@ -50,6 +52,12 @@ public class ShotController {
 
     /** Lead time (seconds) between playing the swing sound and ball.hit() firing. */
     private static final float SHOT_SOUND_LEAD = 0.1f;
+    /**
+     * Peak forward-swing speed (HUD px/frame) that maps linearly to MAX_POWER.
+     * Speeds above this are capped. Linear feel matches real golf: a 50% swing = ~50% power.
+     * Tune if shots feel too weak/strong: raise to make full power harder to reach, lower to ease it.
+     */
+    private static final float SWING_FULL_POWER_SPEED = 280f;
     private boolean pendingShot = false;
     private float shotLeadTimer = 0f;
     private MinigameResult pendingResult;
@@ -166,6 +174,31 @@ public class ShotController {
                 reset();
                 return false;
             }
+
+            // ── New swing gesture path ────────────────────────────────────────
+            if (hud.isSwingViewActive()) {
+                SwingResult swingResult = hud.consumeSwingResult();
+                if (swingResult != null) {
+                    // Linear: power is directly proportional to peak swing speed, capped at MAX_POWER.
+                    // Matches real golf feel — a 50% swing genuinely produces ~50% power.
+                    pendingPower = MathUtils.clamp(
+                            swingResult.peakForwardSpeed / SWING_FULL_POWER_SPEED * MAX_POWER,
+                            0.0f, MAX_POWER);
+                    Gdx.app.log("SwingDebug", String.format(
+                            "[POWER] peakSpeed=%.1f → power=%.2f (%.0f%% max)",
+                            swingResult.peakForwardSpeed, pendingPower, pendingPower / MAX_POWER * 100f));
+                    waitingForMinigame = false;
+                    isSpinLocked = false;
+                    if (soundManager != null) soundManager.playBallStrike(clubSoundCategory(club), pendingPower / MAX_POWER);
+                    pendingResult = convertSwingResult(swingResult);
+                    pendingClub   = club;
+                    pendingShot   = true;
+                    shotLeadTimer = SHOT_SOUND_LEAD;
+                }
+                return false;
+            }
+
+            // ── Legacy spindicator path ───────────────────────────────────────
             if (hud.isMinigameComplete()) {
                 waitingForMinigame = false;
                 isSpinLocked = false;
@@ -195,7 +228,8 @@ public class ShotController {
                 isPowerLocked = false;
                 float powerMod = 0.5f + (lockedPower / MAX_POWER);
 
-                lockedCamDir.set(camDir);
+                // lockedCamDir was already captured before the camera started lerping —
+                // do NOT overwrite it here or we'd use the lerped swing-view direction.
                 hud.logShotInitiated(ball.getPosition(), club, currentDifficulty, powerMod);
                 waitingForMinigame = true;
                 lockTimer = 0;
@@ -203,32 +237,14 @@ public class ShotController {
             return false;
         }
 
-        if (input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT)) {
-            if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
-                isCharging = false;
-                isPowerLocked = true;
-                lockedPower = MAX_POWER;
-                lockTimer = 0;
-                spaceHoldTime = 0;
+        // Both hit actions open the swing view immediately — power comes from swing speed.
+        if (input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT)
+                || input.isActionPressed(GameInputProcessor.Action.CHARGE_SHOT)) {
+            if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0 && !waitingForMinigame) {
+                lockedCamDir.set(camDir);
+                hud.logShotInitiated(ball.getPosition(), club, currentDifficulty, 1.0f);
+                waitingForMinigame = true;
             }
-            return false;
-        }
-
-        if (input.isActionPressed(GameInputProcessor.Action.CHARGE_SHOT)) {
-            if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
-                if (!isCharging) {
-                    lockedCamDir.set(camDir);
-                }
-                isCharging = true;
-                spaceHoldTime = Math.min(spaceHoldTime + (delta * 2f), MAX_POWER);
-            }
-            return false;
-        } else if (isCharging) {
-            isCharging = false;
-            isPowerLocked = true;
-            lockedPower = spaceHoldTime;
-            lockTimer = 0;
-            spaceHoldTime = 0;
             return false;
         }
 
@@ -427,8 +443,11 @@ public class ShotController {
             batch.render(targetDotInstance, env);
         }
 
+        // In swing-gesture mode, waitingForMinigame is true but there is no power bar to show.
+        if (waitingForMinigame) return;
+
         float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : 0f);
-        if (height <= 0 && !isCharging && !isPowerLocked && !waitingForMinigame) return;
+        if (height <= 0 && !isCharging && !isPowerLocked) return;
 
         float dist = camPos.dst(ballPos);
         float currentUnitScale = MathUtils.clamp(dist * DISTANCE_SCALE_FACTOR * HUD.UI_SCALE, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
@@ -467,6 +486,46 @@ public class ShotController {
 
     public boolean isCharging() {
         return isCharging || isPowerLocked || waitingForMinigame || pendingShot;
+    }
+
+    /**
+     * Converts a SwingResult (from the gesture overlay) into a MinigameResult
+     * so the existing shot-execution pipeline can consume it unchanged.
+     *
+     * Composite quality = tempoQuality × contactFactor × followThroughFactor
+     *   contactFactor     : 1.0 at centre, 0.4 at full heel/toe
+     *   followThroughFactor: 0.65 for HIGH (flip/scoop), 1.0 for LOW/NEUTRAL
+     *
+     * powerMod lerps 0.60 → 1.20 over composite quality.
+     * accuracy maps pathDeg to the direction-error input expected by executeShot:
+     *   +ve = push right (fade), -ve = push left (draw).
+     */
+    private MinigameResult convertSwingResult(SwingResult s) {
+        float contactFactor = 1f - (Math.abs(s.contactOffset) * 0.6f);
+        float ftFactor = s.followThroughResult == SwingGestureAnalyser.FollowThroughResult.HIGH
+                       ? 0.65f : 1.0f;
+        float compositeQuality = s.tempoQuality * contactFactor * ftFactor;
+
+        MinigameResult.Rating rating;
+        if      (compositeQuality >= 0.90f) rating = MinigameResult.Rating.SUPER;
+        else if (compositeQuality >= 0.75f) rating = MinigameResult.Rating.GREAT;
+        else if (compositeQuality >= 0.55f) rating = MinigameResult.Rating.GOOD;
+        else if (compositeQuality >= 0.30f) rating = MinigameResult.Rating.POOR;
+        else if (compositeQuality >= 0.15f) rating = MinigameResult.Rating.TERRIBLE;
+        else                                rating = MinigameResult.Rating.ABYSMAL;
+
+        MinigameResult r = new MinigameResult();
+        r.rating   = rating;
+        r.powerMod = MathUtils.lerp(0.60f, 1.20f, compositeQuality);
+        // pathDeg: +ve = in-to-out (draw); map to accuracy: +ve = fade, -ve = draw
+        r.accuracy = MathUtils.clamp(-(s.pathDeg / 15f) * (1f - Math.abs(s.contactOffset) * 0.5f), -1f, 1f);
+
+        Gdx.app.log("SwingDebug", String.format(
+            "[CONVERT] tempo_q=%.2f contact=%.2f ft=%s → composite=%.2f → %s pwr_mod=%.2f acc=%.2f",
+            s.tempoQuality, s.contactOffset, s.followThroughResult,
+            compositeQuality, rating, r.powerMod, r.accuracy));
+
+        return r;
     }
 
     public void dispose() {
