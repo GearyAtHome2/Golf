@@ -206,7 +206,9 @@ public class MainMenuRenderer {
 
     private void renderEighteenMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s, CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         java.util.List<MenuButtonDescriptor> descs = MenuButtonResolver.resolve(MenuState.EIGHTEEN_HOLES, sessions, dailyCache);
-        float[] yOffsets = {0, -s, -(s * 2), -(s * 3), -(s * 4.5f)};
+        // 7 items: PLAY18, DAILY18, DAILY9, DAILY PAR3, DAILY PAR4, DAILY PAR5, BACK
+        // Extra 0.5s gap before BACK to visually separate it from the daily options.
+        float[] yOffsets = {0, -s, -(s * 2), -(s * 3), -(s * 4), -(s * 5), -(s * 6.5f)};
         for (int i = 0; i < descs.size(); i++) {
             MenuButtonDescriptor d = descs.get(i);
             if (d.sparkle) drawSparkleOption(batch, font, selection == i, !d.locked, true, true, d.label, x, y + yOffsets[i]);

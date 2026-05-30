@@ -204,9 +204,11 @@ public class ScoreSubmissionHandler {
 
     private String buildDialogTitle() {
         return switch (courseType) {
-            case HOLES_1  -> "DAILY 1-HOLE SUBMISSION";
-            case HOLES_9  -> "DAILY 9-HOLE SUBMISSION";
-            case HOLES_18 -> "DAILY 18-HOLE SUBMISSION";
+            case HOLES_1_PAR3 -> "DAILY PAR 3 SUBMISSION";
+            case HOLES_1_PAR4 -> "DAILY PAR 4 SUBMISSION";
+            case HOLES_1_PAR5 -> "DAILY PAR 5 SUBMISSION";
+            case HOLES_9      -> "DAILY 9-HOLE SUBMISSION";
+            case HOLES_18     -> "DAILY 18-HOLE SUBMISSION";
         };
     }
 

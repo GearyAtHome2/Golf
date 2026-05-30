@@ -314,7 +314,7 @@ public static class MobileUIPackage {
                 result[archetypes.length] = "BACK";
                 yield result;
             }
-            case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY 1-HOLE", "BACK"};
+            case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY PAR 3", "DAILY PAR 4", "DAILY PAR 5", "< BACK"};
             case PRACTICE -> TutorialPrefs.isComplete()
                 ? new String[]{"DRIVING RANGE", "PUTTING GREEN", "TUTORIAL", "BACK"}
                 : new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};

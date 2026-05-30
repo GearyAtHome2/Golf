@@ -51,6 +51,7 @@ public class HUD {
     private final TutorialOverlayRenderer tutorialOverlayRenderer = new TutorialOverlayRenderer();
     private LeaderboardUI leaderboardUI;
     private final HighscoreService highscoreService = new HighscoreService();
+    private java.util.function.Consumer<GameSession.GameMode> leaderboardPlayDailyCallback;
     private final SpriteBatch batch;
     private final ShapeRenderer shapeRenderer;
     private final BitmapFont font;
@@ -246,6 +247,10 @@ public class HUD {
 
         if (leaderboardUI == null && startMenuStage != null) {
             leaderboardUI = new LeaderboardUI(getSkin(), font, highscoreService);
+            leaderboardUI.setDailySubmissionCache(dailyCache);
+            if (leaderboardPlayDailyCallback != null) {
+                leaderboardUI.setPlayDailyCallback(leaderboardPlayDailyCallback);
+            }
             startMenuStage.addActor(leaderboardUI);
             leaderboardUI.bindStage(startMenuStage);
             updateLeaderboardLayout();
@@ -366,7 +371,9 @@ public class HUD {
         renderDistanceDisplay(delta, rangeScale);
         if (isPractice) renderShotDistance(ball, isAndroid ? 2.2f : 1.4f);
         renderClubAndBallInfo(isPractice, levelData, currentClub, ball, session, terrain);
-        if (session != null && session.getMode() == GameSession.GameMode.DAILY_1) {
+        if (session != null && (session.getMode() == GameSession.GameMode.DAILY_PAR3
+                             || session.getMode() == GameSession.GameMode.DAILY_PAR4
+                             || session.getMode() == GameSession.GameMode.DAILY_PAR5)) {
             holeTimerRenderer.render(batch, font, viewport, session.getElapsedTimeSeconds(), session.isStarted());
         }
         batch.end();
@@ -541,7 +548,11 @@ public class HUD {
     }
 
     private boolean isDailyMode(GameSession.GameMode mode) {
-        return mode == GameSession.GameMode.DAILY_18 || mode == GameSession.GameMode.DAILY_9 || mode == GameSession.GameMode.DAILY_1;
+        return mode == GameSession.GameMode.DAILY_18
+            || mode == GameSession.GameMode.DAILY_9
+            || mode == GameSession.GameMode.DAILY_PAR3
+            || mode == GameSession.GameMode.DAILY_PAR4
+            || mode == GameSession.GameMode.DAILY_PAR5;
     }
 
     public void reset() {
@@ -903,6 +914,29 @@ public void renderInstructions(GameInputProcessor input) {
 
     public void setLoggedInUser(String displayName) {
         mainMenuRenderer.setLoggedInUser(displayName);
+    }
+
+    /**
+     * Stores a callback invoked when the user presses a "PLAY DAILY PAR X" button
+     * in the leaderboard. Applied immediately if the leaderboard already exists,
+     * or deferred and applied at lazy-creation time.
+     */
+    public void setLeaderboardPlayDailyCallback(java.util.function.Consumer<GameSession.GameMode> callback) {
+        this.leaderboardPlayDailyCallback = callback;
+        if (leaderboardUI != null) leaderboardUI.setPlayDailyCallback(callback);
+    }
+
+    /**
+     * Called when DailySubmissionCache finishes its async fetch so the leaderboard
+     * can re-evaluate any gated par tabs that were showing "Loading...".
+     */
+    public void notifyLeaderboardCacheReady() {
+        if (leaderboardUI != null) leaderboardUI.notifyCacheReady();
+    }
+
+    /** Triggers a full leaderboard refresh (re-fetches counts and scores). */
+    public void refreshLeaderboard() {
+        if (leaderboardUI != null) leaderboardUI.refresh();
     }
 
     /**

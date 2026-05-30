@@ -37,9 +37,11 @@ public final class MenuButtonResolver {
 
     private static List<MenuButtonDescriptor> resolveMain(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         boolean competitiveSparkle = sessions == null
-            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_18, sessions.daily18, dailyCache)
-            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_9,  sessions.daily9,  dailyCache)
-            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_1,  sessions.daily1,  dailyCache);
+            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_18,    sessions.daily18,   dailyCache)
+            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_9,     sessions.daily9,    dailyCache)
+            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_1_PAR3, sessions.dailyPar3, dailyCache)
+            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_1_PAR4, sessions.dailyPar4, dailyCache)
+            || DailyStatusResolver.isAvailableOrPending(CourseType.HOLES_1_PAR5, sessions.dailyPar5, dailyCache);
 
         java.util.List<MenuButtonDescriptor> items = new java.util.ArrayList<>();
         if (!TutorialPrefs.isComplete()) {
@@ -75,15 +77,14 @@ public final class MenuButtonResolver {
     }
 
     private static List<MenuButtonDescriptor> resolveEighteenHoles(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
-        GameSession standard = sessions != null ? sessions.standard : null;
-        GameSession daily18  = sessions != null ? sessions.daily18  : null;
-        GameSession daily9   = sessions != null ? sessions.daily9   : null;
-        GameSession daily1   = sessions != null ? sessions.daily1   : null;
+        GameSession standard  = sessions != null ? sessions.standard   : null;
+        GameSession daily18   = sessions != null ? sessions.daily18    : null;
+        GameSession daily9    = sessions != null ? sessions.daily9     : null;
+        GameSession dailyPar3 = sessions != null ? sessions.dailyPar3  : null;
+        GameSession dailyPar4 = sessions != null ? sessions.dailyPar4  : null;
+        GameSession dailyPar5 = sessions != null ? sessions.dailyPar5  : null;
 
         boolean standardFinished = standard != null && standard.isFinished();
-        // Finished standard sessions are unlocked — non-daily 18 is infinitely replayable.
-        // The completed result still lives in save_standard.json until the next load clears it;
-        // when handicap archiving is added (F-029), hook into SessionPersistence before that deletion.
         String play18Label = (standard != null && !standardFinished)
             ? "CONTINUE 18 (" + (standard.getCurrentHoleIndex() + 1) + "/18)"
             : "PLAY 18";
@@ -100,17 +101,31 @@ public final class MenuButtonResolver {
             : (daily9 != null && daily9.isFinished() ? "DAILY 9 [SUBMIT SCORE]"
             : (daily9 != null ? "CONTINUE DAILY 9 (" + (daily9.getCurrentHoleIndex() + 1) + "/9)" : "DAILY 9"));
 
-        boolean daily1Done = DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1, daily1, dailyCache);
-        String daily1Label = daily1Done
-            ? "DAILY 1-HOLE (SUBMITTED TODAY)"
-            : (daily1 != null && daily1.isFinished() ? "DAILY 1-HOLE [SUBMIT SCORE]"
-            : (daily1 != null ? "CONTINUE DAILY 1-HOLE (1/1)" : "DAILY 1-HOLE"));
+        boolean par3Done = DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1_PAR3, dailyPar3, dailyCache);
+        String par3Label = par3Done
+            ? "DAILY PAR 3 (SUBMITTED TODAY)"
+            : (dailyPar3 != null && dailyPar3.isFinished() ? "DAILY PAR 3 [SUBMIT SCORE]"
+            : (dailyPar3 != null ? "CONTINUE DAILY PAR 3 (1/1)" : "DAILY PAR 3"));
+
+        boolean par4Done = DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1_PAR4, dailyPar4, dailyCache);
+        String par4Label = par4Done
+            ? "DAILY PAR 4 (SUBMITTED TODAY)"
+            : (dailyPar4 != null && dailyPar4.isFinished() ? "DAILY PAR 4 [SUBMIT SCORE]"
+            : (dailyPar4 != null ? "CONTINUE DAILY PAR 4 (1/1)" : "DAILY PAR 4"));
+
+        boolean par5Done = DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1_PAR5, dailyPar5, dailyCache);
+        String par5Label = par5Done
+            ? "DAILY PAR 5 (SUBMITTED TODAY)"
+            : (dailyPar5 != null && dailyPar5.isFinished() ? "DAILY PAR 5 [SUBMIT SCORE]"
+            : (dailyPar5 != null ? "CONTINUE DAILY PAR 5 (1/1)" : "DAILY PAR 5"));
 
         return Arrays.asList(
-            new MenuButtonDescriptor(play18Label,  false, false),
-            new MenuButtonDescriptor(daily18Label, daily18Done,      !daily18Done),
-            new MenuButtonDescriptor(daily9Label,  daily9Done,       !daily9Done),
-            new MenuButtonDescriptor(daily1Label,  daily1Done,       !daily1Done),
+            new MenuButtonDescriptor(play18Label,  false,    false),
+            new MenuButtonDescriptor(daily18Label, daily18Done, !daily18Done),
+            new MenuButtonDescriptor(daily9Label,  daily9Done,  !daily9Done),
+            new MenuButtonDescriptor(par3Label,    par3Done,    !par3Done),
+            new MenuButtonDescriptor(par4Label,    par4Done,    !par4Done),
+            new MenuButtonDescriptor(par5Label,    par5Done,    !par5Done),
             MenuButtonDescriptor.enabled("< BACK TO MAIN")
         );
     }

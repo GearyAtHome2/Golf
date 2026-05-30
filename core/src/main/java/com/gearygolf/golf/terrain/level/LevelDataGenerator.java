@@ -120,12 +120,12 @@ public class LevelDataGenerator {
     }
 
     /**
-     * Creates a single guaranteed par-3 hole for DAILY_1.
+     * Creates a single guaranteed par-3 hole for DAILY_PAR3.
      * Candidates are all archetypes that can ever produce a par-3 (parFixed==3, or
-     * parThreshold34 > 0 meaning distance-based par can reach 3).  One is chosen
-     * deterministically from the seed.  If the chosen archetype has variable par,
-     * generation is retried with successive seeds until par==3 (up to 100 attempts).
-     * Falls back to the first fixed-par-3 archetype if all retries fail.
+     * par3DistMax > 0).  One is chosen deterministically from the seed.  If the
+     * chosen archetype has variable par, generation is retried with successive seeds
+     * until par==3 (up to 100 attempts).  Falls back to the first fixed-par-3
+     * archetype if all retries fail.
      */
     public static LevelData createPar3Hole(long seed) {
         LevelData.Archetype[] candidates = Arrays.stream(LevelData.Archetype.values())
@@ -146,6 +146,60 @@ public class LevelDataGenerator {
         // Fallback: guaranteed par-3 archetype
         LevelData.Archetype fallback = Arrays.stream(LevelData.Archetype.values())
                 .filter(a -> a.spec().parFixed == 3)
+                .findFirst().orElseThrow();
+        return createFixedLevelData(seed, fallback);
+    }
+
+    /**
+     * Creates a single guaranteed par-4 hole for DAILY_PAR4.
+     * Same deterministic/retry/fallback pattern as createPar3Hole.
+     */
+    public static LevelData createPar4Hole(long seed) {
+        LevelData.Archetype[] candidates = Arrays.stream(LevelData.Archetype.values())
+                .filter(a -> a.spec().parFixed == 4 || a.spec().par4DistMax > 0)
+                .toArray(LevelData.Archetype[]::new);
+        LevelData.Archetype chosen = candidates[new Random(seed).nextInt(candidates.length)];
+
+        if (chosen.spec().parFixed == 4) {
+            return createFixedLevelData(seed, chosen);
+        }
+
+        // Variable-par archetype: retry until distance lands in par-4 range
+        for (int attempt = 0; attempt < 100; attempt++) {
+            LevelData hole = createFixedLevelData(seed + attempt, chosen);
+            if (hole.getPar() == 4) return hole;
+        }
+
+        // Fallback: guaranteed par-4 archetype
+        LevelData.Archetype fallback = Arrays.stream(LevelData.Archetype.values())
+                .filter(a -> a.spec().parFixed == 4)
+                .findFirst().orElseThrow();
+        return createFixedLevelData(seed, fallback);
+    }
+
+    /**
+     * Creates a single guaranteed par-5 hole for DAILY_PAR5.
+     * Same deterministic/retry/fallback pattern as createPar3Hole.
+     */
+    public static LevelData createPar5Hole(long seed) {
+        LevelData.Archetype[] candidates = Arrays.stream(LevelData.Archetype.values())
+                .filter(a -> a.spec().parFixed == 5 || a.spec().par5DistMax > 0)
+                .toArray(LevelData.Archetype[]::new);
+        LevelData.Archetype chosen = candidates[new Random(seed).nextInt(candidates.length)];
+
+        if (chosen.spec().parFixed == 5) {
+            return createFixedLevelData(seed, chosen);
+        }
+
+        // Variable-par archetype: retry until distance lands in par-5 range
+        for (int attempt = 0; attempt < 100; attempt++) {
+            LevelData hole = createFixedLevelData(seed + attempt, chosen);
+            if (hole.getPar() == 5) return hole;
+        }
+
+        // Fallback: guaranteed par-5 archetype
+        LevelData.Archetype fallback = Arrays.stream(LevelData.Archetype.values())
+                .filter(a -> a.spec().parFixed == 5)
                 .findFirst().orElseThrow();
         return createFixedLevelData(seed, fallback);
     }

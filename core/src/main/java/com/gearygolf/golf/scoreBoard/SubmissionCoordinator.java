@@ -95,9 +95,11 @@ public class SubmissionCoordinator {
     /** Used from the competitive menu when the user taps [SUBMIT SCORE] on a pending session. */
     public void resubmitDaily(CourseType type) {
         GameSession session = switch (type) {
-            case HOLES_18 -> sessionManager.getDaily18();
-            case HOLES_9  -> sessionManager.getDaily9();
-            case HOLES_1  -> sessionManager.getDaily1();
+            case HOLES_18     -> sessionManager.getDaily18();
+            case HOLES_9      -> sessionManager.getDaily9();
+            case HOLES_1_PAR3 -> sessionManager.getDailyPar3();
+            case HOLES_1_PAR4 -> sessionManager.getDailyPar4();
+            case HOLES_1_PAR5 -> sessionManager.getDailyPar5();
         };
         if (session == null) return;
 
@@ -175,9 +177,11 @@ public class SubmissionCoordinator {
     /** Called silently after login/cache-fetch to retry any pending unsubmitted daily sessions. */
     public void tryAutoRetryAll() {
         CompetitiveSessions sessions = sessionManager.getCompetitiveSessions();
-        tryAutoRetrySession(sessions.daily18, CourseType.HOLES_18);
-        tryAutoRetrySession(sessions.daily9,  CourseType.HOLES_9);
-        tryAutoRetrySession(sessions.daily1,  CourseType.HOLES_1);
+        tryAutoRetrySession(sessions.daily18,   CourseType.HOLES_18);
+        tryAutoRetrySession(sessions.daily9,    CourseType.HOLES_9);
+        tryAutoRetrySession(sessions.dailyPar3, CourseType.HOLES_1_PAR3);
+        tryAutoRetrySession(sessions.dailyPar4, CourseType.HOLES_1_PAR4);
+        tryAutoRetrySession(sessions.dailyPar5, CourseType.HOLES_1_PAR5);
     }
 
     private void tryAutoRetrySession(GameSession session, CourseType type) {

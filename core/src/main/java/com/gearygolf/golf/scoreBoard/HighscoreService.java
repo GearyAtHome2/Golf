@@ -115,11 +115,11 @@ public class HighscoreService {
 
     /**
      * Builds the Firestore "where" JSON fragment scoped to today.
-     * Uses a composite filter (difficulty + timestamp) when difficulty is non-null and courseType is not HOLES_1;
+     * Uses a composite filter (difficulty + timestamp) when difficulty is non-null and courseType is not a 1-hole type;
      * otherwise uses a simple timestamp-only filter.
      */
     private static String buildTodayWhereJson(String difficulty, CourseType courseType, String todayStart) {
-        if (difficulty == null || courseType == CourseType.HOLES_1) {
+        if (difficulty == null || courseType.isOneHole()) {
             return "\"where\":{\"fieldFilter\":{\"field\":{\"fieldPath\":\"submissionTime\"},"
                  + "\"op\":\"GREATER_THAN_OR_EQUAL\",\"value\":{\"timestampValue\":\"" + todayStart + "\"}}}";
         } else {
@@ -132,7 +132,7 @@ public class HighscoreService {
 
     /**
      * Fires a Firestore aggregation COUNT query for today's entries.
-     * @param difficulty null to count across all difficulties (used for CourseType tab counts and HOLES_1).
+     * @param difficulty null to count across all difficulties (used for CourseType tab counts and 1-hole types).
      */
     public void fetchCount(String difficulty, CourseType courseType, CountListener listener) {
         if (listener == null) return;
@@ -200,10 +200,10 @@ public class HighscoreService {
         json.append("\"score\": { \"integerValue\": ").append(score).append(" },");
         json.append("\"difficulty\": { \"stringValue\": \"").append(difficulty).append("\" },");
         json.append("\"submissionTime\": { \"timestampValue\": \"").append(timestamp).append("\" }");
-        if (courseType == CourseType.HOLES_1) {
+        if (courseType.isOneHole()) {
             json.append(",\"elapsedTime\": { \"doubleValue\": ").append(elapsedTime).append(" }");
         }
-        if (courseType != CourseType.HOLES_1 && pars != null && scores != null) {
+        if (!courseType.isOneHole() && pars != null && scores != null) {
             json.append(",\"pars\": ").append(toFirestoreIntArray(pars));
             json.append(",\"scores\": ").append(toFirestoreIntArray(scores));
         }
@@ -328,7 +328,7 @@ public class HighscoreService {
         json.append("\"from\": [{\"collectionId\": \"").append(courseType.collectionId).append("\"}],");
         json.append(buildTodayWhereJson(difficulty, courseType, todayStart)).append(",");
         json.append("\"orderBy\": [");
-        if (courseType == CourseType.HOLES_1) {
+        if (courseType.isOneHole()) {
             // Order by submissionTime only — Firestore can handle this without a composite index.
             // score/elapsedTime sorting is done client-side after fetching.
             json.append("{ \"field\": {\"fieldPath\": \"submissionTime\"}, \"direction\": \"ASCENDING\" }");
