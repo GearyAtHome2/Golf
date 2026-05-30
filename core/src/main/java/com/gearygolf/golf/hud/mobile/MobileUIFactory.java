@@ -316,8 +316,8 @@ public static class MobileUIPackage {
             }
             case EIGHTEEN_HOLES -> new String[]{"STANDARD 18", "DAILY 18", "DAILY 9", "DAILY PAR 3", "DAILY PAR 4", "DAILY PAR 5", "< BACK"};
             case PRACTICE -> TutorialPrefs.isComplete()
-                ? new String[]{"DRIVING RANGE", "PUTTING GREEN", "TUTORIAL", "BACK"}
-                : new String[]{"DRIVING RANGE", "PUTTING GREEN", "BACK"};
+                ? new String[]{"DRIVING RANGE", "PUTTING GREEN", "TUTORIAL", "IMPORT SHOT", "BACK"}
+                : new String[]{"DRIVING RANGE", "PUTTING GREEN", "IMPORT SHOT", "BACK"};
             case DIFFICULTY_SELECT -> {
                 String[] diffs = GameConfig.Difficulty.getNames();
                 String[] withBack = new String[diffs.length + 1];
@@ -475,8 +475,6 @@ public static class MobileUIPackage {
         bottomRightTable.add(createMenuButton("COPY SEED", menuStyle, input, GameInputProcessor.Action.COPY_SEED, smallFont))
                 .width(sBtnW).height(sBtnH).padBottom(viewport.getWorldHeight() * 0.01f).row();
         bottomRightTable.add(createMenuButton("EXPORT SHOT", menuStyle, input, GameInputProcessor.Action.EXPORT_SHOT, smallFont))
-                .width(sBtnW).height(sBtnH).padBottom(viewport.getWorldHeight() * 0.01f).row();
-        bottomRightTable.add(createMenuButton("IMPORT SHOT", menuStyle, input, GameInputProcessor.Action.IMPORT_SHOT, smallFont))
                 .width(sBtnW).height(sBtnH);
 
         ui.pauseMenuStage.addActor(bottomRightTable);

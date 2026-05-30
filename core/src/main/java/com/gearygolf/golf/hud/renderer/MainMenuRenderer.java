@@ -233,12 +233,14 @@ public class MainMenuRenderer {
 
     private void renderPracticeMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {
         drawOption(batch, font, selection == 0, true, "PRACTICE RANGE", x, y);
-        drawOption(batch, font, selection == 1, true, "PUTTING GREEN", x, y - s);
+        drawOption(batch, font, selection == 1, true, "PUTTING GREEN",  x, y - s);
         if (TutorialPrefs.isComplete()) {
             drawOption(batch, font, selection == 2, true, "TUTORIAL",        x, y - (s * 2));
-            drawOption(batch, font, selection == 3, true, "< BACK TO MAIN",  x, y - (s * 3.5f));
+            drawOption(batch, font, selection == 3, true, "IMPORT SHOT",     x, y - (s * 3));
+            drawOption(batch, font, selection == 4, true, "< BACK TO MAIN",  x, y - (s * 4.5f));
         } else {
-            drawOption(batch, font, selection == 2, true, "< BACK TO MAIN",  x, y - (s * 2.5f));
+            drawOption(batch, font, selection == 2, true, "IMPORT SHOT",     x, y - (s * 2));
+            drawOption(batch, font, selection == 3, true, "< BACK TO MAIN",  x, y - (s * 3.5f));
         }
     }
 

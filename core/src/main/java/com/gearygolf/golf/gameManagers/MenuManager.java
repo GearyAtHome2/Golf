@@ -195,19 +195,21 @@ public class MenuManager {
 
     private void handlePractice(MenuHandler callback) {
         if (TutorialPrefs.isComplete()) {
-            // DRIVING RANGE(0) PUTTING GREEN(1) TUTORIAL(2) BACK(3)
+            // DRIVING RANGE(0) PUTTING GREEN(1) TUTORIAL(2) IMPORT SHOT(3) BACK(4)
             switch (menuSelection) {
                 case 0 -> callback.onStartPracticeRange();
                 case 1 -> callback.onStartPuttingGreen();
                 case 2 -> callback.onStartTutorial();
-                case 3 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
+                case 3 -> callback.onImportShot();
+                case 4 -> { currentMenuState = MenuState.MAIN; menuSelection = 3; }
             }
         } else {
-            // DRIVING RANGE(0) PUTTING GREEN(1) BACK(2)
+            // DRIVING RANGE(0) PUTTING GREEN(1) IMPORT SHOT(2) BACK(3)
             switch (menuSelection) {
                 case 0 -> callback.onStartPracticeRange();
                 case 1 -> callback.onStartPuttingGreen();
-                case 2 -> { currentMenuState = MenuState.MAIN; menuSelection = 4; }
+                case 2 -> callback.onImportShot();
+                case 3 -> { currentMenuState = MenuState.MAIN; menuSelection = 4; }
             }
         }
     }
@@ -218,7 +220,7 @@ public class MenuManager {
             case PLAY_OPTIONS -> 4;
             case MAP_SELECT -> MAP_SELECT_TOTAL;
             case EIGHTEEN_HOLES -> 7;
-            case PRACTICE -> TutorialPrefs.isComplete() ? 4 : 3;
+            case PRACTICE -> TutorialPrefs.isComplete() ? 5 : 4;
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.values().length + 1;
             case SETTINGS -> 4;
         };
@@ -260,5 +262,7 @@ public class MenuManager {
         default void onShowSoundSettings() {}
         /** Open the player profile screen. */
         default void onShowProfile() {}
+        /** Attempt to import a shot from the clipboard (from Practice submenu). */
+        default void onImportShot() {}
     }
 }

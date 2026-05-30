@@ -12,14 +12,20 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Group;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.gearygolf.golf.Club;
@@ -83,7 +89,6 @@ public class HUD {
     private String distanceText = "";
     private float seedFeedbackTimer = 0;
     private float shotExportFeedbackTimer = 0;
-    private boolean importShotRequested = false;
     private boolean mainMenuRequested = false;
     private Stage stage;
     private Skin skin;
@@ -91,6 +96,7 @@ public class HUD {
     private Stage pauseMenuStage;
     private Table gameplayTable;
     private Table victoryTable;
+    private Actor importRetryOverlay;
     private final SwingOverlay swingOverlay = new SwingOverlay();
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
@@ -308,9 +314,6 @@ public class HUD {
         if (input.isActionJustPressed(GameInputProcessor.Action.EXPORT_SHOT) && lastShotExport != null) {
             Gdx.app.getClipboard().setContents(lastShotExport);
             shotExportFeedbackTimer = 2.0f;
-        }
-        if (input.isActionJustPressed(GameInputProcessor.Action.IMPORT_SHOT)) {
-            importShotRequested = true;
         }
         if (seedFeedbackTimer > 0) seedFeedbackTimer -= Gdx.graphics.getDeltaTime();
         if (shotExportFeedbackTimer > 0) shotExportFeedbackTimer -= Gdx.graphics.getDeltaTime();
@@ -835,10 +838,70 @@ public void renderInstructions(GameInputProcessor input) {
         return m;
     }
 
-    public boolean wasImportShotRequested() {
-        boolean v = importShotRequested;
-        importShotRequested = false;
-        return v;
+    public void showImportRetryOverlay(Runnable onRetry, Runnable onDismiss) {
+        hideImportRetryOverlay();
+
+        float w = viewport.getWorldWidth();
+        float h = viewport.getWorldHeight();
+        float panelW = 540f, panelH = 210f;
+
+        // Root group — contains dimmer and panel as siblings (no event bubbling between siblings)
+        Group root = new Group();
+        root.setSize(w, h);
+
+        // Dimmer: full-screen Image — tap anywhere on it to dismiss
+        Image dimmer = new Image(UIUtils.createRoundedRectDrawable(new Color(0, 0, 0, 0.6f), 0));
+        dimmer.setSize(w, h);
+        dimmer.addListener(new InputListener() {
+            @Override public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                // Defer removal to after the touch event is fully processed so the stage
+                // retains focus on the dimmer and the gesture detector never sees the touchUp.
+                Gdx.app.postRunnable(onDismiss);
+                return true;
+            }
+        });
+        root.addActor(dimmer);
+
+        // Panel: Touchable.enabled so it catches all taps in its area (blocks dimmer below)
+        Table panel = new Table();
+        panel.setBackground(UIUtils.createRoundedRectDrawable(new Color(0.1f, 0.1f, 0.1f, 0.97f), 12));
+        panel.setTouchable(Touchable.enabled);
+        panel.setSize(panelW, panelH);
+        panel.setPosition(w / 2f - panelW / 2f, h / 2f - panelH / 2f);
+
+        Label.LabelStyle ls = new Label.LabelStyle(font, Color.RED);
+        Label label = new Label("NO VALID SHOT ON CLIPBOARD", ls);
+        label.setFontScale(0.45f);
+        label.setAlignment(Align.center);
+
+        TextButton.TextButtonStyle btnStyle = new TextButton.TextButtonStyle();
+        btnStyle.font = font;
+        btnStyle.fontColor = Color.WHITE;
+        Color btnBase = new Color(0.38f, 0.26f, 0.14f, 0.95f);
+        btnStyle.up   = UIUtils.createRaisedButtonDrawable(btnBase, 12, 5);
+        btnStyle.down = UIUtils.createRoundedRectDrawable(new Color(0.20f, 0.14f, 0.07f, 1f), 12);
+        TextButton retryBtn = new TextButton("RETRY", btnStyle);
+        retryBtn.getLabel().setFontScale(1.2f);
+        retryBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) { onRetry.run(); }
+        });
+
+        panel.pad(28f);
+        panel.add(label).padBottom(18f).row();
+        panel.add(retryBtn).width(340f).height(78f);
+
+        root.addActor(panel);
+        importRetryOverlay = root;
+        startMenuStage.addActor(root);
+        if (startMenuTable != null) startMenuTable.setTouchable(Touchable.disabled);
+    }
+
+    public void hideImportRetryOverlay() {
+        if (importRetryOverlay != null) {
+            importRetryOverlay.remove();
+            importRetryOverlay = null;
+        }
+        if (startMenuTable != null) startMenuTable.setTouchable(Touchable.childrenOnly);
     }
 
     public MinigameResult getMinigameResult() {

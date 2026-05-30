@@ -85,9 +85,6 @@ public class PauseMenuRenderer {
             drawCenteredShadowedText(batch, font, "[E] EXPORT SHOT", centerX, currentY, exportColor);
             currentY -= spacing;
 
-            drawCenteredShadowedText(batch, font, "[P] IMPORT SHOT", centerX, currentY, Color.WHITE);
-            currentY -= spacing;
-
             drawCenteredShadowedText(batch, font, "[M] EXIT TO MAIN MENU", centerX, currentY, Color.WHITE);
             currentY -= spacing;
 

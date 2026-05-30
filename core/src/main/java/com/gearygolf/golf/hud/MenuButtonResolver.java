@@ -72,6 +72,7 @@ public final class MenuButtonResolver {
         if (TutorialPrefs.isComplete()) {
             items.add(MenuButtonDescriptor.enabled("TUTORIAL"));
         }
+        items.add(MenuButtonDescriptor.enabled("IMPORT SHOT"));
         items.add(MenuButtonDescriptor.enabled("< BACK TO MAIN"));
         return items;
     }

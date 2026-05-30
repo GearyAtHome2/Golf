@@ -130,6 +130,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private String lastShotExport = null;
     private ShotExportPacket.ShotReplayData pendingShotReplay = null;
     private boolean shotReplayReady = false;
+    private boolean showImportRetryPrompt = false;
     private Model highlightModel;
     private ModelInstance highlightInstance;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
@@ -509,16 +510,20 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             exitToMainMenu();
             return;
         }
-        if (hud.wasImportShotRequested()) {
-            importShotFromClipboard();
-            return;
-        }
         if (submissionCoordinator.isSubmissionInProgress()) return;
 
         switch (currentState) {
             case LOGIN -> {
             } // input handled by the login stage via the input multiplexer
             case START -> {
+                if (showImportRetryPrompt) {
+                    if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.IMPORT_SHOT)) {
+                        onImportShot();
+                    } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
+                        dismissImportOverlay();
+                    }
+                    break;
+                }
                 menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
                 // Badge click — opens rank info overlay (desktop + Android)
                 if (Gdx.input.justTouched()
@@ -2341,6 +2346,27 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     @Override
     public void onStartPracticeRange() {
         startLoadingLevel(GameState.PRACTICE_RANGE, -1);
+    }
+
+    @Override
+    public void onImportShot() {
+        String clip = Gdx.app.getClipboard().getContents();
+        ShotExportPacket.ShotReplayData data =
+                ShotExportPacket.decode(clip != null ? clip.trim() : null);
+        if (data == null) {
+            showImportRetryPrompt = true;
+            hud.showImportRetryOverlay(this::onImportShot, this::dismissImportOverlay);
+            return;
+        }
+        dismissImportOverlay();
+        pendingShotReplay = data;
+        shotReplayReady = true;
+        startLoadingLevel(GameState.SHOT_REPLAY, -1);
+    }
+
+    private void dismissImportOverlay() {
+        showImportRetryPrompt = false;
+        hud.hideImportRetryOverlay();
     }
 
     @Override
