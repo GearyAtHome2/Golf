@@ -231,6 +231,21 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         particleManager.setSoundManager(soundManager);
         sessionManager = new SessionManager(config);
 
+        hud.setLeaderboardPlayDailyCallback(mode -> {
+            GameSession session = switch (mode) {
+                case DAILY_PAR3 -> sessionManager.getDailyPar3();
+                case DAILY_PAR4 -> sessionManager.getDailyPar4();
+                case DAILY_PAR5 -> sessionManager.getDailyPar5();
+                default -> null;
+            };
+            int pendingMode = switch (mode) {
+                case DAILY_PAR4 -> 4;
+                case DAILY_PAR5 -> 5;
+                default -> 3;
+            };
+            selectDaily(session, pendingMode);
+        });
+
         authService = new AuthService();
         userSession = new UserSession();
         userSession.load();
@@ -289,7 +304,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             refreshSkillRatingDisplay();
             sessionManager.reloadDailySessions(r.uid);
             uploadPendingStandard18IfPresent();
-            dailySubmissionCache.fetch(r.uid, this::tryAutoRetryPending);
+            dailySubmissionCache.fetch(r.uid, () -> {
+                tryAutoRetryPending();
+                hud.notifyLeaderboardCacheReady();
+            });
             TutorialPrefs.markFirstLoginDone();
             changeState(GameState.START);
         });
@@ -341,7 +359,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     refreshSkillRatingDisplay();
                     sessionManager.reloadDailySessions(r.uid);
                     uploadPendingStandard18IfPresent();
-                    dailySubmissionCache.fetch(r.uid, GolfGame.this::tryAutoRetryPending);
+                    dailySubmissionCache.fetch(r.uid, () -> {
+                        tryAutoRetryPending();
+                        hud.notifyLeaderboardCacheReady();
+                    });
                     changeState(GameState.START);
                 }
 
@@ -453,6 +474,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (soundManager != null) {
             if (newState == GameState.START) soundManager.onMenuEnter();
             else if (oldState == GameState.LOADING && isGameplayState(newState)) soundManager.onHoleEnter(false); // TODO: pass true for canyon/reverb maps
+        }
+
+        if (newState == GameState.START && oldState != GameState.LOGIN) {
+            hud.refreshLeaderboard();
         }
 
         switch (newState) {
@@ -793,7 +818,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     if (next.isNewLevelStep()) {
                         startLoadingLevel(GameState.PLAYING, -1);
                     } else if (next == TutorialController.Step.STEP_L3_7_DAILY_PROMPT
-                            && dailySubmissionCache.hasSubmitted(com.gearygolf.golf.scoreBoard.CourseType.HOLES_1)) {
+                            && dailySubmissionCache.hasSubmitted(com.gearygolf.golf.scoreBoard.CourseType.HOLES_1_PAR3)) {
                         // Daily 1-hole already submitted today — skip the prompt
                         tutorialSession.controller.advance(); // → DONE
                         TutorialPrefs.markComplete();
@@ -1235,12 +1260,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     /**
-     * Advances the elapsed timer for DAILY_1 mode when gameplay is active.
+     * Advances the elapsed timer for DAILY_PAR3/4/5 modes when gameplay is active.
      */
     private void updateDaily1Timer(float delta) {
         if (gameplayState != GameState.COMPETITIVE || currentState == GameState.PAUSED || isVictory) return;
         GameSession active = sessionManager.getActive();
-        if (active != null && active.getMode() == GameSession.GameMode.DAILY_1) {
+        if (active == null) return;
+        GameSession.GameMode m = active.getMode();
+        if (m == GameSession.GameMode.DAILY_PAR3
+         || m == GameSession.GameMode.DAILY_PAR4
+         || m == GameSession.GameMode.DAILY_PAR5) {
             active.addElapsedTime(delta);
         }
     }
@@ -2262,8 +2291,18 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     @Override
-    public void onSelectDaily1() {
-        selectDaily(sessionManager.getDaily1(), 3);
+    public void onSelectDailyPar3() {
+        selectDaily(sessionManager.getDailyPar3(), 3);
+    }
+
+    @Override
+    public void onSelectDailyPar4() {
+        selectDaily(sessionManager.getDailyPar4(), 4);
+    }
+
+    @Override
+    public void onSelectDailyPar5() {
+        selectDaily(sessionManager.getDailyPar5(), 5);
     }
 
     private void selectDaily(GameSession daily, int pendingMatchMode) {
@@ -2291,7 +2330,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             case 0 -> sessionManager.startStandardMatch();
             case 1 -> sessionManager.startDaily18();
             case 2 -> sessionManager.startDaily9();
-            case 3 -> sessionManager.startDaily1();
+            case 3 -> sessionManager.startDailyPar3();
+            case 4 -> sessionManager.startDailyPar4();
+            case 5 -> sessionManager.startDailyPar5();
         }
 
         startLoadingLevel(GameState.COMPETITIVE, -1);

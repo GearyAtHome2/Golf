@@ -38,14 +38,14 @@ public class VictoryRenderer {
         // hasModal: competitive 18/9-hole screens that render a score table in a dark box.
         // For these, shout+subtext are drawn INSIDE renderCompetitiveResults, AFTER the modal
         // background, so they appear in front. For all other cases draw them here.
-        boolean hasModal = (session != null) && (session.getMode() != GameSession.GameMode.DAILY_1);
+        boolean hasModal = (session != null) && !isOneHoleMode(session);
 
         if (!hasModal) {
-            // Non-competitive or DAILY_1: text in open screen space (no modal to work around).
-            // DAILY_1 needs the same ~0.17 vertical gap as non-competitive so the large shout
+            // Non-competitive or daily 1-hole: text in open screen space (no modal to work around).
+            // 1-hole modes need the same ~0.17 vertical gap as non-competitive so the large shout
             // text doesn't overlap the subtext; it just sits higher to leave room for TIME below.
             float shoutY, subTextY;
-            if (session != null && session.getMode() == GameSession.GameMode.DAILY_1) {
+            if (session != null && isOneHoleMode(session)) {
                 shoutY   = screenH * 0.88f;
                 subTextY = screenH * 0.72f; // ~0.16 gap below shout; TIME is at 0.65
             } else if (session == null) {
@@ -69,7 +69,7 @@ public class VictoryRenderer {
         }
 
         if (session != null) {
-            if (session.getMode() == GameSession.GameMode.DAILY_1) {
+            if (isOneHoleMode(session)) {
                 renderDaily1Results(batch, font, viewport, session, centerX, screenH);
             } else {
                 batch.end();
@@ -170,7 +170,7 @@ public class VictoryRenderer {
             font.setColor(Color.YELLOW);
             String prompt;
             if (session.isFinished()) {
-                if (session.getMode() == GameSession.GameMode.DAILY_18 || session.getMode() == GameSession.GameMode.DAILY_9 || session.getMode() == GameSession.GameMode.DAILY_1) {
+                if (session.getMode() == GameSession.GameMode.DAILY_18 || session.getMode() == GameSession.GameMode.DAILY_9 || isOneHoleMode(session)) {
                     prompt = "COURSE COMPLETE! [S] Submit Score or [M] Main Menu";
                 } else if (session.getMode() == GameSession.GameMode.STANDARD_18) {
                     prompt = uploadDone
@@ -292,5 +292,12 @@ public class VictoryRenderer {
     private void drawCentered(SpriteBatch batch, BitmapFont font, String text, float x, float y, float width) {
         layout.setText(font, text);
         font.draw(batch, text, x + (width / 2f) - (layout.width / 2f), y);
+    }
+
+    private static boolean isOneHoleMode(GameSession session) {
+        GameSession.GameMode m = session.getMode();
+        return m == GameSession.GameMode.DAILY_PAR3
+            || m == GameSession.GameMode.DAILY_PAR4
+            || m == GameSession.GameMode.DAILY_PAR5;
     }
 }

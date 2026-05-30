@@ -7,6 +7,7 @@ import com.gearygolf.golf.ball.CompetitiveScore;
 import com.gearygolf.golf.terrain.level.LevelData;
 import com.gearygolf.golf.terrain.level.LevelDataGenerator;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class GameSession implements Json.Serializable {
@@ -14,12 +15,14 @@ public class GameSession implements Json.Serializable {
         STANDARD_18,
         DAILY_18,
         DAILY_9,
-        DAILY_1,
+        DAILY_PAR3,
+        DAILY_PAR4,
+        DAILY_PAR5,
         MULTIPLAYER_9;
 
         public int holeCount() {
             return switch (this) {
-                case DAILY_1 -> 1;
+                case DAILY_PAR3, DAILY_PAR4, DAILY_PAR5 -> 1;
                 case DAILY_9, MULTIPLAYER_9 -> 9;
                 default -> 18;
             };
@@ -56,6 +59,12 @@ public class GameSession implements Json.Serializable {
     public void rebuildLayout() {
         if (mode == GameMode.MULTIPLAYER_9) {
             this.courseLayout = LevelDataGenerator.generate9RandomHoles(masterSeed);
+        } else if (mode == GameMode.DAILY_PAR3) {
+            this.courseLayout = Collections.singletonList(LevelDataGenerator.createPar3Hole(masterSeed));
+        } else if (mode == GameMode.DAILY_PAR4) {
+            this.courseLayout = Collections.singletonList(LevelDataGenerator.createPar4Hole(masterSeed));
+        } else if (mode == GameMode.DAILY_PAR5) {
+            this.courseLayout = Collections.singletonList(LevelDataGenerator.createPar5Hole(masterSeed));
         } else {
             List<LevelData> full18 = LevelDataGenerator.generate18Holes(masterSeed);
             int count = (mode != null) ? mode.holeCount() : 18;

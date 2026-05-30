@@ -15,11 +15,14 @@ import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 import com.gearygolf.golf.GameConfig;
+import com.gearygolf.golf.hud.SparkleButton;
 import com.gearygolf.golf.hud.UIUtils;
+import com.gearygolf.golf.session.GameSession;
 
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public class LeaderboardUI extends Table {
     private final HighscoreService service;
@@ -27,10 +30,15 @@ public class LeaderboardUI extends Table {
     private final BitmapFont font;
     private final Table scoreTable;
     private String currentDifficulty = GameConfig.Difficulty.NOVICE.name();
-    private CourseType currentCourseType = CourseType.HOLES_1;
+    private CourseType currentCourseType = CourseType.HOLES_1_PAR3;
     private float lastAppliedScale = 1.0f;
     private Stage boundStage;
     private ScorecardPopup currentPopup;
+
+    // Injected after construction — used for 1-hole par tab gating
+    private DailySubmissionCache dailyCache;
+    // Called when user presses "PLAY DAILY PAR X" in a gated par tab
+    private Consumer<GameSession.GameMode> onPlayDaily;
 
     // Count caches — absent key means "not yet loaded"
     private final Map<CourseType, Integer> courseTypeCounts = new EnumMap<>(CourseType.class);
@@ -61,6 +69,33 @@ public class LeaderboardUI extends Table {
         this.boundStage = stage;
     }
 
+    /** Injects the submission cache so 1-hole par tabs can gate their content. */
+    public void setDailySubmissionCache(DailySubmissionCache cache) {
+        this.dailyCache = cache;
+    }
+
+    /**
+     * Sets the callback invoked when the user presses a "PLAY DAILY PAR X" button
+     * in a gated 1-hole par tab. The consumer receives the game mode to launch.
+     */
+    public void setPlayDailyCallback(Consumer<GameSession.GameMode> callback) {
+        this.onPlayDaily = callback;
+    }
+
+    /**
+     * Called externally when the DailySubmissionCache finishes its async fetch.
+     * Re-evaluates the current tab — if it was showing "Loading..." for a gated
+     * par tab, it will now either show the play button or fire the leaderboard query.
+     */
+    public void notifyCacheReady() {
+        if (currentCourseType.isOneHole()) {
+            gen++;
+            final int g = gen;
+            rebuild(lastAppliedScale); // re-evaluates sparkle state on par tabs
+            fireDataQuery(g);
+        }
+    }
+
     private void ensureStylesExist() {
         if (!skin.has("default", Label.LabelStyle.class)) {
             Label.LabelStyle labelStyle = new Label.LabelStyle();
@@ -88,7 +123,8 @@ public class LeaderboardUI extends Table {
         title.setFontScale(uiScale * 1.0f);
 
         Table courseTabTable = buildCourseTypeTabs(uiScale);
-        Table tabTable = buildDifficultyTabs(uiScale);
+        Table parTabTable = currentCourseType.isOneHole() ? buildParTabs(uiScale) : null;
+        Table diffTabTable = !currentCourseType.isOneHole() ? buildDifficultyTabs(uiScale) : null;
 
         ScrollPane scroll = new ScrollPane(scoreTable, skin);
         scroll.setFadeScrollBars(false);
@@ -102,8 +138,11 @@ public class LeaderboardUI extends Table {
 
         this.add(title).expandX().fillX().padBottom(10 * uiScale).row();
         this.add(courseTabTable).expandX().fillX().padBottom(6 * uiScale).row();
-        if (currentCourseType != CourseType.HOLES_1) {
-            this.add(tabTable).expandX().fillX().padBottom(10 * uiScale).row();
+        if (parTabTable != null) {
+            this.add(parTabTable).expandX().fillX().padBottom(10 * uiScale).row();
+        }
+        if (diffTabTable != null) {
+            this.add(diffTabTable).expandX().fillX().padBottom(10 * uiScale).row();
         }
         this.add(scroll).expand().fill().row();
         this.add(refreshBtn).width(140 * uiScale).height(40 * uiScale).right().padTop(10 * uiScale);
@@ -117,28 +156,40 @@ public class LeaderboardUI extends Table {
         float btnW = (this.getWidth() - 40 * uiScale) / 3f * 0.88f;
 
         // F-021: 1-Hole first, 18-Hole last
-        CourseType[] types = {CourseType.HOLES_1, CourseType.HOLES_9, CourseType.HOLES_18};
+        // "1-Hole" maps to whichever par variant is currently active (or defaults to PAR3)
+        CourseType[] outerTypes = {CourseType.HOLES_1_PAR3, CourseType.HOLES_9, CourseType.HOLES_18};
         String[] baseLabels = {"1-Hole", "9-Hole", "18-Hole"};
 
-        for (int i = 0; i < types.length; i++) {
-            final CourseType ct = types[i];
-            String text = baseLabels[i] + " " + countSuffix(courseTypeCounts.get(ct));
+        for (int i = 0; i < outerTypes.length; i++) {
+            final CourseType ct = outerTypes[i];
+            final boolean isOneHoleTab = (i == 0);
+            // For the outer 1-hole tab, count across all three par types combined
+            Integer count = isOneHoleTab
+                ? sumOneHoleCounts()
+                : courseTypeCounts.get(ct);
+            String text = baseLabels[i] + " " + countSuffix(count);
             TextButton btn = new TextButton(text, skin, "default");
             btn.getLabel().setFontScale(fitBtnScale(text, btnScale, btnW));
+            // Track the PAR3 label for the outer tab (representative of the 1-hole group)
             courseTabLabels.put(ct, btn.getLabel());
-            if (ct == currentCourseType) {
+            boolean isCurrentTab = isOneHoleTab ? currentCourseType.isOneHole() : ct == currentCourseType;
+            if (isCurrentTab) {
                 btn.setChecked(true);
                 btn.setColor(Color.GRAY);
             }
             btn.addListener(new ClickListener() {
                 @Override public void clicked(InputEvent event, float x, float y) {
-                    if (ct == currentCourseType) return;
-                    currentCourseType = ct;
+                    CourseType target = isOneHoleTab ? CourseType.HOLES_1_PAR3 : ct;
+                    boolean alreadyActive = isOneHoleTab ? currentCourseType.isOneHole() : currentCourseType == ct;
+                    if (alreadyActive) return;
+                    currentCourseType = target;
                     difficultyCounts.clear();
                     gen++;
                     final int g = gen;
                     rebuild(lastAppliedScale);
-                    fireDiffCounts(g);
+                    if (!isOneHoleTab) {
+                        fireDiffCounts(g);
+                    }
                     fireDataQuery(g);
                 }
             });
@@ -146,6 +197,50 @@ public class LeaderboardUI extends Table {
             courseGroup.add(btn);
         }
         return courseTabTable;
+    }
+
+    /** Builds the Par 3 / Par 4 / Par 5 inner tabs shown when the 1-Hole outer tab is active. */
+    private Table buildParTabs(float uiScale) {
+        Table parTabTable = new Table();
+        ButtonGroup<TextButton> group = new ButtonGroup<>();
+        boolean isAndroid = Platform.isAndroid();
+        float btnScale = uiScale * (isAndroid ? 0.75f : 1.0f);
+        float btnW = (this.getWidth() - 40 * uiScale) / 3f * 0.88f;
+
+        CourseType[] parTypes = {CourseType.HOLES_1_PAR3, CourseType.HOLES_1_PAR4, CourseType.HOLES_1_PAR5};
+        String[] labels = {"Par 3", "Par 4", "Par 5"};
+
+        TextButton.TextButtonStyle btnStyle = skin.get("default", TextButton.TextButtonStyle.class);
+        for (int i = 0; i < parTypes.length; i++) {
+            final CourseType pt = parTypes[i];
+            String text = labels[i] + " " + countSuffix(courseTypeCounts.get(pt));
+            boolean isCurrentTab = (pt == currentCourseType);
+            // Sparkle until the cache positively confirms the user submitted today.
+            // If cache isn't fetched yet we assume unplayed (stops when notifyCacheReady rebuilds).
+            boolean unplayed = !isCurrentTab
+                && (dailyCache == null || !dailyCache.isFetched() || !dailyCache.hasSubmitted(pt));
+            SparkleButton btn = new SparkleButton(text, btnStyle);
+            btn.getLabel().setFontScale(fitBtnScale(text, btnScale, btnW));
+            btn.setSparkleEnabled(unplayed);
+            courseTabLabels.put(pt, btn.getLabel());
+            if (isCurrentTab) {
+                btn.setChecked(true);
+                btn.setColor(Color.GRAY);
+            }
+            btn.addListener(new ClickListener() {
+                @Override public void clicked(InputEvent event, float x, float y) {
+                    if (pt == currentCourseType) return;
+                    currentCourseType = pt;
+                    gen++;
+                    final int g = gen;
+                    rebuild(lastAppliedScale);
+                    fireDataQuery(g);
+                }
+            });
+            parTabTable.add(btn).expandX().fillX().height(40 * uiScale).pad(2 * uiScale);
+            group.add(btn);
+        }
+        return parTabTable;
     }
 
     private Table buildDifficultyTabs(float uiScale) {
@@ -203,7 +298,7 @@ public class LeaderboardUI extends Table {
     // Query dispatch
     // -------------------------------------------------------------------------
 
-    /** Fires 3 count queries (one per CourseType, no difficulty filter). Updates course type tab labels in place. */
+    /** Fires count queries for all CourseTypes. Updates tab labels in place. */
     private void fireCourseTypeCounts(int g) {
         for (CourseType type : CourseType.values()) {
             final CourseType ct = type;
@@ -216,7 +311,6 @@ public class LeaderboardUI extends Table {
                 }
                 @Override public void onFailure(Throwable err) {
                     if (gen != g) return;
-                    // On failure just drop the suffix — don't leave "(...)" permanently
                     Label lbl = courseTabLabels.get(ct);
                     if (lbl != null) lbl.setText(courseTypeBaseLabel(ct));
                 }
@@ -227,17 +321,13 @@ public class LeaderboardUI extends Table {
     /**
      * Fires one query (all difficulties, today, limit 55) for the current CourseType,
      * then counts client-side per difficulty to update the difficulty tab labels.
-     * No-op for HOLES_1 which has no difficulty tabs.
-     *
-     * Using a regular query rather than 5 aggregation queries avoids the composite-index
-     * requirement that Firestore COUNT aggregation adds for multi-field filters.
+     * No-op for 1-hole par types (which have no difficulty tabs).
      */
     private void fireDiffCounts(int g) {
-        if (currentCourseType == CourseType.HOLES_1) return;
+        if (currentCourseType.isOneHole()) return;
         service.fetchHighscoresAllDifficulties(currentCourseType, new HighscoreService.HighscoreListener() {
             @Override public void onSuccess(Array<HighscoreService.HighscoreEntry> entries) {
                 if (gen != g) return;
-                // Count entries per difficulty
                 Map<String, Integer> counts = new HashMap<>();
                 for (HighscoreService.HighscoreEntry e : entries) {
                     if (e.difficulty != null) {
@@ -255,7 +345,6 @@ public class LeaderboardUI extends Table {
             }
             @Override public void onFailure(Throwable err) {
                 if (gen != g) return;
-                // On failure drop the suffix rather than leaving "(...)" permanently
                 for (String diff : GameConfig.Difficulty.getNames()) {
                     Label lbl = diffTabLabels.get(diff);
                     if (lbl != null) lbl.setText(diff);
@@ -264,12 +353,30 @@ public class LeaderboardUI extends Table {
         });
     }
 
-    /** Fires the top-10 data query for the current (CourseType, difficulty). Shows "Loading..." until it returns. */
+    /**
+     * For 1-hole par tabs, checks the submission gate before firing the query:
+     * - Cache not fetched yet  → show "Loading..." (already shown above)
+     * - Cache fetched, not submitted → show "PLAY DAILY PAR X" button
+     * - Cache fetched, submitted     → fire the leaderboard query as normal
+     *
+     * For 9/18-hole tabs, always fires the query.
+     */
     private void fireDataQuery(int g) {
         scoreTable.clear();
         Label loading = new Label("Loading...", skin, "default");
         loading.setFontScale(lastAppliedScale * 0.7f);
         scoreTable.add(loading).center().padTop(40 * lastAppliedScale);
+
+        if (currentCourseType.isOneHole()) {
+            // Not enough information yet — leave "Loading..." until cache arrives
+            if (dailyCache == null || !dailyCache.isFetched()) return;
+
+            // Gate: user hasn't played this par variant today
+            if (!dailyCache.hasSubmitted(currentCourseType)) {
+                showPlayDailyButton(g);
+                return;
+            }
+        }
 
         service.fetchHighscores(currentDifficulty, currentCourseType, new HighscoreService.HighscoreListener() {
             @Override public void onSuccess(Array<HighscoreService.HighscoreEntry> entries) {
@@ -287,6 +394,31 @@ public class LeaderboardUI extends Table {
         });
     }
 
+    /** Replaces scoreTable content with a large sparkle-animated play button. */
+    private void showPlayDailyButton(int g) {
+        if (gen != g) return;
+        scoreTable.clear();
+
+        int parNum = currentCourseType == CourseType.HOLES_1_PAR4 ? 4
+                   : currentCourseType == CourseType.HOLES_1_PAR5 ? 5 : 3;
+        String btnText = "PLAY DAILY PAR " + parNum;
+
+        GameSession.GameMode mode = currentCourseType == CourseType.HOLES_1_PAR4 ? GameSession.GameMode.DAILY_PAR4
+                                  : currentCourseType == CourseType.HOLES_1_PAR5 ? GameSession.GameMode.DAILY_PAR5
+                                  : GameSession.GameMode.DAILY_PAR3;
+
+        SparkleButton playBtn = new SparkleButton(btnText, skin.get("default", TextButton.TextButtonStyle.class));
+        playBtn.getLabel().setFontScale(lastAppliedScale * 1.6f);
+        playBtn.setSparkleEnabled(true);
+        playBtn.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent event, float x, float y) {
+                if (onPlayDaily != null) onPlayDaily.accept(mode);
+            }
+        });
+
+        scoreTable.add(playBtn).expand().fill().pad(20 * lastAppliedScale);
+    }
+
     // -------------------------------------------------------------------------
     // Table population
     // -------------------------------------------------------------------------
@@ -300,7 +432,7 @@ public class LeaderboardUI extends Table {
         boolean isAndroid = Platform.isAndroid();
         float textScale = uiScale * (isAndroid ? 0.70f : 0.88f);
 
-        if (currentCourseType == CourseType.HOLES_1) {
+        if (currentCourseType.isOneHole()) {
             if (entries != null) {
                 entries.sort((a, b) -> {
                     if (a.score != b.score) return Integer.compare(a.score, b.score);
@@ -339,7 +471,6 @@ public class LeaderboardUI extends Table {
 
         Drawable hoverBg = skin.has("white", Drawable.class)
             ? skin.newDrawable("white", new Color(1f, 1f, 1f, 0.10f)) : null;
-        // Zero min-dimensions so the background tint doesn't alter row height and cause layout shift.
         if (hoverBg instanceof BaseDrawable) {
             ((BaseDrawable) hoverBg).setMinWidth(0);
             ((BaseDrawable) hoverBg).setMinHeight(0);
@@ -464,11 +595,22 @@ public class LeaderboardUI extends Table {
     // -------------------------------------------------------------------------
 
     private String courseTypeBaseLabel(CourseType type) {
-        switch (type) {
-            case HOLES_1: return "1-Hole";
-            case HOLES_9: return "9-Hole";
-            default:      return "18-Hole";
-        }
+        return switch (type) {
+            case HOLES_1_PAR3 -> "Par 3";
+            case HOLES_1_PAR4 -> "Par 4";
+            case HOLES_1_PAR5 -> "Par 5";
+            case HOLES_9      -> "9-Hole";
+            default           -> "18-Hole";
+        };
+    }
+
+    /** Sums counts across all three 1-hole par types for the outer "1-Hole" tab label. */
+    private Integer sumOneHoleCounts() {
+        Integer p3 = courseTypeCounts.get(CourseType.HOLES_1_PAR3);
+        Integer p4 = courseTypeCounts.get(CourseType.HOLES_1_PAR4);
+        Integer p5 = courseTypeCounts.get(CourseType.HOLES_1_PAR5);
+        if (p3 == null && p4 == null && p5 == null) return null; // none loaded yet
+        return (p3 != null ? p3 : 0) + (p4 != null ? p4 : 0) + (p5 != null ? p5 : 0);
     }
 
     private String countSuffix(Integer count) {

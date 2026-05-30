@@ -18,9 +18,11 @@ public class SessionPersistence {
         boolean hasUid = uid != null && !uid.isEmpty();
         return switch (mode) {
             case STANDARD_18  -> STANDARD_FILE;
-            case DAILY_18     -> hasUid ? "save_daily_18_" + uid + ".json" : "save_daily_18.json";
-            case DAILY_9      -> hasUid ? "save_daily_9_"  + uid + ".json" : "save_daily_9.json";
-            case DAILY_1      -> hasUid ? "save_daily_1_"  + uid + ".json" : "save_daily_1.json";
+            case DAILY_18     -> hasUid ? "save_daily_18_"    + uid + ".json" : "save_daily_18.json";
+            case DAILY_9      -> hasUid ? "save_daily_9_"     + uid + ".json" : "save_daily_9.json";
+            case DAILY_PAR3   -> hasUid ? "save_daily_par3_"  + uid + ".json" : "save_daily_par3.json";
+            case DAILY_PAR4   -> hasUid ? "save_daily_par4_"  + uid + ".json" : "save_daily_par4.json";
+            case DAILY_PAR5   -> hasUid ? "save_daily_par5_"  + uid + ".json" : "save_daily_par5.json";
             case MULTIPLAYER_9 -> ""; // ephemeral — never saved to disk
         };
     }

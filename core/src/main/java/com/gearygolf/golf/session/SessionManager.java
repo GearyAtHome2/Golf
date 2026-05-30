@@ -12,7 +12,9 @@ public class SessionManager {
     private GameSession standardSession;
     private GameSession daily18Session;
     private GameSession daily9Session;
-    private GameSession daily1Session;
+    private GameSession dailyPar3Session;
+    private GameSession dailyPar4Session;
+    private GameSession dailyPar5Session;
     private GameSession finishedStandard18PendingUpload;
     private final GameConfig config;
     private String uid = "";
@@ -31,9 +33,11 @@ public class SessionManager {
      */
     public void reloadDailySessions(String uid) {
         this.uid = uid != null ? uid : "";
-        this.daily18Session = SessionPersistence.loadSession(GameSession.GameMode.DAILY_18, this.uid);
-        this.daily9Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_9,  this.uid);
-        this.daily1Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_1,  this.uid);
+        this.daily18Session    = SessionPersistence.loadSession(GameSession.GameMode.DAILY_18,   this.uid);
+        this.daily9Session     = SessionPersistence.loadSession(GameSession.GameMode.DAILY_9,    this.uid);
+        this.dailyPar3Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_PAR3, this.uid);
+        this.dailyPar4Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_PAR4, this.uid);
+        this.dailyPar5Session  = SessionPersistence.loadSession(GameSession.GameMode.DAILY_PAR5, this.uid);
     }
 
     public void startCompetitiveMatch(long seed, GameSession.GameMode mode) {
@@ -47,9 +51,9 @@ public class SessionManager {
 
         switch (mode) {
             case STANDARD_18 -> standardSession = activeSession;
-            case DAILY_18 -> daily18Session = activeSession;
-            case DAILY_9 -> daily9Session = activeSession;
-            case DAILY_1 -> daily1Session = activeSession;
+            case DAILY_18    -> daily18Session   = activeSession;
+            case DAILY_9     -> daily9Session    = activeSession;
+            default          -> {} // DAILY_PAR3/4/5 use their own start methods; other modes are ephemeral
         }
 
         SessionPersistence.saveSession(activeSession, uid);
@@ -63,12 +67,30 @@ public class SessionManager {
         startCompetitiveMatch(scrambleDailySeed(SessionPersistence.getTodayTimestamp() * 37L + 1L), GameSession.GameMode.DAILY_9);
     }
 
-    public void startDaily1() {
+    public void startDailyPar3() {
         long seed = scrambleDailySeed(SessionPersistence.getTodayTimestamp() * 71L + 3L);
-        activeSession = new GameSession(seed, config.difficulty, GameSession.GameMode.DAILY_1, SessionPersistence.getTodayTimestamp());
+        activeSession = new GameSession(seed, config.difficulty, GameSession.GameMode.DAILY_PAR3, SessionPersistence.getTodayTimestamp());
         activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession, uid));
         activeSession.setCourseLayout(Collections.singletonList(LevelDataGenerator.createPar3Hole(seed)));
-        daily1Session = activeSession;
+        dailyPar3Session = activeSession;
+        SessionPersistence.saveSession(activeSession, uid);
+    }
+
+    public void startDailyPar4() {
+        long seed = scrambleDailySeed(SessionPersistence.getTodayTimestamp() * 97L + 7L);
+        activeSession = new GameSession(seed, config.difficulty, GameSession.GameMode.DAILY_PAR4, SessionPersistence.getTodayTimestamp());
+        activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession, uid));
+        activeSession.setCourseLayout(Collections.singletonList(LevelDataGenerator.createPar4Hole(seed)));
+        dailyPar4Session = activeSession;
+        SessionPersistence.saveSession(activeSession, uid);
+    }
+
+    public void startDailyPar5() {
+        long seed = scrambleDailySeed(SessionPersistence.getTodayTimestamp() * 113L + 11L);
+        activeSession = new GameSession(seed, config.difficulty, GameSession.GameMode.DAILY_PAR5, SessionPersistence.getTodayTimestamp());
+        activeSession.setSaveCallback(() -> SessionPersistence.saveSession(activeSession, uid));
+        activeSession.setCourseLayout(Collections.singletonList(LevelDataGenerator.createPar5Hole(seed)));
+        dailyPar5Session = activeSession;
         SessionPersistence.saveSession(activeSession, uid);
     }
 
@@ -104,7 +126,8 @@ public class SessionManager {
     }
 
     public CompetitiveSessions getCompetitiveSessions() {
-        return new CompetitiveSessions(standardSession, daily18Session, daily9Session, daily1Session);
+        return new CompetitiveSessions(standardSession, daily18Session, daily9Session,
+                                       dailyPar3Session, dailyPar4Session, dailyPar5Session);
     }
 
     public GameSession getActive() { return activeSession; }
@@ -116,10 +139,12 @@ public class SessionManager {
         }
     }
 
-    public GameSession getStandard() { return standardSession; }
-    public GameSession getDaily18() { return daily18Session; }
-    public GameSession getDaily9() { return daily9Session; }
-    public GameSession getDaily1() { return daily1Session; }
+    public GameSession getStandard()     { return standardSession; }
+    public GameSession getDaily18()      { return daily18Session; }
+    public GameSession getDaily9()       { return daily9Session; }
+    public GameSession getDailyPar3()    { return dailyPar3Session; }
+    public GameSession getDailyPar4()    { return dailyPar4Session; }
+    public GameSession getDailyPar5()    { return dailyPar5Session; }
     public void clearActive() { activeSession = null; }
 
     /** Returns and clears a finished STANDARD_18 session that was found on disk at startup. */
@@ -132,6 +157,10 @@ public class SessionManager {
     public boolean isDailyActive() {
         if (activeSession == null) return false;
         GameSession.GameMode m = activeSession.getMode();
-        return m == GameSession.GameMode.DAILY_18 || m == GameSession.GameMode.DAILY_9 || m == GameSession.GameMode.DAILY_1;
+        return m == GameSession.GameMode.DAILY_18
+            || m == GameSession.GameMode.DAILY_9
+            || m == GameSession.GameMode.DAILY_PAR3
+            || m == GameSession.GameMode.DAILY_PAR4
+            || m == GameSession.GameMode.DAILY_PAR5;
     }
 }

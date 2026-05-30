@@ -86,9 +86,11 @@ public class MenuManager {
 
     private boolean isSelectionLocked(CompetitiveSessions sessions, DailySubmissionCache dailyCache) {
         if (currentMenuState == MenuState.EIGHTEEN_HOLES) {
-            if (menuSelection == 1) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_18, sessions.daily18, dailyCache);
-            if (menuSelection == 2) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_9,  sessions.daily9,  dailyCache);
-            if (menuSelection == 3) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1,  sessions.daily1,  dailyCache);
+            if (menuSelection == 1) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_18,     sessions.daily18,   dailyCache);
+            if (menuSelection == 2) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_9,      sessions.daily9,    dailyCache);
+            if (menuSelection == 3) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1_PAR3, sessions.dailyPar3, dailyCache);
+            if (menuSelection == 4) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1_PAR4, sessions.dailyPar4, dailyCache);
+            if (menuSelection == 5) return DailyStatusResolver.isEffectivelySubmitted(CourseType.HOLES_1_PAR5, sessions.dailyPar5, dailyCache);
         }
         return false;
     }
@@ -165,10 +167,12 @@ public class MenuManager {
     private void handleEighteen(MenuHandler callback, CompetitiveSessions sessions) {
         switch (menuSelection) {
             case 0 -> callback.onSelectStandard18();
-            case 1 -> handleDailySelect(callback, sessions != null ? sessions.daily18 : null, CourseType.HOLES_18, callback::onSelectDaily18);
-            case 2 -> handleDailySelect(callback, sessions != null ? sessions.daily9  : null, CourseType.HOLES_9,  callback::onSelectDaily9);
-            case 3 -> handleDailySelect(callback, sessions != null ? sessions.daily1  : null, CourseType.HOLES_1,  callback::onSelectDaily1);
-            case 4 -> { currentMenuState = MenuState.MAIN; menuSelection = 1; }
+            case 1 -> handleDailySelect(callback, sessions != null ? sessions.daily18   : null, CourseType.HOLES_18,     callback::onSelectDaily18);
+            case 2 -> handleDailySelect(callback, sessions != null ? sessions.daily9    : null, CourseType.HOLES_9,      callback::onSelectDaily9);
+            case 3 -> handleDailySelect(callback, sessions != null ? sessions.dailyPar3 : null, CourseType.HOLES_1_PAR3, callback::onSelectDailyPar3);
+            case 4 -> handleDailySelect(callback, sessions != null ? sessions.dailyPar4 : null, CourseType.HOLES_1_PAR4, callback::onSelectDailyPar4);
+            case 5 -> handleDailySelect(callback, sessions != null ? sessions.dailyPar5 : null, CourseType.HOLES_1_PAR5, callback::onSelectDailyPar5);
+            case 6 -> { currentMenuState = MenuState.MAIN; menuSelection = 1; }
         }
     }
 
@@ -213,7 +217,7 @@ public class MenuManager {
             case MAIN -> TutorialPrefs.isComplete() ? 6 : 7;
             case PLAY_OPTIONS -> 4;
             case MAP_SELECT -> MAP_SELECT_TOTAL;
-            case EIGHTEEN_HOLES -> 5;
+            case EIGHTEEN_HOLES -> 7;
             case PRACTICE -> TutorialPrefs.isComplete() ? 4 : 3;
             case DIFFICULTY_SELECT -> GameConfig.Difficulty.values().length + 1;
             case SETTINGS -> 4;
@@ -237,7 +241,9 @@ public class MenuManager {
         void onSelectStandard18();
         void onSelectDaily18();
         void onSelectDaily9();
-        void onSelectDaily1();
+        void onSelectDailyPar3();
+        void onSelectDailyPar4();
+        void onSelectDailyPar5();
         void onDifficultyFinalized(GameConfig.Difficulty difficulty, int mode);
         void onStartPracticeRange();
         void onStartPuttingGreen();

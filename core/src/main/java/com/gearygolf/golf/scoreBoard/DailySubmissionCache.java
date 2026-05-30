@@ -39,9 +39,11 @@ public class DailySubmissionCache {
     /** Returns true if the user has already submitted a score for this course type today. */
     public boolean hasSubmitted(CourseType type) { return submitted.contains(type); }
 
-    /** Returns true if all three daily course types have been submitted today. */
+    /** Returns true if all five daily course types have been submitted today. */
     public boolean allSubmittedToday() {
-        return submitted.contains(CourseType.HOLES_1)
+        return submitted.contains(CourseType.HOLES_1_PAR3)
+            && submitted.contains(CourseType.HOLES_1_PAR4)
+            && submitted.contains(CourseType.HOLES_1_PAR5)
             && submitted.contains(CourseType.HOLES_9)
             && submitted.contains(CourseType.HOLES_18);
     }
