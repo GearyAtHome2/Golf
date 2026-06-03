@@ -254,6 +254,11 @@ public class HUD {
             startMenuStage.addActor(leaderboardUI);
             leaderboardUI.bindStage(startMenuStage);
             updateLeaderboardLayout();
+            // If the cache fetch completed before the leaderboard was created (common on fast
+            // networks), the notification was lost. Replay it now so the loading state resolves.
+            if (dailyCache != null && dailyCache.isFetched()) {
+                leaderboardUI.notifyCacheReady();
+            }
         }
 
         if (startMenuStage != null) {

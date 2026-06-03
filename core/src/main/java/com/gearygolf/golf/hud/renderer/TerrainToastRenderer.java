@@ -59,9 +59,9 @@ public class TerrainToastRenderer {
         startX = (tempV3.x / Gdx.graphics.getWidth())  * viewport.getWorldWidth();
         startY = (tempV3.y / Gdx.graphics.getHeight()) * viewport.getWorldHeight();
 
-        // Target: bottom-centre
+        // Target: bottom-centre, below the timer
         endX = viewport.getWorldWidth()  / 2f;
-        endY = viewport.getWorldHeight() * 0.14f;
+        endY = viewport.getWorldHeight() * 0.085f;
     }
 
     /** Begin fading out — called when the ball is hit. */
