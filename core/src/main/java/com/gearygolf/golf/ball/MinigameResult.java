@@ -4,9 +4,21 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.MathUtils;
 
 public class MinigameResult {
-    public float powerMod;    // 1.5, 1.25, 1.1, 1.0, or 0.9->0.35
-    public float accuracy;    // 0 in green, +/- outside
+    public float powerMod;       // 1.5, 1.25, 1.1, 1.0, or 0.9->0.35
+    public float accuracy;       // 0 in green, +/- outside
     public Rating rating;
+    /** Multiplier on effective club loft. 1.0 = normal, <1 = thin/skull, fat uses loftDeltaDeg instead. */
+    public float loftMult = 1.0f;
+    /** Additive degrees on effective loft (fat/chunk only). 0 = normal. */
+    public float loftDeltaDeg = 0.0f;
+    /** Multiplier on all spin output. 1.0 = normal, <1 = less spin, negative = topspin. */
+    public float tempoSpinMult = 1.0f;
+    /**
+     * Shank angle in degrees (0 = normal shot). When >0, the shot direction is rotated
+     * this many degrees rightward after all other calculations, overriding accuracy-based
+     * direction. Hosel contact only — triggered by extreme heel contact in new swing mode.
+     */
+    public float shankAngleDeg = 0f;
 
     public enum Rating {
         PERFECTION(new String[]{"OUT OF THIS WORLD!", "YOU ARE GOLF", "UNIDENTIFIABLE!", "GIVE ME BACK MY SON!", "BEAM ME UP", "WHAT!?!"}, new float[]{0.3f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f}, Color.PURPLE),

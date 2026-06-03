@@ -31,8 +31,9 @@ public class SwingOverlay {
 
     // Club head icon size in HUD world units (~1280-wide coordinate space).
     // Thin and tall: from the slightly tilted side-on angle this reads as a club face.
-    private static final float CLUB_W = 11f;
-    private static final float CLUB_H = 34f;
+    // These are defaults (Tour Pro / no-difficulty); set per-difficulty via setClubSize().
+    private float clubW = 11f;
+    private float clubH = 34f;
     // How far to the RIGHT of the projected ball the club head sits.
     // "Right" in swing-view screen space = away from the target = where the backswing starts.
     private static final float CLUB_RIGHT_OFFSET = 46f;
@@ -125,6 +126,12 @@ public class SwingOverlay {
 
     public void setDivotEnabled(boolean enabled) {
         this.divotEnabled = enabled;
+    }
+
+    /** Sets the rendered club head size. Larger values make contact more forgiving (offset is normalised by clubH). */
+    public void setClubSize(float w, float h) {
+        this.clubW = w;
+        this.clubH = h;
     }
 
     // -------------------------------------------------------------------------
@@ -225,11 +232,11 @@ public class SwingOverlay {
             clubHeadColor.set(Color.WHITE);
         }
         sr.setColor(clubHeadColor);
-        sr.rect(clubX - CLUB_W * 0.5f, clubY - CLUB_H * 0.5f, CLUB_W, CLUB_H);
+        sr.rect(clubX - clubW * 0.5f, clubY - clubH * 0.5f, clubW, clubH);
 
         // ── Contact marker: coloured dot on club face at impact position ──────
         if (analyser.isImpactCaptured()) {
-            float contactY = ballHudY + lastContactOffset * (CLUB_H * 0.5f);
+            float contactY = ballHudY + lastContactOffset * (clubH * 0.5f);
             Color markerCol = Math.abs(lastContactOffset) < 0.25f ? Color.GREEN
                             : Math.abs(lastContactOffset) < 0.6f  ? Color.YELLOW
                             : Color.RED;
@@ -439,7 +446,7 @@ public class SwingOverlay {
                 // If the trail passes ABOVE the ball the club center is high, so
                 // the ball contacts the LOWER (heel) part of the face → negative.
                 // Negate so: trail above ball = heel (-), trail below ball = toe (+).
-                float heelToe = (ballHudY - crossY) / (CLUB_H * 0.5f);
+                float heelToe = (ballHudY - crossY) / (clubH * 0.5f);
                 heelToe = MathUtils.clamp(heelToe, -1f, 1f);
 
                 // Path: angle of drag vector from "straight left" (target direction).

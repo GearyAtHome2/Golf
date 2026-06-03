@@ -1347,18 +1347,42 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             if (chargingNow && !wasChargingShot) {
                 // Capture aim direction and terrain type at the moment charging starts.
                 cameraController.setSwingAimDir(camera.direction);
-                hud.setSwingTerrainType(terrain.getTerrainTypeAt(
-                        ball.getPosition().x, ball.getPosition().z));
-                hud.setSwingDivotEnabled(clubMakesDivot(currentClub));
+                com.gearygolf.golf.terrain.Terrain.TerrainType swingTerrain =
+                        terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
+                hud.setSwingTerrainType(swingTerrain);
+                // No divot on tee (ball is elevated — can't strike the ground first).
+                hud.setSwingDivotEnabled(clubMakesDivot(currentClub)
+                        && swingTerrain != com.gearygolf.golf.terrain.Terrain.TerrainType.TEE);
                 wasImpactCaptured = false;
+                // Set difficulty-scaled swing params (contact, path, follow-through, shank).
+                // These are the same for every club type — putter contact threshold is separate.
+                shotController.setSwingDifficultyParams(
+                        swingContactSweetSpot(config.difficulty),
+                        swingPathScale(config.difficulty),
+                        swingFollowThroughPenalty(config.difficulty),
+                        swingFollowThroughThreshold(config.difficulty),
+                        swingShankThreshold(config.difficulty));
+                float[] clubSz = swingClubSize(config.difficulty);
+                hud.setSwingClubSize(clubSz[0], clubSz[1]);
                 // Set tempo tolerance based on difficulty level + club type.
-                hud.getSwingAnalyser().setTempoWindows(
-                        swingPerfectFraction(config.difficulty, currentClub),
-                        swingMaxFraction(config.difficulty, currentClub));
+                if (currentClub == Club.PUTTER) {
+                    // Putter: tempo direction is irrelevant — any timing is valid except a
+                    // complete whiff (q≈0). Use very wide windows so quality is always high.
+                    hud.getSwingAnalyser().setTempoWindows(5.0f, 10.0f);
+                    shotController.setPutterContactThreshold(putterContactThreshold(config.difficulty));
+                } else {
+                    // Tee shots get a wider PERFECT band — the ball is elevated so there's
+                    // no ground penalty and a broader range of timing produces a good result.
+                    float teeBonus = (swingTerrain == com.gearygolf.golf.terrain.Terrain.TerrainType.TEE) ? 1.4f : 1.0f;
+                    hud.getSwingAnalyser().setTempoWindows(
+                            swingPerfectFraction(config.difficulty, currentClub) * teeBonus,
+                            swingMaxFraction(config.difficulty, currentClub) * teeBonus);
+                    shotController.setPutterContactThreshold(0f);
+                }
             }
             if (!chargingNow) wasImpactCaptured = false;
             wasChargingShot = chargingNow;
-            cameraController.setSwingViewActive(chargingNow);
+            cameraController.setSwingViewActive(config.swingModeNew && chargingNow);
             cameraController.update(ball.getPosition(), inputProcessor);
         }
 
@@ -1501,6 +1525,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (hud.wasMinigameCanceled()) shotController.reset();
 
         PhysicsProfiler.startSection("ShotControllerCharge");
+        shotController.setSwingModeNew(config.swingModeNew);
         shotController.setGuidelineAvailable(config.difficulty.hasShotProjection());
         if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
             ball.snapshotShotStart(); // trailer mode: capture initial state for replay
@@ -2554,6 +2579,106 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             case TOUR_PRO     -> 0.50f;
         };
         return base * clubTempoModifier(club);
+    }
+
+    /**
+     * Contact offset threshold beyond which putter heel/toe causes a penalty.
+     * Putters are wide — only extreme mis-hits lose distance. Scaled by difficulty.
+     * Value is the abs(contactOffset) fraction [0,1] where the penalty begins.
+     */
+    private static float putterContactThreshold(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> 0.80f;
+            case INTERMEDIATE -> 0.65f;
+            case ADVANCED     -> 0.55f;
+            case PRO          -> 0.45f;
+            case TOUR_PRO     -> 0.35f;
+        };
+    }
+
+    /**
+     * Non-putter contact sweet spot: abs(contactOffset) below this = zero quality penalty.
+     * Widens the central "clean contact" zone for easier difficulties.
+     */
+    private static float swingContactSweetSpot(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> 0.60f;
+            case INTERMEDIATE -> 0.35f;
+            case ADVANCED     -> 0.12f;
+            case PRO          -> 0.05f;
+            case TOUR_PRO     -> 0.00f;
+        };
+    }
+
+    /**
+     * Club head rect size [w, h] for the swing overlay.
+     * Larger = visually bigger face AND mechanically more forgiving (offset normalised by h).
+     * NOVICE rect is ~60% taller than Tour Pro; intermediate splits the difference.
+     */
+    private static float[] swingClubSize(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> new float[]{ 18f, 54f };
+            case INTERMEDIATE -> new float[]{ 15f, 44f };
+            case ADVANCED     -> new float[]{ 13f, 38f };
+            case PRO          -> new float[]{ 12f, 36f };
+            case TOUR_PRO     -> new float[]{ 11f, 34f };
+        };
+    }
+
+    /**
+     * Multiplier on path angle and gear-effect direction (1.0 = full, 0.35 = novice ≈ ÷3).
+     * Applies to both the swing-line path and the heel/toe gear-effect curve.
+     */
+    private static float swingPathScale(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> 0.35f;
+            case INTERMEDIATE -> 0.55f;
+            case ADVANCED     -> 0.72f;
+            case PRO          -> 0.87f;
+            case TOUR_PRO     -> 1.00f;
+        };
+    }
+
+    /**
+     * Quality factor at maximum follow-through height (height=1.0 = full flip/scoop).
+     * Lower = bigger penalty. At NOVICE, even a terrible follow-through barely hurts.
+     */
+    private static float swingFollowThroughPenalty(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> 0.90f;
+            case INTERMEDIATE -> 0.80f;
+            case ADVANCED     -> 0.73f;
+            case PRO          -> 0.68f;
+            case TOUR_PRO     -> 0.65f;
+        };
+    }
+
+    /**
+     * Normalised follow-through height above which the quality penalty begins.
+     * Widens the "no penalty" zone at easier difficulties.
+     */
+    private static float swingFollowThroughThreshold(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> 0.55f;
+            case INTERMEDIATE -> 0.45f;
+            case ADVANCED     -> 0.38f;
+            case PRO          -> 0.30f;
+            case TOUR_PRO     -> 0.25f;
+        };
+    }
+
+    /**
+     * abs(contactOffset) at which a shank triggers. Higher = harder to shank.
+     * NOVICE: 0.95 (nearly impossible); TOUR_PRO: 0.85 (current).
+     */
+    private static float swingShankThreshold(GameConfig.Difficulty diff) {
+        return switch (diff) {
+            case NOVICE       -> 0.95f;
+            case INTERMEDIATE -> 0.92f;
+            case ADVANCED     -> 0.89f;
+            case PRO          -> 0.87f;
+            case TOUR_PRO     -> 0.85f;
+        };
     }
 
     /** Extra tempo forgiveness per club category. */

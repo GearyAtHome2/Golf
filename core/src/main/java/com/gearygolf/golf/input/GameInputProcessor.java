@@ -24,6 +24,7 @@ public interface GameInputProcessor {
         SPIN_LEFT,
         SPIN_RIGHT,
         TOGGLE_PARTICLES,
+        TOGGLE_SWING_MODE,
         COPY_SEED,
         CLUB_UP,
         CLUB_DOWN,
@@ -59,6 +60,7 @@ public interface GameInputProcessor {
         TRAILER_PAN_LEFT,
         TRAILER_PAN_RIGHT,
         EXPORT_SHOT,
-        IMPORT_SHOT
+        IMPORT_SHOT,
+        TEST_SWING
     }
 }

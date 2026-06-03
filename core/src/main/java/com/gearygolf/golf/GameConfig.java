@@ -8,6 +8,7 @@ public class GameConfig {
     public Difficulty difficulty = Difficulty.NOVICE;
     public boolean particlesEnabled = true;
     public boolean cinematicMode = false;
+    public boolean swingModeNew = true;
 
     // Game Speed cycle: 0.25, 0.5, 1, 2, 3, 5
     private final float[] speedValues = {0.25f, 0.5f, 1.0f, 2.0f, 3.0f, 5.0f};

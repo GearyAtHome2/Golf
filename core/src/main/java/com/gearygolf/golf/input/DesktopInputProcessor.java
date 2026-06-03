@@ -24,6 +24,7 @@ public class DesktopInputProcessor extends com.badlogic.gdx.InputAdapter impleme
         keyMap.put(Action.HELP, Input.Keys.I);
         keyMap.put(Action.CAM_CONFIG, Input.Keys.O);
         keyMap.put(Action.TOGGLE_PARTICLES, Input.Keys.L);
+        keyMap.put(Action.TOGGLE_SWING_MODE, Input.Keys.G);
         keyMap.put(Action.COPY_SEED, Input.Keys.C);
         keyMap.put(Action.CLUB_UP, Input.Keys.UP);
         keyMap.put(Action.CLUB_DOWN, Input.Keys.DOWN);

@@ -48,7 +48,7 @@ public static class MobileUIPackage {
         public TextButton nextLevelBtn, submitScoreBtn, uploadScoreBtn, mainMenuBtn;
         public Table arrowContainer;
         public Table clubArrowRow;
-        public TextButton hitBtn, maxHitBtn;
+        public TextButton hitBtn, maxHitBtn, testSwingBtn;
     }
 
     public static MobileUIPackage create(Viewport viewport, SpriteBatch batch, BitmapFont font, GameConfig config, MobileInputProcessor input, SpinIndicator spinIndicator, PreShotDebugActor debugActor) {
@@ -73,7 +73,7 @@ public static class MobileUIPackage {
         ui.startMenuTable.top().left();
         ui.startMenuStage.addActor(ui.startMenuTable);
 
-        setupGameplayLayout(ui, input, spinIndicator, debugActor, baseStyle, viewport);
+        setupGameplayLayout(ui, input, spinIndicator, debugActor, baseStyle, viewport, config);
         setupClubSelection(ui, input, baseStyle, viewport);
         setupPauseMenu(ui, font, viewport, config, input);
         setupVictoryMenu(ui, input, baseStyle, viewport);
@@ -81,7 +81,7 @@ public static class MobileUIPackage {
         return ui;
     }
 
-    private static void setupGameplayLayout(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style, Viewport viewport) {
+    private static void setupGameplayLayout(MobileUIPackage ui, MobileInputProcessor input, SpinIndicator spin, PreShotDebugActor debug, TextButton.TextButtonStyle style, Viewport viewport, GameConfig config) {
         ui.gameplayTable.clear();
 
         float rightEdge = 10f;
@@ -144,10 +144,40 @@ public static class MobileUIPackage {
         ui.maxHitBtn = createTriggerButton(maxStyle, "MAX", input, GameInputProcessor.Action.MAX_POWER_SHOT, globalFontScale);
         rightStack.add(ui.maxHitBtn).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
 
+        // TEST SWING button — debug only, visible in new swing mode only.
+        // Fires a synthetic perfect swing (+5° path) for distance calibration.
+        TextButton.TextButtonStyle testStyle = new TextButton.TextButtonStyle(style);
+        testStyle.up   = UIUtils.createEmbossedButtonDrawable(new Color(0f, 0.6f, 0.6f, 0.85f), RADIUS_HIT, 5);
+        testStyle.down = UIUtils.createInsetButtonDrawable(new Color(0f, 0.4f, 0.4f, 0.85f), RADIUS_HIT, 5);
+        ui.testSwingBtn = createTriggerButton(testStyle, "TEST", input, GameInputProcessor.Action.TEST_SWING, globalFontScale);
+        ui.testSwingBtn.setVisible(config.swingModeNew);
+        rightStack.add(ui.testSwingBtn).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
+
         TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
         hitStyle.up   = UIUtils.createEmbossedButtonDrawable(COLOR_HIT_UP, RADIUS_HIT, 5);
         hitStyle.down = UIUtils.createInsetButtonDrawable(COLOR_HIT_DOWN, RADIUS_HIT, 5);
-        ui.hitBtn = createTriggerButton(hitStyle, "HIT", input, GameInputProcessor.Action.CHARGE_SHOT, FONT_SCALE_GAMEPLAY * 0.75f);
+        ui.hitBtn = new TextButton("HIT", hitStyle);
+        ui.hitBtn.getLabel().setFontScale(FONT_SCALE_GAMEPLAY * 0.75f);
+        ui.hitBtn.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                if (config.swingModeNew) {
+                    // Tap-to-start / tap-to-cancel: one-shot trigger consumed by ShotController
+                    input.triggerAction(GameInputProcessor.Action.CHARGE_SHOT);
+                } else {
+                    input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, true);
+                }
+                return true;
+            }
+            @Override
+            public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                if (!config.swingModeNew) {
+                    input.setActionState(GameInputProcessor.Action.CHARGE_SHOT, false);
+                    boolean releasedOnButton = x >= 0 && x <= ui.hitBtn.getWidth() && y >= 0 && y <= ui.hitBtn.getHeight();
+                    if (releasedOnButton) input.triggerAction(GameInputProcessor.Action.STOP_NEEDLE);
+                }
+            }
+        });
         rightStack.add(ui.hitBtn).width(hitW).height(hitH).right().padBottom(spacing).row();
 
         Drawable holdFill = createRoundedRectDrawable(new Color(0.95f, 0.60f, 0.10f, 0.70f), RADIUS_STD);
@@ -428,10 +458,11 @@ public static class MobileUIPackage {
         pauseTable.setFillParent(true);
         ui.pauseMenuStage.addActor(pauseTable);
         TextButton.TextButtonStyle menuStyle = createMenuStyle(font);
-        float bW = viewport.getWorldWidth() * 0.45f, bH = viewport.getWorldHeight() * 0.09f;
+        float bW = viewport.getWorldWidth() * 0.45f, bH = viewport.getWorldHeight() * 0.075f;
         float scaledFont = FONT_SCALE_PAUSE_MENU * 0.4f;
+        float pad = viewport.getWorldHeight() * 0.009f;
 
-        pauseTable.add(createMenuButton("RESUME", menuStyle, input, GameInputProcessor.Action.PAUSE, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+        pauseTable.add(createMenuButton("RESUME", menuStyle, input, GameInputProcessor.Action.PAUSE, scaledFont)).width(bW).height(bH).padBottom(pad).row();
 
         final TextButton animBtn = new TextButton("ANIMATION: " + config.animSpeed.name(), menuStyle);
         animBtn.getLabel().setFontScale(scaledFont);
@@ -442,7 +473,7 @@ public static class MobileUIPackage {
                 animBtn.setText("ANIMATION: " + config.animSpeed.name());
             }
         });
-        pauseTable.add(animBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+        pauseTable.add(animBtn).width(bW).height(bH).padBottom(pad).row();
 
         ui.difficultyBtn = new TextButton("DIFFICULTY: " + config.difficulty.name(), menuStyle);
         ui.difficultyBtn.getLabel().setFontScale(scaledFont * 0.72f);
@@ -455,10 +486,21 @@ public static class MobileUIPackage {
                 }
             }
         });
-        pauseTable.add(ui.difficultyBtn).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+        pauseTable.add(ui.difficultyBtn).width(bW).height(bH).padBottom(pad).row();
 
-        pauseTable.add(createMenuButton("SETTINGS", menuStyle, input, GameInputProcessor.Action.OPEN_SOUND_SETTINGS, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
-        pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(viewport.getWorldHeight() * 0.012f).row();
+        final TextButton swingBtn = new TextButton("SWING: " + (config.swingModeNew ? "NEW" : "CLASSIC"), menuStyle);
+        swingBtn.getLabel().setFontScale(scaledFont);
+        swingBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                config.swingModeNew = !config.swingModeNew;
+                swingBtn.setText("SWING: " + (config.swingModeNew ? "NEW" : "CLASSIC"));
+            }
+        });
+        pauseTable.add(swingBtn).width(bW).height(bH).padBottom(pad).row();
+
+        pauseTable.add(createMenuButton("SETTINGS", menuStyle, input, GameInputProcessor.Action.OPEN_SOUND_SETTINGS, scaledFont)).width(bW).height(bH).padBottom(pad).row();
+        pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(pad).row();
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();
 
         pauseTable.top().padTop(viewport.getWorldHeight() * 0.355f);
@@ -467,7 +509,7 @@ public static class MobileUIPackage {
         Table bottomRightTable = new Table();
         bottomRightTable.setFillParent(true);
         float sBtnW = viewport.getWorldWidth() * 0.2f, sBtnH = viewport.getWorldHeight() * 0.07f;
-        float smallFont = scaledFont * 0.75f;
+        float smallFont = scaledFont * 0.67f;
         float padRight  = viewport.getWorldWidth()  * 0.02f;
         float padBottom = viewport.getWorldHeight() * 0.02f;
 

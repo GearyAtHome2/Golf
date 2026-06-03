@@ -306,6 +306,8 @@ public class HUD {
         }
         if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES))
             config.particlesEnabled = !config.particlesEnabled;
+        if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_SWING_MODE))
+            config.swingModeNew = !config.swingModeNew;
         if (input.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) mainMenuRequested = true;
         if (input.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && levelData != null) {
             Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
@@ -328,7 +330,7 @@ public class HUD {
             this.spinDot.set(spinIndicator.getSpinDot());
         }
         if (mobileClubLabel != null) mobileClubLabel.setText(currentClub.name.toUpperCase());
-        updateSpinInput(delta, input);
+        if (!config.swingModeNew) updateSpinInput(delta, input);
         if (Platform.isAndroid() && mobileUIPackage != null) {
             boolean inCompetitive = session != null;
             mobileUIPackage.newMapBtn.setDisabled(inCompetitive);
@@ -349,6 +351,14 @@ public class HUD {
             }
             setUtilityButtonState(mobileUIPackage.projectBtn, config.difficulty.hasShotProjection());
             setUtilityButtonState(mobileUIPackage.distanceBtn, config.difficulty.hasRangeFinder());
+            if (mobileUIPackage.maxHitBtn != null)
+                mobileUIPackage.maxHitBtn.setVisible(!config.swingModeNew);
+            if (mobileUIPackage.hitBtn != null) {
+                boolean swingActive = config.swingModeNew && shotController.isCharging();
+                mobileUIPackage.hitBtn.setColor(swingActive ? Color.YELLOW : Color.WHITE);
+            }
+            if (mobileUIPackage.testSwingBtn != null)
+                mobileUIPackage.testSwingBtn.setVisible(config.swingModeNew);
         }
         if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE) && config.difficulty.hasRangeFinder()) {
             distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
@@ -370,7 +380,8 @@ public class HUD {
             preShotDebugActor.setBounds(40, 150, 400, 140);
             preShotDebugActor.draw(batch, 1.0f);
         }
-        if (!isAndroid) spinIndicator.draw(batch, 1.0f);
+        if (!isAndroid && !config.swingModeNew) spinIndicator.draw(batch, 1.0f);
+        if (isAndroid) spinIndicator.setVisible(!config.swingModeNew);
         float rangeScale = isAndroid ? 2.8f : 1.8f;
         renderDistanceDisplay(delta, rangeScale);
         if (isPractice) renderShotDistance(ball, isAndroid ? 2.2f : 1.4f);
@@ -428,7 +439,7 @@ public class HUD {
                 renderClubInfo(currentClub);
                 handleMobileInfoClick(input);
             }
-            if (spinIndicator.isBigModeActive()) {
+            if (!config.swingModeNew && spinIndicator.isBigModeActive()) {
                 batch.begin();
                 spinIndicator.renderBigOverlay(batch, viewport);
                 batch.end();
@@ -447,7 +458,7 @@ public class HUD {
         } else if (showClubInfo) {
             renderClubInfo(currentClub);
         }
-        if (minigameController.isActive()) {
+        if (!config.swingModeNew && minigameController.isActive()) {
             minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input, shotController);
         }
     }
@@ -1284,6 +1295,11 @@ public void renderInstructions(GameInputProcessor input) {
 
     public void setSwingTerrainType(com.gearygolf.golf.terrain.Terrain.TerrainType type) {
         swingOverlay.setTerrainType(type);
+    }
+
+    /** Sets the rendered club head size; larger values make contact more forgiving. */
+    public void setSwingClubSize(float w, float h) {
+        swingOverlay.setClubSize(w, h);
     }
 
     public void setSwingDivotEnabled(boolean enabled) {
