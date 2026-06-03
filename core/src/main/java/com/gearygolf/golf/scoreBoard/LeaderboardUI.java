@@ -37,6 +37,8 @@ public class LeaderboardUI extends Table {
 
     // Injected after construction — used for 1-hole par tab gating
     private DailySubmissionCache dailyCache;
+    // True only after notifyCacheReady() is explicitly called, regardless of dailyCache.isFetched()
+    private boolean cacheReadyNotified = false;
     // Called when user presses "PLAY DAILY PAR X" in a gated par tab
     private Consumer<GameSession.GameMode> onPlayDaily;
 
@@ -47,6 +49,8 @@ public class LeaderboardUI extends Table {
     // Live label references updated in-place when counts arrive
     private final Map<CourseType, Label> courseTabLabels = new EnumMap<>(CourseType.class);
     private final Map<String, Label> diffTabLabels = new HashMap<>();
+    // Separate reference for the outer "1-Hole" aggregate tab (HOLES_1_PAR3 key is reused by the inner par tab)
+    private Label oneHoleOuterLabel;
 
     // Incremented on each refresh to drop stale async callbacks
     private int gen = 0;
@@ -88,6 +92,7 @@ public class LeaderboardUI extends Table {
      * par tab, it will now either show the play button or fire the leaderboard query.
      */
     public void notifyCacheReady() {
+        cacheReadyNotified = true;
         if (currentCourseType.isOneHole()) {
             gen++;
             final int g = gen;
@@ -170,8 +175,11 @@ public class LeaderboardUI extends Table {
             String text = baseLabels[i] + " " + countSuffix(count);
             TextButton btn = new TextButton(text, skin, "default");
             btn.getLabel().setFontScale(fitBtnScale(text, btnScale, btnW));
-            // Track the PAR3 label for the outer tab (representative of the 1-hole group)
-            courseTabLabels.put(ct, btn.getLabel());
+            if (isOneHoleTab) {
+                oneHoleOuterLabel = btn.getLabel();
+            } else {
+                courseTabLabels.put(ct, btn.getLabel());
+            }
             boolean isCurrentTab = isOneHoleTab ? currentCourseType.isOneHole() : ct == currentCourseType;
             if (isCurrentTab) {
                 btn.setChecked(true);
@@ -308,11 +316,19 @@ public class LeaderboardUI extends Table {
                     courseTypeCounts.put(ct, count);
                     Label lbl = courseTabLabels.get(ct);
                     if (lbl != null) lbl.setText(courseTypeBaseLabel(ct) + " " + countSuffix(count));
+                    if (ct.isOneHole() && oneHoleOuterLabel != null) {
+                        oneHoleOuterLabel.setText("1-Hole " + countSuffix(sumOneHoleCounts()));
+                    }
                 }
                 @Override public void onFailure(Throwable err) {
                     if (gen != g) return;
+                    // Treat failure as 0 so sumOneHoleCounts() can resolve without staying at (...)
+                    if (ct.isOneHole()) courseTypeCounts.put(ct, 0);
                     Label lbl = courseTabLabels.get(ct);
                     if (lbl != null) lbl.setText(courseTypeBaseLabel(ct));
+                    if (ct.isOneHole() && oneHoleOuterLabel != null) {
+                        oneHoleOuterLabel.setText("1-Hole " + countSuffix(sumOneHoleCounts()));
+                    }
                 }
             });
         }
@@ -368,8 +384,8 @@ public class LeaderboardUI extends Table {
         scoreTable.add(loading).center().padTop(40 * lastAppliedScale);
 
         if (currentCourseType.isOneHole()) {
-            // Not enough information yet — leave "Loading..." until cache arrives
-            if (dailyCache == null || !dailyCache.isFetched()) return;
+            // Not enough information yet — leave "Loading..." until notifyCacheReady() is called
+            if (!cacheReadyNotified) return;
 
             // Gate: user hasn't played this par variant today
             if (!dailyCache.hasSubmitted(currentCourseType)) {
