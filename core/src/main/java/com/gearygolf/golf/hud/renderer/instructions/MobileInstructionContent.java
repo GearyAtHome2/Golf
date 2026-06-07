@@ -15,10 +15,8 @@ public class MobileInstructionContent implements InstructionContent {
     public String[] getControlLines() {
         return new String[]{
                 "Single touch drag to rotate the camera, and pinch to zoom.",
-                "When in overhead mode, you can pinch to both zoom and",
-                " pan, and single touch drag to rotate",
-                "When in the shot minigame, you can't adjust your aim, but",
-                " you can adjust your spin and tap to quit.",
+                "When in overhead mode, you can pinch to both zoom and pan, and single touch drag to rotate.",
+                "When in the shot minigame, you can't adjust your aim, but you can adjust your spin and tap to quit.",
         };
     }
 
@@ -49,19 +47,12 @@ public class MobileInstructionContent implements InstructionContent {
     @Override
     public String[] getGameplayLines() {
         return new String[]{
-                "POWER: Hold SPACE to charge power. Release to start",
-                "swing minigame.",
-                "SWING: Press SPACE when the dial is in sweet spots to",
-                "hit accurately and powerfully, with increased spin.",
-                "SPIN: Touch the 'Spindicator' bottom-left to set your",
-                "spindication.",
-                "Hitting the bottom of the ball will generate more loft,",
-                "and lower spin.",
-                "Hitting the top of the ball will generate less loft,",
-                "and more spin.",
-                "PHYSICS: Lift and curl is based on velocity and spin",
-                "magnitude.",
-                "TERRAIN: Slopes kick initial hit trajectory left/right.",
+                "POWER: Hold the HIT button to charge power. Release to start the swing minigame.",
+                "SWING: Tap the HIT button when the dial is in the sweet spots to hit accurately and powerfully, with increased spin.",
+                "SPIN: Touch the Spindicator (bottom-left) to set your spin direction.",
+                "Hitting the bottom of the ball generates more loft and lower spin. Hitting the top generates less loft and more spin.",
+                "PHYSICS: Lift and curl is based on velocity and spin magnitude.",
+                "TERRAIN: Slopes kick the initial hit trajectory left or right.",
                 "WIND: Increases at higher altitudes."
         };
     }

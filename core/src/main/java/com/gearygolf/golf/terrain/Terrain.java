@@ -541,32 +541,45 @@ public class Terrain {
     }
 
     public enum TerrainType {
-        TEE(0.4f, 2.0f, 1.1f, 0.75f, 0.2f, 0.45f, new Color(0.2f, 0.5f, 0.2f, 1f)),
-        FAIRWAY(0.32f, 0.12f, 1.05f, 1.0f, 0.17f, 0.43f, new Color(0.1f, 0.4f, 0.1f, 1f)),
+        //                    kf     rr     sm    diff  soft  rest  tempoDiff tempSev  color
+        // tempoDifficulty: how hard it is to achieve good tempo (1.0 = fairway baseline; higher = tighter window needed).
+        // tempoSeverity:   how punishing a timing miss is once it happens (1.0 = fairway baseline; higher = worse outcome).
+        TEE       (0.4f,  2.0f,  1.1f,  0.75f, 0.20f, 0.45f, 0.6f, 0.5f,  new Color(0.2f,  0.5f,  0.2f,  1f)),
+        FAIRWAY   (0.32f, 0.12f, 1.05f, 1.0f,  0.17f, 0.43f, 1.0f, 1.0f,  new Color(0.1f,  0.4f,  0.1f,  1f)),
         // Fringe: transition band between fairway and rough — moderate slow, slight spin penalty.
-        FRINGE(0.27f, 0.07f, 1.05f, 0.95f, 0.19f, 0.40f, new Color(0.22f, 0.50f, 0.13f, 1f)),
-        ROUGH(1.2f, 4.5f, 1.5f, 2.1f, 0.63f, 0.32f, new Color(0.02f, 0.15f, 0.02f, 1f)),
-        // Deep rough: stronger slow and higher spin penalty than standard rough.
-        DEEP_ROUGH(1.8f, 8.0f, 1.8f, 3.2f, 0.78f, 0.20f, new Color(0.01f, 0.08f, 0.01f, 1f)),
-        SAND(1.4f, 12.0f, 2.5f, 4.6f, 0.9f, 0.11f, new Color(0.85f, 0.8f, 0.5f, 1f)),
-        GREEN(0.16f, 0.02f, 1.05f, 0.9f, 0.22f, 0.35f, new Color(0.1f, 0.6f, 0.1f, 1f)),
-        STONE(0.1f, 0.02f, 1.05f, 1.5f, 0.01f, 0.7f, new Color(0.18f, 0.18f, 0.2f, 1f)),
-        // Mud: ball stops very quickly (high rolling resistance, very soft landing).
+        FRINGE    (0.27f, 0.07f, 1.05f, 0.95f, 0.19f, 0.40f, 1.1f, 0.85f, new Color(0.22f, 0.50f, 0.13f, 1f)),
+        // Rough: harder to time cleanly, but grass absorbs some of the punishment — fat/thin are forgiving.
+        ROUGH     (1.2f,  4.5f,  1.5f,  2.1f,  0.63f, 0.32f, 1.5f, 0.75f, new Color(0.02f, 0.15f, 0.02f, 1f)),
+        // Deep rough: very hard to time, ball buried — punishment is consistent and severe.
+        DEEP_ROUGH(1.8f,  8.0f,  1.8f,  3.2f,  0.78f, 0.20f, 2.0f, 1.0f,  new Color(0.01f, 0.08f, 0.01f, 1f)),
+        // Sand: requires hitting behind the ball (different technique) — fat is partially correct so severity is low.
+        SAND      (1.4f,  12.0f, 2.5f,  4.6f,  0.90f, 0.11f, 1.3f, 0.65f, new Color(0.85f, 0.8f,  0.5f,  1f)),
+        GREEN     (0.16f, 0.02f, 1.05f, 0.9f,  0.22f, 0.35f, 0.8f, 0.8f,  new Color(0.1f,  0.6f,  0.1f,  1f)),
+        // Stone: ball sits up perfectly so timing is easy, but club deflects badly when fat — high severity.
+        STONE     (0.1f,  0.02f, 1.05f, 1.5f,  0.01f, 0.70f, 0.6f, 1.8f,  new Color(0.18f, 0.18f, 0.2f,  1f)),
+        // Mud: hard to judge lie depth, and a miss collapses power completely — high difficulty and severity.
         // Shot penalty is applied separately in ShotController — only 20% of spin carries
         // through and power is reduced by 20%. See ShotController.executeShot().
-        MUD(2.0f, 16.0f, 2.5f, 4.0f, 0.95f, 0.05f, new Color(0.18f, 0.10f, 0.03f, 0.82f));
+        MUD       (2.0f,  16.0f, 2.5f,  4.0f,  0.95f, 0.05f, 1.8f, 1.4f,  new Color(0.18f, 0.10f, 0.03f, 0.82f));
 
         public final float kineticFriction, rollingResistance, staticMultiplier, difficulty, softness, restitution;
+        /** How hard it is to achieve good tempo from this lie (1.0 = fairway baseline; higher = tighter window). */
+        public final float tempoDifficulty;
+        /** How punishing a timing miss is from this lie (1.0 = fairway baseline; higher = worse outcome). */
+        public final float tempoSeverity;
         public final Color color;
 
-        TerrainType(float kf, float rr, float sm, float diff, float softness, float rest, Color col) {
-            this.kineticFriction = kf;
+        TerrainType(float kf, float rr, float sm, float diff, float softness, float rest,
+                    float tempoDifficulty, float tempoSeverity, Color col) {
+            this.kineticFriction   = kf;
             this.rollingResistance = rr;
-            this.staticMultiplier = sm;
-            this.difficulty = diff;
-            this.softness = softness;
-            this.restitution = rest; // New field
-            this.color = col;
+            this.staticMultiplier  = sm;
+            this.difficulty        = diff;
+            this.softness          = softness;
+            this.restitution       = rest;
+            this.tempoDifficulty   = tempoDifficulty;
+            this.tempoSeverity     = tempoSeverity;
+            this.color             = col;
         }
     }
 

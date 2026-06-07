@@ -94,10 +94,11 @@ public class LeaderboardUI extends Table {
     public void notifyCacheReady() {
         cacheReadyNotified = true;
         if (currentCourseType.isOneHole()) {
-            gen++;
-            final int g = gen;
+            // Do NOT increment gen here — the count queries fired by refresh() are still in-flight
+            // and must not be discarded. For 1-hole tabs, fireDataQuery() in refresh() returned
+            // early (no async call was made), so there is nothing stale to cancel.
             rebuild(lastAppliedScale); // re-evaluates sparkle state on par tabs
-            fireDataQuery(g);
+            fireDataQuery(gen);
         }
     }
 

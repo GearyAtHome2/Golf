@@ -19,6 +19,19 @@ public class MinigameResult {
      * direction. Hosel contact only — triggered by extreme heel contact in new swing mode.
      */
     public float shankAngleDeg = 0f;
+    /**
+     * Attack angle in degrees passed from the new swing gesture (-ve = descending).
+     * 0 in old swing mode — executeShot falls back to spin-dial derivation in that case.
+     */
+    public float attackAngleDeg = 0f;
+
+    /**
+     * Follow-through sidespin contribution: positive = flip side (hook bias),
+     * negative = extension side (fade bias).  Injected directly into sidespin in
+     * executeShot, does NOT affect launch direction (unlike accuracy).
+     * Units match accuracy: ±1.0 = full sidespin contribution.
+     */
+    public float ftSpinContrib = 0f;
 
     public enum Rating {
         PERFECTION(new String[]{"OUT OF THIS WORLD!", "YOU ARE GOLF", "UNIDENTIFIABLE!", "GIVE ME BACK MY SON!", "BEAM ME UP", "WHAT!?!"}, new float[]{0.3f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f}, Color.PURPLE),

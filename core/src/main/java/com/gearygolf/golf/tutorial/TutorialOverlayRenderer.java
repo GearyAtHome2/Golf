@@ -11,13 +11,22 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.gearygolf.golf.Platform;
+import com.gearygolf.golf.hud.UIUtils;
 
 public class TutorialOverlayRenderer {
 
     private static final float DIM_ALPHA = 0.60f;
     private static final Color BOX_FILL  = new Color(0.04f, 0.04f, 0.16f, 0.93f);
+
+    // Lazily created to match the standard game button theme
+    private Drawable nextBtnDrawable;
+    // Bounds of the NEXT button in viewport world-space, updated every frame it is drawn
+    private final Rectangle lastNextButtonBounds = new Rectangle();
+
+    public Rectangle getLastNextButtonBounds() { return lastNextButtonBounds; }
     private static final Color HIGHLIGHT  = new Color(1f, 0.85f, 0.1f, 0.55f);
     private static final float SPOTLIGHT_PAD = 6f; // px extra space around highlighted button
 
@@ -163,9 +172,9 @@ public class TutorialOverlayRenderer {
 
     // ----------------------------------------------------------------- Aim direction bar (STEP_2_AIM)
 
-    private static final float BAR_RANGE_DEG  = 30f;  // ±30° shown across the full bar width
+    private static final float BAR_RANGE_DEG  = 25f;  // ±30° shown across the full bar width
     private static final float AIM_THRESHOLD  = 4.5f; // degrees before the zone begins
-    private static final float AIM_ZONE_MAX   = 22f;  // degrees at the far edge of the target zone
+    private static final float AIM_ZONE_MAX   = 6f;  // degrees at the far edge of the target zone
 
     /**
      * Draws a horizontal aim indicator above the text box.
@@ -205,10 +214,10 @@ public class TutorialOverlayRenderer {
             zoneRight =  AIM_THRESHOLD + 1f;
         }
 
-        // Has the needle entered the target zone?
-        boolean inZone = targetDir > 0  ? aimYawDelta >= AIM_THRESHOLD
-                       : targetDir < 0  ? aimYawDelta <= -AIM_THRESHOLD
-                       : Math.abs(aimYawDelta) >= AIM_THRESHOLD;
+        // Is the needle currently inside the target zone?
+        boolean inZone = targetDir > 0  ? (aimYawDelta >= AIM_THRESHOLD && aimYawDelta <= AIM_ZONE_MAX)
+                       : targetDir < 0  ? (aimYawDelta <= -AIM_THRESHOLD && aimYawDelta >= -AIM_ZONE_MAX)
+                       : Math.abs(aimYawDelta) >= AIM_THRESHOLD && Math.abs(aimYawDelta) <= AIM_ZONE_MAX;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -258,34 +267,49 @@ public class TutorialOverlayRenderer {
         boolean mobile = Platform.isAndroid();
         float textScale = h * 0.0013f;
         float hintScale = textScale * 0.72f;
+        boolean showNextBtn = step.isNextButtonStep();
+
+        // NEXT button dimensions
+        float nextBtnH = h * 0.052f;
+        float nextBtnW = h * 0.22f;
+        float nextBtnMargin = h * 0.014f; // gap between text and button, and button to box edge
 
         // Position the box away from the highlighted button
         float boxH = mobile ? h * 0.17f : h * 0.12f;
         if (hintText != null) boxH += h * 0.05f;
+        if (showNextBtn) boxH += nextBtnH + nextBtnMargin * 2f;
         float boxW = w * (mobile ? 0.72f : 0.55f);
         float boxX = (w - boxW) / 2f;
         float boxY = chooseBoxY(h, step, btnBounds, boxH);
+
+        // NEXT button centered at the bottom of the box
+        float nextBtnX = boxX + (boxW - nextBtnW) / 2f;
+        float nextBtnY = boxY + nextBtnMargin;
 
         // Draw box background
         sr.begin(ShapeRenderer.ShapeType.Filled);
         sr.setColor(BOX_FILL);
         sr.rect(boxX, boxY, boxW, boxH);
         sr.end();
+
+        // Draw box border
         sr.begin(ShapeRenderer.ShapeType.Line);
         sr.setColor(Color.GOLD);
         sr.rect(boxX, boxY, boxW, boxH);
         sr.end();
 
-        // Draw text — use wrap+centre so long strings break gracefully inside the box
+        // Draw text and NEXT button (batch pass)
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
 
         float textAreaW = boxW * 0.88f;
         float textAreaX = boxX + (boxW - textAreaW) / 2f;
+        // Shift text up to leave room for the button strip
+        float textOffsetY = showNextBtn ? nextBtnH + nextBtnMargin * 2f : 0f;
 
         font.getData().setScale(textScale);
         layout.setText(font, mainText, Color.WHITE, textAreaW, Align.center, true);
-        float ty = boxY + boxH - (boxH - layout.height * (hintText != null ? 1.6f : 1f)) / 2f;
+        float ty = boxY + boxH - (boxH - textOffsetY - layout.height * (hintText != null ? 1.6f : 1f)) / 2f;
 
         font.setColor(0f, 0f, 0f, 0.7f);
         font.draw(batch, mainText, textAreaX + 1, ty - 1, textAreaW, Align.center, true);
@@ -300,6 +324,17 @@ public class TutorialOverlayRenderer {
             font.draw(batch, hintText, textAreaX + 1, hy - 1, textAreaW, Align.center, true);
             font.setColor(new Color(1f, 0.9f, 0.5f, 1f));
             font.draw(batch, hintText, textAreaX, hy, textAreaW, Align.center, true);
+        }
+
+        if (showNextBtn) {
+            lastNextButtonBounds.set(nextBtnX, nextBtnY, nextBtnW, nextBtnH);
+            if (nextBtnDrawable == null) {
+                nextBtnDrawable = UIUtils.createRoundedRectDrawable(new Color(0.2f, 0.2f, 0.2f, 0.5f), 12);
+            }
+            nextBtnDrawable.draw(batch, nextBtnX, nextBtnY, nextBtnW, nextBtnH);
+            font.getData().setScale(textScale * 0.85f);
+            font.setColor(Color.WHITE);
+            font.draw(batch, "NEXT  >", nextBtnX, nextBtnY + nextBtnH * 0.72f, nextBtnW, Align.center, false);
         }
 
         batch.end();
@@ -335,12 +370,12 @@ public class TutorialOverlayRenderer {
             case STEP_1_DISTANCE -> "Check the distance to the hole";
             case STEP_2_AIM      -> windAimText(wind);
             case STEP_3_INFO     -> "Check your club distances";
-            case STEP_4_CLUB     -> "Distance: 180 - switch to the 9 Iron";
+            case STEP_4_CLUB     -> "Distance: 180 - press > a few times to switch to the 9 Iron";
             case STEP_5_POWER    -> "Take a full swing";
             case STEP_6_HIT      -> "Stop the needle in the sweet spot!";
             case STEP_8_PUTTER   -> "Press >> to select the putter";
             case STEP_9_PROJECT  -> "View shot projection";
-            case STEP_10_AIM     -> "Aim at the flag, hold HIT to pick shot power";
+            case STEP_10_AIM     -> "Aim at the flag, hold HIT to pick about 40% shot power";
             case STEP_12_COMPLETE_1 -> "At higher difficulties, you'll lose utilities such as distance and shot projection.";
             case STEP_13_COMPLETE_2 -> "Some courses and holes are a lot harder than others.";
             // Level 2
@@ -354,8 +389,9 @@ public class TutorialOverlayRenderer {
             case STEP_L3_1_SPINDICATOR -> "There's a strong headwind - hit the ball from the top to keep your flight path low.";
             case STEP_L3_3_LIE         -> "Observe the shot projection to see how the slope affects your ball's trajectory after landing.";
             case STEP_L3_4_TIP         -> "Consider using a longer iron or wood - it's more forgiving in the fairway. Make sure to hit low under the wind for maximum distance.";
+            case STEP_L3_4B_WIND_TIP   -> "When hitting into the wind, pick a club that should go further than the green and let the wind slow it.";
             case STEP_L3_6_CONGRATS    -> "Congrats! You've got all the basics down.";
-            case STEP_L3_7_DAILY_PROMPT -> "Try today's Daily 1-Hole challenge to compete against other players on the leaderboard!";
+            case STEP_L3_7_DAILY_PROMPT -> "Try today's Daily Par-3 challenge to compete against other players on the leaderboard!";
             default              -> "";
         };
     }
@@ -378,6 +414,7 @@ public class TutorialOverlayRenderer {
             case STEP_L2_2_HIT         -> "Press Space to stop the needle";
             case STEP_L2_4_APPROACH    -> "Press F to check distance, scroll to select club";
             case STEP_L2_6_COMPLETE_1, STEP_L2_7_COMPLETE_2 -> "Press N to continue";
+            case STEP_L3_3_LIE, STEP_L3_4_TIP, STEP_L3_4B_WIND_TIP -> "Press N to continue";
             case STEP_L3_6_CONGRATS, STEP_L3_7_DAILY_PROMPT -> "Press N to continue";
             default              -> null;
         };

@@ -77,12 +77,18 @@ public class MainMenuRenderer {
 
     private void renderDesktopMenu(SpriteBatch batch, BitmapFont font, float screenW, float screenH, int selection, MenuState state, CompetitiveSessions sessions, float baseScale, int mapScrollOffset, DailySubmissionCache dailyCache) {
         float fixedLeftX = screenW * 0.03f;
-        float menuStartY = screenH * 0.65f;
         float spacing = screenH * 0.075f;
         float optionScale = baseScale * 0.32f;
 
         maxMenuTextWidth = screenW * 0.50f;
         font.getData().setScale(optionScale);
+
+        // Clamp menuStartY so no item in the current state clips below the screen.
+        // getMenuMaxSlots() returns the deepest slot index used by this state's content.
+        // A 4% bottom margin keeps items clear of any OS chrome.
+        float maxSlots  = getMenuMaxSlots(state);
+        float bottomPad = screenH * 0.04f;
+        float menuStartY = Math.min(screenH * 0.65f, screenH - bottomPad - spacing * maxSlots);
 
         switch (state) {
             case MAIN -> renderMainMenu(batch, font, selection, fixedLeftX, menuStartY, spacing, sessions, dailyCache);
@@ -110,10 +116,38 @@ public class MainMenuRenderer {
             } else {
                 badgeRadius = 0f;
             }
+            // Hint text: place one slot below LOG OUT so it never overlaps it.
+            // regularCount = total MAIN items minus the LOG OUT entry at the end.
+            int mainRegularCount = TutorialPrefs.isComplete() ? 5 : 6;
             font.getData().setScale(optionScale * 0.6f);
             font.setColor(Color.GRAY);
-            font.draw(batch, "Use UP/DOWN to select, ENTER to start", fixedLeftX, menuStartY - (spacing * 7f));
+            font.draw(batch, "Use UP/DOWN to select, ENTER to start", fixedLeftX,
+                      menuStartY - (spacing * (mainRegularCount + 1.5f)));
         }
+    }
+
+    /**
+     * Returns the number of vertical spacing-units consumed by the deepest item
+     * in the given menu state.  Used to clamp menuStartY so nothing clips off-screen.
+     */
+    private float getMenuMaxSlots(MenuState state) {
+        return switch (state) {
+            // Regular items at slots 0..regularCount, LOG OUT at regularCount+1,
+            // hint text half a slot lower — +0.5 budgets for its own line height.
+            case MAIN             -> TutorialPrefs.isComplete() ? 7.0f : 8.0f;
+            // 7 items, last (BACK) at slot 6.5
+            case EIGHTEEN_HOLES   -> 7.0f;
+            // 4 items, last at slot 3.5
+            case PLAY_OPTIONS     -> 4.0f;
+            // MAP_SELECT has its own SCROLL_WINDOW = 8 items; no further clamping needed
+            case MAP_SELECT       -> 8.0f;
+            // N difficulties + BACK at slot N+0.5
+            case DIFFICULTY_SELECT -> com.gearygolf.golf.GameConfig.Difficulty.values().length + 1.5f;
+            // 4–5 items, last at slot 4.5 (tutorial) or 3.5 (no tutorial)
+            case PRACTICE         -> TutorialPrefs.isComplete() ? 5.0f : 4.0f;
+            // 4 items, last at slot 3.5
+            case SETTINGS         -> 4.0f;
+        };
     }
 
     private String    skillRating = "";
@@ -225,7 +259,7 @@ public class MainMenuRenderer {
     }
 
     private void renderSettingsMenu(SpriteBatch batch, BitmapFont font, int selection, float x, float y, float s) {
-        drawOption(batch, font, selection == 0, true, "SOUND",           x, y);
+        drawOption(batch, font, selection == 0, true, "GAMEPLAY",        x, y);
         drawOption(batch, font, selection == 1, true, "INSTRUCTIONS",   x, y - s);
         drawOption(batch, font, selection == 2, true, "PROFILE",        x, y - (s * 2));
         drawOption(batch, font, selection == 3, true, "< BACK TO MAIN", x, y - (s * 3.5f));

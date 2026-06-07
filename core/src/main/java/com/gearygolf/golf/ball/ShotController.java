@@ -58,12 +58,11 @@ public class ShotController {
     /** Lead time (seconds) between playing the swing sound and ball.hit() firing. */
     private static final float SHOT_SOUND_LEAD = 0.1f;
     /**
-     * Two-segment power curve: speed up to BREAKPOINT maps linearly to 85% power;
-     * speed from BREAKPOINT to FULL_POWER maps linearly from 85% to 100%.
-     * The kink discourages max-effort thrashing while still rewarding commitment.
+     * Club-head speed in screen widths per second (sw/s) that maps to 100% power ceiling.
+     * 2.0 = traversing 200% of screen width per second — a fast but achievable forward swing.
+     * Tune via playtest; kept in sync with SwingOverlay.fullPowerSpeed.
      */
-    private static final float SWING_BREAKPOINT_SPEED  = 200f;  // 85% power threshold
-    private static final float SWING_FULL_POWER_SPEED  = 200f;  // 100% power ceiling
+    public static final float SWING_FULL_POWER_SPEED  = 2.0f;
     private boolean pendingShot = false;
     private float shotLeadTimer = 0f;
     private MinigameResult pendingResult;
@@ -72,7 +71,7 @@ public class ShotController {
 
     private float animationTimer = 0f;
     private ShotDifficulty currentDifficulty;
-    private boolean swingModeNew = true;
+    private boolean swingModeNew = false;
     private Terrain.TerrainType lastTerrainType = Terrain.TerrainType.FAIRWAY;
     private Club shotStartClub = Club.DRIVER;
     /** Heel/toe offset beyond which the putter incurs a contact penalty (0 = always penalise). */
@@ -83,22 +82,31 @@ public class ShotController {
     private float swingContactSweetSpot  = 0.00f;
     /** Multiplier on path and gear-effect direction — 1.0 = full effect (Tour Pro), <1 = forgiven. */
     private float swingPathScale         = 1.00f;
-    /** Quality factor at maximum (height=1.0) follow-through height — lower = bigger penalty. */
-    private float swingFtPenalty         = 0.65f;
-    /** Normalised follow-through height above which quality penalty starts being applied. */
-    private float swingFtThreshold       = 0.25f;
     /** abs(contactOffset) that triggers a shank — higher means harder to shank at easy difficulties. */
     private float swingShankThreshold    = 0.85f;
+    /**
+     * Follow-through angle threshold (degrees) — inner band boundary for the tax-bracket
+     * spin calculation.  Kept in sync with the analyser threshold set via HUD.
+     * NOVICE=6°, TOUR_PRO=4°.
+     */
+    private float swingFtAngleThreshold  = 5.0f;
+    /**
+     * First bracket boundary for the non-linear path curve (raw degrees).
+     * Path magnitude below this is linear (rate 1×); above it is 2× per degree.
+     * Scales with difficulty: NOVICE=4°, TOUR_PRO=2°. Second boundary is implicitly 2×B1.
+     */
+    private float swingPathBreakpoint1   = 4.00f;
 
     public void setPutterContactThreshold(float t) { this.putterContactThreshold = t; }
 
+    public void setFollowThroughAngleThreshold(float degrees) { this.swingFtAngleThreshold = degrees; }
+
     public void setSwingDifficultyParams(float contactSweetSpot, float pathScale,
-                                         float ftPenalty, float ftThreshold, float shankThreshold) {
+                                         float shankThreshold, float pathBreakpoint1) {
         this.swingContactSweetSpot = contactSweetSpot;
         this.swingPathScale        = pathScale;
-        this.swingFtPenalty        = ftPenalty;
-        this.swingFtThreshold      = ftThreshold;
         this.swingShankThreshold   = shankThreshold;
+        this.swingPathBreakpoint1  = pathBreakpoint1;
     }
 
     private com.gearygolf.golf.glamour.SoundManager soundManager;
@@ -183,7 +191,9 @@ public class ShotController {
         if (ballIsStationary) {
             if (isSpinLocked) {
                 calculateShotVector(projectionVector, lockedCamDir, club, lockedSpin, terrain, 0f);
-            } else if (waitingForMinigame) {
+            } else if (waitingForMinigame || pendingShot) {
+                // pendingShot: swing has resolved but shot hasn't fired yet — keep projection
+                // locked on lockedCamDir so the guideline doesn't swing with the overhead camera.
                 calculateShotVector(projectionVector, lockedCamDir, club, hud.getSpinOffset(), terrain, 0f);
             } else {
                 calculateShotVector(projectionVector, camDir, club, hud.getSpinOffset(), terrain, 0f);
@@ -210,37 +220,30 @@ public class ShotController {
                 return false;
             }
 
-            // In new swing mode, pressing HIT while waiting cancels the shot.
-            if (swingModeNew && (input.isActionJustPressed(GameInputProcessor.Action.CHARGE_SHOT)
-                    || input.isActionJustPressed(GameInputProcessor.Action.MAX_POWER_SHOT))) {
+            // In new swing mode, pressing HIT while waiting cancels the shot —
+            // unless the overview panel is up, in which case the tap confirms the shot.
+            if (swingModeNew && !hud.isSwingOverviewActive()
+                    && (input.isActionJustPressed(GameInputProcessor.Action.CHARGE_SHOT)
+                        || input.isActionJustPressed(GameInputProcessor.Action.MAX_POWER_SHOT))) {
                 reset();
                 return false;
             }
 
-            // TEST_SWING: inject a synthetic perfect swing with +5° path for calibration.
+            // TEST_SWING: tee fat driver — full power, LATE_FAT (no power penalty when teed), +2° attack (extra loft/less spin).
+            // Injects into SwingOverlay so the overview panel shows; tap-to-confirm fires the shot via the normal path.
             if (swingModeNew && input.isActionJustPressed(GameInputProcessor.Action.TEST_SWING)) {
                 SwingResult testSwing = new SwingResult(
                         0f,                                          // contactOffset: dead centre
-                        0.3f,                                          // pathDeg: 0.3deg
+                        0f,                                        // pathDeg: gentle draw
                         SWING_FULL_POWER_SPEED,                      // peakForwardSpeed: full power
-                        SwingGestureAnalyser.TempoResult.PERFECT,    // tempoResult
-                        1.0f,                                        // tempoQuality: perfect
-                        SwingGestureAnalyser.FollowThroughResult.LOW,// followThroughResult: good extension
-                        -0.5f                                        // followThroughHeight: well below threshold
+                        SwingGestureAnalyser.TempoResult.LATE_FAT,  // tempoResult: fat — no penalty when teed (q>=0.3)
+                        0.7f,                                       // tempoQuality: solid fat (miss<0.02, tee-fat threshold=0.3)
+                        SwingGestureAnalyser.FollowThroughResult.HIGH,// followThroughResult: flip (tests spin effect)
+                        2.0f,                                        // followThroughAngleDeg: outside threshold → (5×1 + 3×2)/30 = 0.37 ftSpin
+                        1.0f,                                        // backswingNorm: full backswing
+                        0f                                         // attackAngleDeg: ascending driver blow (+1.4° loft, -5% spin)
                 );
-                float fraction = 1.0f;  // full power
-                pendingPower = MathUtils.clamp(fraction * MAX_POWER, 0f, MAX_POWER);
-                pendingResult = convertSwingResult(testSwing,
-                        lastTerrainType == Terrain.TerrainType.TEE,
-                        shotStartClub == Club.PUTTER);
-                if (pendingResult != null) {
-                    waitingForMinigame = false;
-                    isSpinLocked = false;
-                    if (soundManager != null) soundManager.playBallStrike(clubSoundCategory(club), pendingPower / MAX_POWER);
-                    pendingClub   = club;
-                    pendingShot   = true;
-                    shotLeadTimer = SHOT_SOUND_LEAD;
-                }
+                hud.injectTestSwingResult(testSwing);
                 return false;
             }
 
@@ -248,19 +251,19 @@ public class ShotController {
             if (hud.isSwingViewActive()) {
                 SwingResult swingResult = hud.consumeSwingResult();
                 if (swingResult != null) {
-                    // Two-segment curve: 0→BREAKPOINT gives 0→85% power; BREAKPOINT→FULL gives 85→100%.
-                    // Rewards a committed swing without requiring max-effort thrashing.
-                    float spd = swingResult.peakForwardSpeed;
-                    float fraction = spd <= SWING_BREAKPOINT_SPEED
-                            ? (spd / SWING_BREAKPOINT_SPEED) * 0.85f
-                            : 0.85f + ((spd - SWING_BREAKPOINT_SPEED)
-                                       / (SWING_FULL_POWER_SPEED - SWING_BREAKPOINT_SPEED)) * 0.15f;
+                    // Power = forward speed fraction × backswing fraction — strictly linear.
+                    // 10% backswing + 100% speed = 10% power; 50% backswing + 80% speed = 40% power.
+                    float spd      = swingResult.peakForwardSpeed;
+                    float spdFrac  = MathUtils.clamp(spd / SWING_FULL_POWER_SPEED, 0f, 1f);
+                    float bkFrac   = MathUtils.clamp(swingResult.backswingNorm, 0f, 1f);
+                    float fraction = spdFrac * bkFrac;
                     pendingPower = MathUtils.clamp(fraction * MAX_POWER, 0f, MAX_POWER);
                     Gdx.app.log("SwingDebug", String.format(
-                            "[POWER] peakSpeed=%.1f → power=%.2f (%.0f%% max)",
-                            swingResult.peakForwardSpeed, pendingPower, pendingPower / MAX_POWER * 100f));
+                            "[POWER] peakSpeed=%.3fsw/s(%.0f%%) bkNorm=%.2f → power=%.2f (%.0f%% max)",
+                            spd, spdFrac * 100f, swingResult.backswingNorm,
+                            pendingPower, pendingPower / MAX_POWER * 100f));
                     pendingResult = convertSwingResult(swingResult,
-                            lastTerrainType == Terrain.TerrainType.TEE,
+                            lastTerrainType,
                             shotStartClub == Club.PUTTER);
                     if (pendingResult == null) {
                         // Complete whiff — too far from expected impact time.
@@ -272,6 +275,7 @@ public class ShotController {
                     }
                     waitingForMinigame = false;
                     isSpinLocked = false;
+                    hud.incrementShots();
                     if (soundManager != null) soundManager.playBallStrike(clubSoundCategory(club), pendingPower / MAX_POWER);
                     pendingClub   = club;
                     pendingShot   = true;
@@ -330,7 +334,7 @@ public class ShotController {
                     spaceHoldTime = 0f;
                 }
                 if (isCharging) {
-                    float gain = input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT) ? MAX_POWER : delta;
+                    float gain = input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT) ? MAX_POWER : delta * 2f;
                     spaceHoldTime = MathUtils.clamp(spaceHoldTime + gain, 0f, MAX_POWER);
                 }
             } else if (isCharging) {
@@ -409,11 +413,11 @@ public class ShotController {
             }
         }
 
-        // Shank: rotate shot direction hard right (hosel contact, no grooves).
-        // Done after loft calc so elevation angle is preserved; only azimuth changes.
+        // Shank: rotate shot azimuth. Sign convention: positive = LEFT (heel), negative = RIGHT (toe).
+        // Done after loft calc so elevation is preserved; only azimuth changes.
         // Spin is zeroed below after backspin/sidespin are computed.
-        if (result.shankAngleDeg > 0f) {
-            tempV1.rotate(Vector3.Y, -result.shankAngleDeg);
+        if (result.shankAngleDeg != 0f) {
+            tempV1.rotate(Vector3.Y, result.shankAngleDeg);
         }
 
         // Power: smooth base off-centre penalty + sharp edge penalty, capped at 75%
@@ -436,7 +440,13 @@ public class ShotController {
         projectionVector.set(tempV2).crs(Vector3.Y).nor();
 
         Vector2 quadOffset = getQuadraticSpinOffset(spin);
-        float attackAngle = quadOffset.y * -20.0f;
+        // New swing mode sets attackAngleDeg on the result (negative = descending blow).
+        // Old swing mode leaves it at 0 and derives attack from the spin dial instead.
+        float attackAngle = result.attackAngleDeg != 0f
+                ? result.attackAngleDeg          // new swing: e.g. -5° for descending
+                : quadOffset.y * -20.0f;         // old swing: dial position → degrees
+        // Map back to [0,1] scale used by efficiency curves (positive = descending).
+        float attackQuadY = -attackAngle / 20.0f;
         float sForce = (float) Math.sin(Math.abs(club.loft - attackAngle) * MathUtils.degreesToRadians);
         float spinCurve = (float) Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
         float quality = getQualityFactor(result.rating);
@@ -460,17 +470,20 @@ public class ShotController {
         // Long irons peak later (~0.50) to reward the stinger zone; short irons peak earlier (~0.28).
         float optimalAttack = MathUtils.lerp(0.28f, 0.50f, loftFactor);
         float attackEfficiency;
-        if (quadOffset.y <= 0f) {
+        if (attackQuadY <= 0f) {
             attackEfficiency = 0f; // ascending blow — no backspin bonus
-        } else if (quadOffset.y <= optimalAttack) {
-            attackEfficiency = quadOffset.y / optimalAttack; // linear rise to peak
+        } else if (attackQuadY <= optimalAttack) {
+            attackEfficiency = attackQuadY / optimalAttack; // linear rise to peak
         } else {
-            attackEfficiency = 1f - 0.65f * (quadOffset.y - optimalAttack) / (1f - optimalAttack);
+            attackEfficiency = 1f - 0.65f * (attackQuadY - optimalAttack) / (1f - optimalAttack);
         }
         attackEfficiency = MathUtils.clamp(attackEfficiency, 0f, 1f);
 
-        float backspin = (power * finalPowerMult) * sForce * 9.0f * (1.0f + (quadOffset.y * attackAngleCoeff * attackAngleDamping * attackEfficiency)) * quality * spinCurve * terrainSpinMult * club.spinMult;
-        float sidespin = ((quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve) + (result.accuracy * (power * finalPowerMult) * 5.0f * spinCurve)) * terrainSpinMult * club.spinMult;
+        float backspin = (power * finalPowerMult) * sForce * 9.0f * (1.0f + (attackQuadY * attackAngleCoeff * attackAngleDamping * attackEfficiency)) * quality * spinCurve * terrainSpinMult * club.spinMult;
+        float sidespin = ((quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve)
+                        - (result.accuracy     * (power * finalPowerMult) * 8.0f * spinCurve)
+                        + (result.ftSpinContrib * (power * finalPowerMult) * 5.0f * spinCurve))
+                       * terrainSpinMult * club.spinMult;
 
         // Edge spin reversal: crosses zero at edgeFactor=0.5, fully reversed at edgeFactor=1.
         // At the rim, backspin becomes topspin (topping the ball).
@@ -484,7 +497,7 @@ public class ShotController {
         sidespin *= Math.abs(result.tempoSpinMult);
 
         // Shank: hosel has no grooves — zero all spin. Direction already rotated above.
-        if (result.shankAngleDeg > 0f) { backspin = 0f; sidespin = 0f; }
+        if (result.shankAngleDeg != 0f) { backspin = 0f; sidespin = 0f; }
 
         if (DEBUG_SHOT) Gdx.app.log("ShotDebug", String.format(
             "[%s] pwr=%.2f finalPwr=%.1f loft=%.1f→%.1f sForce=%.3f back=%.1f side=%.1f spinMult=%.2f",
@@ -504,6 +517,15 @@ public class ShotController {
 
         out.set(aimDir);
         out.rotate(Vector3.Y, (quadOffset.x * 2.5f) - (accuracy * 12.0f) - physicalKick);
+
+        if (club == Club.PUTTER) {
+            // Project the aim direction onto the terrain plane so putts follow the slope.
+            // Removes the component that would cut into the hill; the result lies on the surface.
+            float dot = out.dot(terrainNormal);
+            out.sub(terrainNormal.x * dot, terrainNormal.y * dot, terrainNormal.z * dot);
+            out.nor();
+            return;
+        }
 
         float deloftAbility = MathUtils.clamp(1.2f - (club.loft / 45f), 0.2f, 1.2f);
         float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * -65.0f * deloftAbility), 0.1f, 85f);
@@ -595,7 +617,7 @@ public class ShotController {
         if (waitingForMinigame && swingModeNew) return;
 
         float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : 0f);
-        if (height <= 0 && !isCharging && !isPowerLocked) return;
+        if (height <= 0 && !isCharging && !isPowerLocked && !waitingForMinigame) return;
 
         float dist = camPos.dst(ballPos);
         float currentUnitScale = MathUtils.clamp(dist * DISTANCE_SCALE_FACTOR * HUD.UI_SCALE, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
@@ -653,7 +675,8 @@ public class ShotController {
      *              Shank impossible. Wide contact sweet spot (putterContactThreshold).
      *              Push/pull from path is preserved — that's putting's main mechanic.
      */
-    private MinigameResult convertSwingResult(SwingResult s, boolean isTeed, boolean isPutter) {
+    private MinigameResult convertSwingResult(SwingResult s, Terrain.TerrainType terrain, boolean isPutter) {
+        TerrainSwingModifier modifier = TerrainSwingModifier.forTerrain(terrain);
         if (s.tempoQuality < MISS_THRESHOLD) return null;
 
         // ── Contact factor ───────────────────────────────────────────────────
@@ -674,17 +697,7 @@ public class ShotController {
             contactFactor = 1f - ((excess / range) * 0.6f);
         }
 
-        // Follow-through: continuous penalty using raw height rather than the discrete enum.
-        // Penalty starts at swingFtThreshold (wider at easy difficulties) and scales linearly
-        // up to (1 - swingFtPenalty) at height=1.0 (smaller max penalty at easy difficulties).
-        float ftFactor;
-        if (s.followThroughHeight <= swingFtThreshold) {
-            ftFactor = 1.0f;
-        } else {
-            float t = (s.followThroughHeight - swingFtThreshold) / (1f - swingFtThreshold);
-            ftFactor = 1f - t * (1f - swingFtPenalty);
-        }
-        float compositeQuality = s.tempoQuality * contactFactor * ftFactor;
+        float compositeQuality = s.tempoQuality * contactFactor;
 
         MinigameResult.Rating rating;
         if      (compositeQuality >= 0.97f) rating = MinigameResult.Rating.PERFECTION;
@@ -695,18 +708,34 @@ public class ShotController {
         else if (compositeQuality >= 0.15f) rating = MinigameResult.Rating.TERRIBLE;
         else                                rating = MinigameResult.Rating.ABYSMAL;
 
-        // ── Shank: extreme heel → hosel contact (irons/woods only) ──────────
-        // Putters have a flat wide face with no hosel equivalent — skip.
-        // swingShankThreshold widens at easier difficulties so novices rarely shank.
+        // ── Shank: extreme heel or toe contact (irons/woods only) ───────────
+        // Putters have a flat wide face — skip.
+        // shankAngleDeg is signed: positive = LEFT (heel), negative = RIGHT (toe).
+        // loftMult = 0.1f: a shanked ball skips out low, not lobbed up.
         if (!isPutter && s.contactOffset < -swingShankThreshold) {
-            float t = (absContact - swingShankThreshold) / (1f - swingShankThreshold); // 0 at threshold, 1 at -1.0
+            // Heel shank — ball fires LEFT
+            float t = (absContact - swingShankThreshold) / (1f - swingShankThreshold);
             MinigameResult shank = new MinigameResult();
             shank.rating        = MinigameResult.Rating.ABYSMAL;
-            shank.shankAngleDeg = MathUtils.lerp(30f, 75f, t);
+            shank.shankAngleDeg = MathUtils.lerp(30f, 75f, t);   // positive = LEFT
             shank.powerMod      = MathUtils.lerp(0.70f, 0.50f, t);
+            shank.loftMult      = 0.1f;
             shank.tempoSpinMult = 0.1f;
             shank.accuracy      = 0f;
-            Gdx.app.log("SwingDebug", String.format("[SHANK] contact=%.2f → %.0f°", s.contactOffset, shank.shankAngleDeg));
+            Gdx.app.log("SwingDebug", String.format("[SHANK-HEEL] contact=%.2f → %.0f° LEFT", s.contactOffset, shank.shankAngleDeg));
+            return shank;
+        }
+        if (!isPutter && s.contactOffset > swingShankThreshold) {
+            // Toe shank — ball fires RIGHT
+            float t = (s.contactOffset - swingShankThreshold) / (1f - swingShankThreshold);
+            MinigameResult shank = new MinigameResult();
+            shank.rating        = MinigameResult.Rating.ABYSMAL;
+            shank.shankAngleDeg = -MathUtils.lerp(30f, 75f, t);  // negative = RIGHT
+            shank.powerMod      = MathUtils.lerp(0.70f, 0.50f, t);
+            shank.loftMult      = 0.1f;
+            shank.tempoSpinMult = 0.1f;
+            shank.accuracy      = 0f;
+            Gdx.app.log("SwingDebug", String.format("[SHANK-TOE] contact=%.2f → %.0f° RIGHT", s.contactOffset, shank.shankAngleDeg));
             return shank;
         }
 
@@ -714,14 +743,36 @@ public class ShotController {
         r.rating = rating;
 
         // ── Accuracy: path + gear effect ─────────────────────────────────────
-        // Both are scaled by swingPathScale: Tour Pro gets the full directional effect;
-        // easier difficulties shrink path deviation and gear-effect curve proportionally.
-        float scaledPathDeg = s.pathDeg * swingPathScale;
-        float pathAccuracy = -(scaledPathDeg / 15f) * (1f - absContact * 0.5f);
+        // Non-linear path bracket: first B1 degrees scale at rate 1×; anything beyond
+        // scales at 2× per degree (tax-bracket style — no discontinuity at the boundary).
+        // B1 is difficulty-scaled (NOVICE=4°, TOUR_PRO=2°) so larger paths are needed to
+        // shape a shot on easier settings, while pros see amplified feedback quickly.
+        float absPath     = Math.abs(s.pathDeg);
+        float b1          = swingPathBreakpoint1;
+        float effectivePath = Math.signum(s.pathDeg) *
+                (Math.min(absPath, b1) + Math.max(0f, absPath - b1) * 2f);
+        // swingPathScale still applies uniformly — Tour Pro gets full sensitivity everywhere.
+        float scaledPathDeg = effectivePath * swingPathScale;
+        float pathAccuracy = (scaledPathDeg / 15f) * (1f - absContact * 0.5f);
         // Gear effect: toe opens the face (fade), heel closes it (draw).
         // Putter base (0.2) is smaller — short putts curve less. Both scaled by difficulty.
         float gearScale = (isPutter ? 0.2f : 0.5f) * swingPathScale;
         r.accuracy = MathUtils.clamp(pathAccuracy + s.contactOffset * gearScale, -1f, 1f);
+
+        // ── Follow-through spin contribution ──────────────────────────────────
+        // Tax-bracket: inside ±threshold → 1 unit/degree; outside → 2 units/degree.
+        // Positive angle (flip side) = hook bias; negative (extension) = fade bias.
+        // Scale: effectiveDeg / 30 gives ±1.0 at extreme deviations, roughly half
+        // the strength of path at the same angle (path uses /15).
+        // Putter: scaled down by 0.2× — short putts are barely affected by follow-through.
+        {
+            float absFt       = Math.abs(s.followThroughAngleDeg);
+            float ftThresh    = swingFtAngleThreshold;
+            float effectiveFt = Math.signum(s.followThroughAngleDeg) *
+                    (Math.min(absFt, ftThresh) + Math.max(0f, absFt - ftThresh) * 2f);
+            float putterScale = isPutter ? 0.2f : 1.0f;
+            r.ftSpinContrib   = -MathUtils.clamp(effectiveFt / 22f * putterScale, -1f, 1f);
+        }
 
         float q = s.tempoQuality;
 
@@ -732,32 +783,23 @@ public class ShotController {
             r.powerMod = MathUtils.lerp(0.85f, 1.05f, compositeQuality);
             // loftMult, loftDeltaDeg, tempoSpinMult all stay at defaults (1.0 / 0.0 / 1.0)
         } else if (s.tempoResult == SwingGestureAnalyser.TempoResult.EARLY_THIN) {
-            if (q >= 0.5f) {
-                // ── Thin zone (q: 1.0→0.5) ──────────────────────────────────
-                float t = (1f - q) * 2f;
-                r.powerMod      = 1.0f;
-                r.loftMult      = MathUtils.lerp(1.0f,  0.5f,  t);
-                r.tempoSpinMult = MathUtils.lerp(1.0f,  0.5f,  t);
-            } else {
-                // ── Top zone (q: 0.5→0.0) ───────────────────────────────────
-                float t = 1f - (q * 2f);
-                r.powerMod      = MathUtils.lerp(1.0f,  0.0f,  t);
-                r.loftMult      = MathUtils.lerp(0.5f, -0.3f,  t);
-                r.tempoSpinMult = MathUtils.lerp(0.5f, -1.0f,  t);
+            if (!modifier.handleEarlyThin(s, r, q)) {
+                if (q >= 0.5f) {
+                    // ── Thin zone (q: 1.0→0.5) ──────────────────────────────────
+                    float t = (1f - q) * 2f;
+                    r.powerMod      = 1.0f;
+                    r.loftMult      = MathUtils.lerp(1.0f,  0.5f,  t);
+                    r.tempoSpinMult = MathUtils.lerp(1.0f,  0.5f,  t);
+                } else {
+                    // ── Top zone (q: 0.5→0.0) ───────────────────────────────────
+                    float t = 1f - (q * 2f);
+                    r.powerMod      = MathUtils.lerp(1.0f,  0.0f,  t);
+                    r.loftMult      = MathUtils.lerp(0.5f, -0.3f,  t);
+                    r.tempoSpinMult = MathUtils.lerp(0.5f, -1.0f,  t);
+                }
             }
         } else if (s.tempoResult == SwingGestureAnalyser.TempoResult.LATE_FAT) {
-            if (isTeed) {
-                if (q >= 0.3f) {
-                    // ── Tee LATE zone (q: 1.0→0.3) — no ground to hit ────────
-                    r.powerMod = 1.0f;
-                } else {
-                    // ── Tee sky/pop-up (q: 0.3→0.0) ─────────────────────────
-                    float t = 1f - (q / 0.3f);
-                    r.powerMod      = MathUtils.lerp(1.0f,  0.30f, t);
-                    r.loftDeltaDeg  = MathUtils.lerp(0f,    35f,   t);
-                    r.tempoSpinMult = MathUtils.lerp(1.0f,  0.20f, t);
-                }
-            } else {
+            if (!modifier.handleLateFat(s, r, q)) {
                 if (q >= 0.5f) {
                     // ── Fat zone (q: 1.0→0.5) ───────────────────────────────
                     float t = (1f - q) * 2f;
@@ -771,21 +813,41 @@ public class ShotController {
                     r.loftDeltaDeg  = MathUtils.lerp(20f,   45f,   t);
                     r.tempoSpinMult = MathUtils.lerp(0.40f, 0.05f, t);
                 }
+                modifier.onAfterLateFat(s, r, q);
             }
         } else {
             // ── Perfect tempo ────────────────────────────────────────────────
             // powerMod ceiling is 1.0 — club powerMult already has the tier multiplier
             // (×1.50/×1.25/×1.10) baked in, so PERFECT tempo at max speed == old PERFECTION.
             r.powerMod = MathUtils.lerp(0.60f, 1.00f, compositeQuality);
-            if (isTeed) {
-                r.loftDeltaDeg  = 6f;
-                r.tempoSpinMult = 1f;
-            }
+            modifier.onPerfect(s, r, compositeQuality);
+        }
+
+        // ── Attack angle adjustments ─────────────────────────────────────────
+        // Positive attack (ascending blow) adds effective loft and reduces backspin.
+        // Negative attack (descending) delofts the shot and increases backspin.
+        // 0.7° loft per degree of attack; ±2.5% spin per degree.
+        if (!isPutter) {
+            r.loftDeltaDeg   += s.attackAngleDeg * 0.7f;
+            r.tempoSpinMult  *= (1.0f + (-s.attackAngleDeg * 0.025f));
+            r.attackAngleDeg  = s.attackAngleDeg; // passed to executeShot for full spin calculation
+        }
+
+        // ── Contact power penalty ────────────────────────────────────────────
+        // Smooth power loss from 0 at the sweet spot edge up to 40% at full heel/toe.
+        // Stacks multiplicatively with tempo penalties. Putter skipped — its contact
+        // penalty already flows through compositeQuality into powerMod above.
+        if (!isPutter) {
+            float excess = Math.max(0f, absContact - swingContactSweetSpot);
+            float range  = Math.max(0.01f, 1f - swingContactSweetSpot);
+            float contactPenalty = MathUtils.clamp(excess / range, 0f, 1f);
+            r.powerMod *= 1f - contactPenalty * 0.4f;
         }
 
         Gdx.app.log("SwingDebug", String.format(
-            "[CONVERT] tempo=%s q=%.2f contact=%.2f ft=%s putter=%b → %s pwr=%.2f loftMult=%.2f loftDelta=%.1f spinMult=%.2f",
-            s.tempoResult, q, s.contactOffset, s.followThroughResult, isPutter,
+            "[CONVERT] tempo=%s q=%.2f contact=%.2f ft=%s(%.1f°) ftSpin=%.3f putter=%b atk=%.1f° → %s pwr=%.2f loftMult=%.2f loftDelta=%.1f spinMult=%.2f",
+            s.tempoResult, q, s.contactOffset, s.followThroughResult, s.followThroughAngleDeg,
+            r.ftSpinContrib, isPutter, s.attackAngleDeg,
             rating, r.powerMod, r.loftMult, r.loftDeltaDeg, r.tempoSpinMult));
 
         return r;

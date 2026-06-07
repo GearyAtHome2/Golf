@@ -43,6 +43,8 @@ public static class MobileUIPackage {
         public LiveScoreboardActor liveScoreboard;
         public HoldButton resetBallBtn, newMapBtn;
         public TextButton difficultyBtn, projectBtn, distanceBtn;
+        /** Left column: PAUSE / PROJECT / DISTANCE / OVERVIEW + spin indicator. Hidden during swing view. */
+        public Table leftPanel;
         public Label clubLabel;
         public Skin skin;
         public TextButton nextLevelBtn, submitScoreBtn, uploadScoreBtn, mainMenuBtn;
@@ -142,16 +144,23 @@ public static class MobileUIPackage {
         maxStyle.up   = UIUtils.createEmbossedButtonDrawable(COLOR_MAX_UP, RADIUS_HIT, 5);
         maxStyle.down = UIUtils.createInsetButtonDrawable(COLOR_MAX_DOWN, RADIUS_HIT, 5);
         ui.maxHitBtn = createTriggerButton(maxStyle, "MAX", input, GameInputProcessor.Action.MAX_POWER_SHOT, globalFontScale);
-        rightStack.add(ui.maxHitBtn).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
 
-        // TEST SWING button — debug only, visible in new swing mode only.
+        // TEST SWING button — debug only, shown in new swing mode in place of MAX.
         // Fires a synthetic perfect swing (+5° path) for distance calibration.
         TextButton.TextButtonStyle testStyle = new TextButton.TextButtonStyle(style);
         testStyle.up   = UIUtils.createEmbossedButtonDrawable(new Color(0f, 0.6f, 0.6f, 0.85f), RADIUS_HIT, 5);
         testStyle.down = UIUtils.createInsetButtonDrawable(new Color(0f, 0.4f, 0.4f, 0.85f), RADIUS_HIT, 5);
+        //disabled for release
         ui.testSwingBtn = createTriggerButton(testStyle, "TEST", input, GameInputProcessor.Action.TEST_SWING, globalFontScale);
-        ui.testSwingBtn.setVisible(config.swingModeNew);
-        rightStack.add(ui.testSwingBtn).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
+        ui.testSwingBtn.setVisible(false); // HUD.java toggles both at runtime based on swingModeNew
+
+        // Both buttons share a single Stack cell so neither shifts the layout when hidden.
+        // setVisible(false) on a plain Table cell still reserves the cell's height in LibGDX,
+        // which is why both cannot be separate rows.
+        Stack topBtnStack = new Stack();
+        topBtnStack.add(ui.maxHitBtn);
+        topBtnStack.add(ui.testSwingBtn);
+        rightStack.add(topBtnStack).width(hitW * 0.8f).height(btnH).right().padBottom(spacing).row();
 
         TextButton.TextButtonStyle hitStyle = new TextButton.TextButtonStyle(style);
         hitStyle.up   = UIUtils.createEmbossedButtonDrawable(COLOR_HIT_UP, RADIUS_HIT, 5);
@@ -193,6 +202,7 @@ public static class MobileUIPackage {
         ui.infoToggleBtn.getLabel().setFontScale(globalFontScale);
         rightStack.add(ui.infoToggleBtn).width(btnW).height(btnH).right();
 
+        ui.leftPanel = leftStack;
         ui.gameplayTable.add(leftStack).expandX().fillY().left().padLeft(leftEdge).padTop(getLeftStackTopPad(viewport));
         ui.gameplayTable.add(rightStack).expandX().fillY().right().padRight(rightEdge).padTop(viewport.getWorldHeight() * (1.0f - MAX_BTN_Y));
     }
@@ -219,11 +229,12 @@ public static class MobileUIPackage {
         String[] options = getOptionsForState(state);
         float screenH = viewport.getWorldHeight();
 
-        table.setSize(620f, screenH);
+        float screenW = viewport.getWorldWidth();
+        table.setSize(screenW * 0.485f, screenH);
         table.setPosition(0, 0);
-        table.top().left().padLeft(20f).padTop(screenH * 0.255f);
+        table.top().left().padLeft(screenW * 0.016f).padTop(screenH * 0.255f);
 
-        float bW = 580f;
+        float bW = screenW * 0.453f;
         float bH = screenH * 0.09f;
         float spacing = screenH * 0.010f;
 
@@ -236,12 +247,7 @@ public static class MobileUIPackage {
                 TextButton btn = new TextButton(options[i], menuStyle);
                 float baseMenuScale = FONT_SCALE_START_MENU * 0.32f;
                 GlyphLayout gl = new GlyphLayout();
-                font.getData().setScale(1.0f);
-                gl.setText(font, options[i]);
-                float textWidthAtBase = gl.width * baseMenuScale;
-                float finalMenuScale = textWidthAtBase > bW * 0.85f ? baseMenuScale * (bW * 0.85f / textWidthAtBase) : baseMenuScale;
-                btn.getLabel().setFontScale(finalMenuScale);
-                font.getData().setScale(1.0f);
+                btn.getLabel().setFontScale(UIUtils.fitFontScale(font, gl, options[i], baseMenuScale, bW * 0.85f));
                 btn.addListener(new InputListener() {
                     @Override public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
                         if (soundManager != null) soundManager.playButtonDown(); return false;
@@ -261,12 +267,15 @@ public static class MobileUIPackage {
             scrollPane.setOverscroll(false, false);
             scrollPane.setFadeScrollBars(true);
             scrollPane.setSmoothScrolling(true);
-            table.add(scrollPane).width(bW + 20f).height(screenH * 0.70f).top().left();
+            table.add(scrollPane).width(bW + screenW * 0.016f).height(screenH * 0.70f).top().left();
             return;
         }
 
         // For MAIN and EIGHTEEN_HOLES, descriptors from the resolver drive label/locked/sparkle.
         java.util.List<MenuButtonDescriptor> descs = MenuButtonResolver.resolve(state, sessions, dailyCache);
+
+        Table innerTable = new Table();
+        innerTable.top().left();
 
         for (int i = 0; i < options.length; i++) {
             final int index = i;
@@ -293,14 +302,8 @@ public static class MobileUIPackage {
             if (doSparkle) ((SparkleButton) btn).setSparkleEnabled(true);
 
             float baseMenuScale = FONT_SCALE_START_MENU * 0.32f;
-            float maxTextWidth = bW * 0.85f;
             GlyphLayout gl = new GlyphLayout();
-            font.getData().setScale(1.0f);
-            gl.setText(font, text);
-            float textWidthAtBase = gl.width * baseMenuScale;
-            float finalMenuScale = textWidthAtBase > maxTextWidth ? baseMenuScale * (maxTextWidth / textWidthAtBase) : baseMenuScale;
-            btn.getLabel().setFontScale(finalMenuScale);
-            font.getData().setScale(1.0f);
+            btn.getLabel().setFontScale(UIUtils.fitFontScale(font, gl, text, baseMenuScale, bW * 0.85f));
 
             if (isLocked) {
                 btn.setDisabled(true);
@@ -323,9 +326,16 @@ public static class MobileUIPackage {
                     }
                 });
             }
-            table.add(btn).width(bW).height(bH).padBottom(spacing).left().row();
+            innerTable.add(btn).width(bW).height(bH).padBottom(spacing).left().row();
         }
 
+        ScrollPane.ScrollPaneStyle sps = new ScrollPane.ScrollPaneStyle();
+        ScrollPane scrollPane = new ScrollPane(innerTable, sps);
+        scrollPane.setScrollingDisabled(true, false);
+        scrollPane.setOverscroll(false, false);
+        scrollPane.setFadeScrollBars(true);
+        scrollPane.setSmoothScrolling(true);
+        table.add(scrollPane).width(bW + screenW * 0.016f).height(screenH * 0.70f).top().left();
     }
 
     private static String[] getOptionsForState(MainMenuRenderer.MenuState state) {
@@ -488,17 +498,6 @@ public static class MobileUIPackage {
         });
         pauseTable.add(ui.difficultyBtn).width(bW).height(bH).padBottom(pad).row();
 
-        final TextButton swingBtn = new TextButton("SWING: " + (config.swingModeNew ? "NEW" : "CLASSIC"), menuStyle);
-        swingBtn.getLabel().setFontScale(scaledFont);
-        swingBtn.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                config.swingModeNew = !config.swingModeNew;
-                swingBtn.setText("SWING: " + (config.swingModeNew ? "NEW" : "CLASSIC"));
-            }
-        });
-        pauseTable.add(swingBtn).width(bW).height(bH).padBottom(pad).row();
-
         pauseTable.add(createMenuButton("SETTINGS", menuStyle, input, GameInputProcessor.Action.OPEN_SOUND_SETTINGS, scaledFont)).width(bW).height(bH).padBottom(pad).row();
         pauseTable.add(createMenuButton("INSTRUCTIONS", menuStyle, input, GameInputProcessor.Action.HELP, scaledFont)).width(bW).height(bH).padBottom(pad).row();
         pauseTable.add(createMenuButton("MAIN MENU", menuStyle, input, GameInputProcessor.Action.MAIN_MENU, scaledFont)).width(bW).height(bH).row();
@@ -584,7 +583,8 @@ public static class MobileUIPackage {
 
         ui.victoryTable.add(ui.nextLevelBtn).width(viewport.getWorldWidth() * 0.35f).height(btnH).center().padBottom(0);
         ui.victoryTable.row();
-        ui.victoryTable.add(buttonTable).expandX().fillX().padLeft(30).padRight(30);
+        float hPad = viewport.getWorldWidth() * 0.023f;
+        ui.victoryTable.add(buttonTable).expandX().fillX().padLeft(hPad).padRight(hPad);
     }
 
     private static TextButton createMenuButton(String text, TextButton.TextButtonStyle style, MobileInputProcessor input, GameInputProcessor.Action action, float fontScale) {

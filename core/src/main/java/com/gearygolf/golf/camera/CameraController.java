@@ -41,12 +41,20 @@ public class CameraController {
     // Left of aimDir (horizontal) = (aimDir.z, 0, -aimDir.x).
     private static final float SWING_HEIGHT    = 3.2f; // units above ball
     private static final float SWING_SIDE_DIST = 1.0f; // units to the left of ball (produces ~16° tilt)
+    // Baseline aim offset (world units) that centres the view on a 7-iron (-4° natural attack).
+    // Calculated as: 7i_naturalAttack * -CAM_SCALE = -(-4.0) * 0.10 = 0.40.
+    // Subtracted from swingCamAimOffset each frame so the attack-angle scale stays unchanged
+    // while the screen framing shifts: driver appears left, 7i central, wedges slightly right.
+    private static final float SWING_AIM_CENTER_OFFSET = 0.40f;
     private boolean swingViewActive = false;
     private float swingProgress = 0f; // 0 = normal camera, 1 = fully in swing view
     private final Vector3 swingAimDir = new Vector3(0, 0, -1); // horizontal aim direction when shot started
     private final Vector3 swingCamTarget = new Vector3();
     private final Vector3 swingUpTarget = new Vector3(1, 0, 0);
     private final Vector3 tempSwing = new Vector3();
+    /** World-space offset applied to swingCamTarget along the aim axis for attack-angle control.
+     *  Set each frame by GolfGame from SwingOverlay.getCamAimOffset(). */
+    private float swingCamAimOffset = 0f;
 
     private boolean isOverhead = false;
     private boolean isPaused = false;
@@ -118,6 +126,10 @@ public class CameraController {
 
     public Vector3 getSwingAimDir() { return swingAimDir; }
 
+    /** Updated each frame from SwingOverlay.getCamAimOffset() to shift the swing camera
+     *  along the aim axis for attack-angle (ball-placement) control. */
+    public void setSwingCamAimOffset(float offset) { this.swingCamAimOffset = offset; }
+
     public void update(Vector3 ballPos, GameInputProcessor input) {
         if (isPaused) return;
         float delta = Gdx.graphics.getDeltaTime();
@@ -145,11 +157,14 @@ public class CameraController {
             float leftX = swingAimDir.z;
             float leftZ = -swingAimDir.x;
 
-            // Camera is to the LEFT of the ball and above it
+            // Camera is to the LEFT of the ball and above it, offset along aim axis for attack angle.
+            // SWING_AIM_CENTER_OFFSET shifts the baseline so 7-iron appears centred on screen;
+            // attack-angle offsets are then applied symmetrically around that point.
+            float aimOffset = swingCamAimOffset - SWING_AIM_CENTER_OFFSET;
             swingCamTarget.set(
-                    ballPos.x + leftX * SWING_SIDE_DIST,
+                    ballPos.x + leftX * SWING_SIDE_DIST + swingAimDir.x * aimOffset,
                     ballPos.y + SWING_HEIGHT,
-                    ballPos.z + leftZ * SWING_SIDE_DIST
+                    ballPos.z + leftZ * SWING_SIDE_DIST + swingAimDir.z * aimOffset
             );
 
             // Derived direction and up so that: target (aimDir) appears to the LEFT of screen.

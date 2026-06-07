@@ -18,6 +18,10 @@ import java.util.TimeZone;
  *
  * Call fetch() after login. Read submittedToday() anywhere — it's synchronous
  * after the initial fetch completes, so there's no per-call lag.
+ *
+ * Also maintains a local on-disk store (via LocalSubmissionStore) that is
+ * populated immediately at the start of fetch(), before Firebase responds.
+ * This ensures buttons are locked correctly even during the Firebase round-trip.
  */
 public class DailySubmissionCache {
 
@@ -28,6 +32,9 @@ public class DailySubmissionCache {
     }
 
     private final Set<CourseType> submitted = EnumSet.noneOf(CourseType.class);
+    /** Populated from the local file at the start of fetch(). Never cleared mid-session. */
+    private final Set<CourseType> localConfirmed = EnumSet.noneOf(CourseType.class);
+    private String uid = "";
     private boolean fetched = false;
     private int pendingRequests = 0;
     private int networkFailures = 0;  // counts requests that failed at network level (no connectivity)
@@ -38,6 +45,12 @@ public class DailySubmissionCache {
 
     /** Returns true if the user has already submitted a score for this course type today. */
     public boolean hasSubmitted(CourseType type) { return submitted.contains(type); }
+
+    /**
+     * Returns true if the local on-disk store (loaded at the start of fetch()) shows this
+     * type as submitted for today. This is available immediately — before Firebase responds.
+     */
+    public boolean isLocallyConfirmed(CourseType type) { return localConfirmed.contains(type); }
 
     /** Returns true if all five daily course types have been submitted today. */
     public boolean allSubmittedToday() {
@@ -61,6 +74,13 @@ public class DailySubmissionCache {
             return;
         }
 
+        this.uid = uid;
+
+        // Load local store first — this is the initial source of truth before Firebase responds.
+        localConfirmed.clear();
+        localConfirmed.addAll(LocalSubmissionStore.load(uid));
+        Gdx.app.log("DailySubmissionCache", "Local store loaded: " + localConfirmed);
+
         submitted.clear();
         fetched = false;
         pendingRequests = CourseType.values().length;
@@ -74,14 +94,18 @@ public class DailySubmissionCache {
         }
     }
 
-    /** Call this after a successful submission to immediately update the local cache. */
+    /** Call this after a successful submission to immediately update the in-memory and local cache. */
     public void markSubmitted(CourseType type) {
         submitted.add(type);
+        localConfirmed.add(type);
+        LocalSubmissionStore.save(uid, localConfirmed);
     }
 
     /** Clears all cached state. Call on logout so a subsequent login fetches fresh data. */
     public void clear() {
         submitted.clear();
+        localConfirmed.clear();
+        uid = "";
         fetched = false;
         pendingRequests = 0;
         networkFailures = 0;
@@ -121,7 +145,14 @@ public class DailySubmissionCache {
                 final boolean hasEntry = found;
                 Gdx.app.postRunnable(() -> {
                     if (generation != fetchGeneration) return; // stale fetch — discard
-                    if (hasEntry) submitted.add(type);
+                    if (hasEntry) {
+                        submitted.add(type);
+                        // Firebase confirmed this submission — persist to local store so future
+                        // app opens don't need to wait for Firebase to lock the button.
+                        if (localConfirmed.add(type)) {
+                            LocalSubmissionStore.save(uid, localConfirmed);
+                        }
+                    }
                     Gdx.app.log("DailySubmissionCache", type + " submitted today: " + hasEntry);
                     pendingRequests--;
                     if (pendingRequests <= 0) {

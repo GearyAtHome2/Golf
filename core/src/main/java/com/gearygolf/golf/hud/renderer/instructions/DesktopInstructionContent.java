@@ -57,12 +57,11 @@ public class DesktopInstructionContent implements InstructionContent {
     @Override
     public String[] getGameplayLines() {
         return new String[]{
-                "SPIN: Aim at the bottom of the ball to 'scoop' it for high loft and low backspin.",
-                "Aim down on the ball from above to compress it for a lower loft and higher spin.",
-                "PHYSICS: engine simulates lift based on velocity and spin magnitude consistently.",
-                "POWER: Time SPACE in sweet spots.",
-                "TERRAIN: Slopes kick trajectory left/right.",
-                "WIND: Affects altitudes more significantly."
+                "SPIN: Aim at the bottom of the ball to scoop it for high loft and low backspin. Aim from above to compress it for lower loft and higher spin.",
+                "PHYSICS: Lift and curl is based on velocity and spin magnitude.",
+                "POWER: Time SPACE in the sweet spots.",
+                "TERRAIN: Slopes kick the initial hit trajectory left or right.",
+                "WIND: Increases at higher altitudes."
         };
     }
 

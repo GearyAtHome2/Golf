@@ -111,13 +111,21 @@ public class SessionManager {
 
     // Scrambles a timestamp-derived seed so players can't trivially reverse-engineer
     // today's daily map by guessing the input (e.g. "20260411"). All players share
-    // the same scrambled seed for a given day. Do NOT change this — doing so would
-    // give every player a different daily map and invalidate historic leaderboard seeds.
+    // the same scrambled seed for a given day.
+    //
+    // Uses the splitmix64 finalizer — a proven bijective 64-bit hash with strong
+    // avalanche properties. Consecutive YYYYMMDD inputs (differing by 1) produce
+    // completely unrelated outputs, giving uniform map distribution across all candidates.
+    //
+    // NOTE: changing this function changes which map appears on which day for all modes.
+    // The old LCG-based scramble was broken: it compressed consecutive daily inputs into
+    // a ~80-unit range, causing every day in 2026 to select ROUGH_HOUGH_BLUFFS for par 4.
     private long scrambleDailySeed(long seed) {
-        for (int i = 0; i < 10; i++) {
-            seed = (seed * 13) + 8;
-            if (String.valueOf(seed).length() > 9) seed /= 17;
-        }
+        seed ^= (seed >>> 30);
+        seed *= 0xbf58476d1ce4e5b9L;
+        seed ^= (seed >>> 27);
+        seed *= 0x94d049bb133111ebL;
+        seed ^= (seed >>> 31);
         return seed;
     }
 

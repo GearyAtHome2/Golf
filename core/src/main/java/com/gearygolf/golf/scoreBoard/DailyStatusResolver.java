@@ -11,10 +11,13 @@ public final class DailyStatusResolver {
     private DailyStatusResolver() {}
 
     /**
-     * Returns true if the daily round is effectively submitted — either the server
-     * confirmed it (via DailySubmissionCache) or the local session flag is set.
+     * Returns true if the daily round is effectively submitted — checked in priority order:
+     * 1. Local on-disk store (available immediately on app start, before Firebase responds)
+     * 2. Firebase cache (available once the async fetch completes)
+     * 3. In-memory session flag (set the moment a submission succeeds this session)
      */
     public static boolean isEffectivelySubmitted(CourseType type, GameSession session, DailySubmissionCache cache) {
+        if (cache != null && cache.isLocallyConfirmed(type)) return true;
         if (cache != null && cache.isFetched() && cache.hasSubmitted(type)) return true;
         return session != null && session.isSubmitted();
     }

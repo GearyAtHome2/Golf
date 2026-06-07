@@ -35,6 +35,21 @@ public class MinigameEngine {
 
     public final Array<Zone> sweetSpots = new Array<>();
 
+    /**
+     * powerMod for a GOOD-zone hit with this club. Used to scale all penalty zones
+     * so that harder clubs (more tiers of potential) receive bigger absolute punishment
+     * for landing outside the good zone.
+     *
+     * Tier layout (ordinal: PERFECTION=0, SUPER=1, GREAT=2, GOOD=3):
+     *   baseDiff >= 1.6 → max is PERFECTION → GOOD is 3 tiers below → 0.70
+     *   baseDiff >= 1.3 → max is SUPER      → GOOD is 2 tiers below → 0.80
+     *   baseDiff >= 1.0 → max is GREAT      → GOOD is 1 tier below  → 0.90
+     *   baseDiff < 1.0  → max is GOOD       → GOOD is max tier      → 1.00
+     */
+    private float goodPowerMod = 1.00f;
+    /** Tiers between the club's best achievable rating and GOOD; drives accuracy scaling. */
+    private int goodTiersBelow = 0;
+
     public void reset(float baseDifficulty) {
         needlePos = 0f;
         needleMovingRight = true;
@@ -44,14 +59,32 @@ public class MinigameEngine {
 
         sweetSpots.clear();
 
+        // Determine the best achievable rating tier for this club.
+        // Ordinal mapping: PERFECTION=0, SUPER=1, GREAT=2, GOOD=3
+        int maxTierOrdinal = baseDifficulty >= 1.6f ? 0
+                           : baseDifficulty >= 1.3f ? 1
+                           : baseDifficulty >= 1.0f ? 2
+                           : 3;
+
+        // GOOD is always at ordinal 3 — tiers below max determines its powerMod penalty.
+        // Each tier below best costs 10% power so that club.powerMult (already baked with
+        // the old top-tier multiplier) acts as the true maximum and worse results scale down.
+        goodTiersBelow = 3 - maxTierOrdinal;
+        goodPowerMod   = 1.0f - goodTiersBelow * 0.10f;
+
         if (baseDifficulty >= 1.0f) {
-            sweetSpots.add(new Zone(GREAT, new Color(1f, 0.9f, 0f, 1f), 0.4f, 1.10f, 1.5f));
+            // GREAT is at ordinal 2 — (2 - maxTierOrdinal) tiers below max (0, 1, or 2)
+            float pm = 1.0f - (2 - maxTierOrdinal) * 0.10f;
+            sweetSpots.add(new Zone(GREAT, new Color(1f, 0.9f, 0f, 1f), 0.4f, pm, 1.5f));
         }
         if (baseDifficulty >= 1.3f) {
-            sweetSpots.add(new Zone(SUPER, new Color(1f, 0.4f, 0.7f, 1f), 0.4f, 1.25f, 1.8f));
+            // SUPER is at ordinal 1 — (1 - maxTierOrdinal) tiers below max (0 or 1)
+            float pm = 1.0f - (1 - maxTierOrdinal) * 0.10f;
+            sweetSpots.add(new Zone(SUPER, new Color(1f, 0.4f, 0.7f, 1f), 0.4f, pm, 1.8f));
         }
         if (baseDifficulty >= 1.6f) {
-            sweetSpots.add(new Zone(PERFECTION, new Color(0.6f, 0.1f, 0.9f, 1f), 0.4f, 1.50f, 2.0f));
+            // PERFECTION is always max tier — no penalty
+            sweetSpots.add(new Zone(PERFECTION, new Color(0.6f, 0.1f, 0.9f, 1f), 0.4f, 1.00f, 2.0f));
         }
     }
 
@@ -89,26 +122,28 @@ public class MinigameEngine {
 
         // 2. Check Green Zone (GOOD)
         if (Math.abs(needlePos - greenCenter) <= greenHalfW) {
-            // Accuracy is calculated relative to the innermost sweet spot
-            // Normalized to the distance from that center to the edge of the green bar
             float distFromBullseye = needlePos - trueCenter;
 
-            // To normalize, we find the max possible distance inside green from the trueCenter
             float maxPossibleDist = (distFromBullseye > 0)
                     ? (greenCenter + greenHalfW) - trueCenter
                     : trueCenter - (greenCenter - greenHalfW);
 
             float normalizedOffset = distFromBullseye / maxPossibleDist;
 
-            // Apply a slight 'Pro Tour' drift for GOOD shots
-            float goodAccuracy = normalizedOffset * 0.08f;
+            // Accuracy drift scales slightly with how many tiers below the club's best this is —
+            // a GOOD hit on a driver (3 tiers below PERFECTION) drifts more than on a wedge (0 below).
+            float accuracyScale = 0.08f + goodTiersBelow * 0.015f;
+            float goodAccuracy = normalizedOffset * accuracyScale;
 
-            setupResult(result, 1.00f, GOOD, goodAccuracy);
+            setupResult(result, goodPowerMod, GOOD, goodAccuracy);
             logShotDetail(needlePos, trueCenter, result, normalizedOffset);
             return result;
         }
 
         // 3. Penalty Zones (Red/Orange)
+        // All powerMods expressed relative to goodPowerMod so that driver mishits are
+        // punished more in absolute terms than wedge mishits — matches the new baked-in
+        // club.powerMult values where the driver's powerMult is already ~1.5× its old value.
         float side = Math.signum(needlePos - greenCenter);
         float distFromEdge = Math.abs(needlePos - greenCenter) - greenHalfW;
         float orangeThreshold = greenHalfW * 0.5f;
@@ -116,17 +151,17 @@ public class MinigameEngine {
 
         if (distFromEdge <= orangeThreshold) {
             result.rating = POOR;
-            result.powerMod = 0.95f;
+            result.powerMod = goodPowerMod * 0.90f;
             result.accuracy = side * 0.18f;
         } else if (distFromEdge <= redThreshold) {
             result.rating = TERRIBLE;
-            result.powerMod = 0.85f;
+            result.powerMod = goodPowerMod * 0.75f;
             result.accuracy = side * 0.40f;
         } else {
             result.rating = ABYSMAL;
             float missDist = MathUtils.clamp(distFromEdge / (0.5f - greenHalfW), 0, 1);
             result.accuracy = side * missDist;
-            result.powerMod = MathUtils.lerp(0.80f, 0.35f, missDist);
+            result.powerMod = goodPowerMod * MathUtils.lerp(0.65f, 0.25f, missDist);
         }
 
         logShotDetail(needlePos, trueCenter, result, result.accuracy);

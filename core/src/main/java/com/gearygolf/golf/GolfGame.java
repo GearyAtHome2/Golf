@@ -150,6 +150,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private final java.util.Map<String, java.util.List<com.badlogic.gdx.graphics.g3d.ModelInstance>>
             remoteBallInstances = new java.util.LinkedHashMap<>();
 
+
+    //max driver distance on new mode = 527.1yds
     // Multiplayer scoreboard state
     private boolean mpScoreboardVisible       = false;
     private boolean mpAllPlayersFinishedHole  = false;
@@ -218,7 +220,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         soundManager.setSfxVolume(com.gearygolf.golf.glamour.SoundPrefs.loadSfx());
         soundManager.setAmbientVolume(com.gearygolf.golf.glamour.SoundPrefs.loadAmbient());
         soundManager.setArcadeFlightSoundsEnabled(com.gearygolf.golf.glamour.SoundPrefs.loadArcadeFlight());
-        config.cinematicMode = com.gearygolf.golf.glamour.SoundPrefs.loadCinematicMode();
+        config.cinematicMode  = com.gearygolf.golf.glamour.SoundPrefs.loadCinematicMode();
+        config.swingModeNew   = com.gearygolf.golf.glamour.SoundPrefs.loadSwingModeNew();
         soundManager.setBounceScale(com.gearygolf.golf.glamour.SoundPrefs.loadBounce());
         soundManager.setArcadeAirborneScale(com.gearygolf.golf.glamour.SoundPrefs.loadArcadeAirborne());
         soundManager.setAirWhooshScale(com.gearygolf.golf.glamour.SoundPrefs.loadAirWhoosh());
@@ -568,16 +571,24 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     while (delta >  180f) delta -= 360f;
                     while (delta < -180f) delta += 360f;
                     com.badlogic.gdx.math.Vector3 aimWind = (currentLevelData != null) ? currentLevelData.getWind() : null;
+                    // Tighter aim window: must have rotated at least 4.5° but no more than 15°
+                    // in the correct direction. Also require the player to have released
+                    // (DRAG_X ≈ 0) so we don't advance mid-pan.
+                    final float AIM_MIN = 4.5f;
+                    final float AIM_MAX = 15f; // tweak this to widen/narrow the accepted zone
+                    boolean notDragging = !com.badlogic.gdx.Gdx.input.isTouched();
                     boolean aimed;
                     if (aimWind != null && aimWind.len() >= 0.3f
                             && Math.abs(aimWind.x) >= Math.abs(aimWind.z)) {
-                        // Lateral wind: must rotate toward the correct side
-                        aimed = aimWind.x > 0 ? delta > 4.5f : delta < -4.5f;
+                        // Lateral wind: must rotate toward the correct side, within AIM_MIN..AIM_MAX
+                        aimed = aimWind.x > 0
+                                ? (delta > AIM_MIN && delta < AIM_MAX)
+                                : (delta < -AIM_MIN && delta > -AIM_MAX);
                     } else {
-                        // Straight/calm wind: any rotation counts
-                        aimed = Math.abs(delta) > 4.5f;
+                        // Straight/calm wind: any small rotation in either direction counts
+                        aimed = Math.abs(delta) > AIM_MIN && Math.abs(delta) < AIM_MAX;
                     }
-                    if (aimed) {
+                    if (aimed && notDragging) {
                         tutorialSession.controller.advance(); // → STEP_3_INFO
                     }
                 }
@@ -650,9 +661,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
             case STEP_L3_3_LIE:
             case STEP_L3_4_TIP:
-                if (!Gdx.input.isTouched()) tutorialCompletionTapConsumed = false;
-                if (Gdx.input.justTouched() && !tutorialCompletionTapConsumed) {
-                    tutorialCompletionTapConsumed = true;
+            case STEP_L3_4B_WIND_TIP:
+                if (hud.isNextButtonHit() || inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) {
                     tutorialSession.controller.advance();
                 }
                 break;
@@ -813,11 +823,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 return;
             }
             if (ts.isCompletionStep()) {
-                if (!Gdx.input.isTouched()) tutorialCompletionTapConsumed = false;
+                // All completion steps now use the NEXT button — require deliberate tap on button.
                 boolean advance = inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)
-                        || (Platform.isAndroid() && Gdx.input.justTouched() && !tutorialCompletionTapConsumed);
+                        || hud.isNextButtonHit();
                 if (advance) {
-                    tutorialCompletionTapConsumed = true;
                     tutorialSession.controller.advance();
                     TutorialController.Step next = tutorialSession.controller.getCurrentStep();
                     if (next.isNewLevelStep()) {
@@ -1172,6 +1181,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 cur = tutorialSession.controller.getCurrentStep();
             } while (cur == TutorialController.Step.STEP_L3_3_LIE
                   || cur == TutorialController.Step.STEP_L3_4_TIP
+                  || cur == TutorialController.Step.STEP_L3_4B_WIND_TIP
                   || cur == TutorialController.Step.STEP_L3_5_WAIT_HOLE);
         }
     }
@@ -1353,36 +1363,46 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 // No divot on tee (ball is elevated — can't strike the ground first).
                 hud.setSwingDivotEnabled(clubMakesDivot(currentClub)
                         && swingTerrain != com.gearygolf.golf.terrain.Terrain.TerrainType.TEE);
+                // Seed attack angle from the current club's natural arc-bottom position.
+                hud.setSwingNaturalAttackAngle(currentClub.naturalAttackAngleDeg);
                 wasImpactCaptured = false;
                 // Set difficulty-scaled swing params (contact, path, follow-through, shank).
                 // These are the same for every club type — putter contact threshold is separate.
                 shotController.setSwingDifficultyParams(
                         swingContactSweetSpot(config.difficulty),
                         swingPathScale(config.difficulty),
-                        swingFollowThroughPenalty(config.difficulty),
-                        swingFollowThroughThreshold(config.difficulty),
-                        swingShankThreshold(config.difficulty));
+                        swingShankThreshold(config.difficulty),
+                        swingPathBreakpoint1(config.difficulty));
+                float ftThreshold = swingFollowThroughAngleThreshold(config.difficulty);
+                hud.setSwingFollowThroughThreshold(ftThreshold);
+                shotController.setFollowThroughAngleThreshold(ftThreshold);
                 float[] clubSz = swingClubSize(config.difficulty);
                 hud.setSwingClubSize(clubSz[0], clubSz[1]);
+                hud.setSwingFullPowerSpeed(com.gearygolf.golf.ball.ShotController.SWING_FULL_POWER_SPEED);
                 // Set tempo tolerance based on difficulty level + club type.
                 if (currentClub == Club.PUTTER) {
                     // Putter: tempo direction is irrelevant — any timing is valid except a
                     // complete whiff (q≈0). Use very wide windows so quality is always high.
-                    hud.getSwingAnalyser().setTempoWindows(5.0f, 10.0f);
+                    hud.setSwingBaseTempoWindows(5.0f, 10.0f);
                     shotController.setPutterContactThreshold(putterContactThreshold(config.difficulty));
                 } else {
-                    // Tee shots get a wider PERFECT band — the ball is elevated so there's
-                    // no ground penalty and a broader range of timing produces a good result.
-                    float teeBonus = (swingTerrain == com.gearygolf.golf.terrain.Terrain.TerrainType.TEE) ? 1.4f : 1.0f;
-                    hud.getSwingAnalyser().setTempoWindows(
-                            swingPerfectFraction(config.difficulty, currentClub) * teeBonus,
-                            swingMaxFraction(config.difficulty, currentClub) * teeBonus);
+                    // Scale tempo windows by lie difficulty: harder terrain = tighter windows.
+                    // tempoDifficulty > 1.0 narrows (harder), < 1.0 widens (easier — e.g. tee, stone).
+                    float terrainTempoMult = com.badlogic.gdx.math.MathUtils.clamp(
+                            1.0f / swingTerrain.tempoDifficulty, 0.5f, 2.0f);
+                    hud.setSwingBaseTempoWindows(
+                            swingPerfectFraction(config.difficulty, currentClub) * terrainTempoMult,
+                            swingMaxFraction(config.difficulty, currentClub) * terrainTempoMult);
                     shotController.setPutterContactThreshold(0f);
                 }
             }
             if (!chargingNow) wasImpactCaptured = false;
             wasChargingShot = chargingNow;
             cameraController.setSwingViewActive(config.swingModeNew && chargingNow);
+            // Keep camera offset in sync with ball-placement adjustments every frame.
+            if (config.swingModeNew) {
+                cameraController.setSwingCamAimOffset(hud.getSwingCamAimOffset());
+            }
             cameraController.update(ball.getPosition(), inputProcessor);
         }
 
@@ -2255,6 +2275,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Vector3 tee = levelManager.getTerrain().getTeePosition();
         ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config, 200L);
         hazardManager.setBallHit(false);
+        hud.dismissTerrainToast();
     }
 
     @Override
@@ -2640,30 +2661,36 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     /**
-     * Quality factor at maximum follow-through height (height=1.0 = full flip/scoop).
-     * Lower = bigger penalty. At NOVICE, even a terrible follow-through barely hurts.
+     * First bracket boundary for the non-linear path curve (raw path degrees).
+     * Path below this is 1× sensitivity; above it is 2× per extra degree.
+     * NOVICE=4° (needs big path errors to curve much), TOUR_PRO=2° (amplifies sooner).
+     * Evenly spaced: 0.5° per difficulty step.
      */
-    private static float swingFollowThroughPenalty(GameConfig.Difficulty diff) {
+    private static float swingPathBreakpoint1(GameConfig.Difficulty diff) {
         return switch (diff) {
-            case NOVICE       -> 0.90f;
-            case INTERMEDIATE -> 0.80f;
-            case ADVANCED     -> 0.73f;
-            case PRO          -> 0.68f;
-            case TOUR_PRO     -> 0.65f;
+            case NOVICE       -> 4.0f;
+            case INTERMEDIATE -> 3.5f;
+            case ADVANCED     -> 3.0f;
+            case PRO          -> 2.5f;
+            case TOUR_PRO     -> 2.0f;
         };
     }
 
     /**
-     * Normalised follow-through height above which the quality penalty begins.
-     * Widens the "no penalty" zone at easier difficulties.
+     * Quality factor at maximum follow-through height (height=1.0 = full flip/scoop).
+     * Lower = bigger penalty. At NOVICE, even a terrible follow-through barely hurts.
      */
-    private static float swingFollowThroughThreshold(GameConfig.Difficulty diff) {
+    /**
+     * Angle threshold (degrees) beyond which a follow-through is classified HIGH or LOW.
+     * Easier difficulties forgive a wider deviation from the projected path line.
+     */
+    private static float swingFollowThroughAngleThreshold(GameConfig.Difficulty diff) {
         return switch (diff) {
-            case NOVICE       -> 0.55f;
-            case INTERMEDIATE -> 0.45f;
-            case ADVANCED     -> 0.38f;
-            case PRO          -> 0.30f;
-            case TOUR_PRO     -> 0.25f;
+            case NOVICE       -> 6.0f;
+            case INTERMEDIATE -> 5.5f;
+            case ADVANCED     -> 5.0f;
+            case PRO          -> 4.5f;
+            case TOUR_PRO     -> 4.0f;
         };
     }
 
@@ -2702,6 +2729,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     @Override
     public void dispose() {
+        // Last-chance save: covers low-memory kills where pause() was never called.
+        if (sessionManager != null) sessionManager.saveActive();
         modelBatch.dispose();
         hud.dispose();
         if (loginScreen != null) loginScreen.dispose();

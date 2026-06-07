@@ -30,10 +30,25 @@ public final class SwingResult {
     public final SwingGestureAnalyser.FollowThroughResult followThroughResult;
 
     /**
-     * Normalised follow-through height: +1 = full flip/scoop (bad), 0 = neutral,
-     * -1 = fully extended low (good).
+     * Signed follow-through angle in degrees: the angle between the projected path
+     * reference line and the vector from the crossing point to where the pointer stopped.
+     * Positive = flip side (above path line), negative = good extension (below path line).
      */
-    public final float followThroughHeight;
+    public final float followThroughAngleDeg;
+
+    /**
+     * Normalised backswing length: 0 = no backswing, 1.0 = full backswing reaching the
+     * reference line. Determines the power ceiling for this swing (short = 60% max power,
+     * full = 100% max power).
+     */
+    public final float backswingNorm;
+
+    /**
+     * Attack angle in degrees. Positive = ascending blow (driver off tee), negative =
+     * descending (steep iron). Combines the club's natural arc-bottom angle with any manual
+     * ball-placement adjustment the player made before the swing.
+     */
+    public final float attackAngleDeg;
 
     public SwingResult(
             float contactOffset,
@@ -42,22 +57,26 @@ public final class SwingResult {
             SwingGestureAnalyser.TempoResult tempoResult,
             float tempoQuality,
             SwingGestureAnalyser.FollowThroughResult followThroughResult,
-            float followThroughHeight) {
+            float followThroughAngleDeg,
+            float backswingNorm,
+            float attackAngleDeg) {
         this.contactOffset       = contactOffset;
         this.pathDeg             = pathDeg;
         this.peakForwardSpeed    = peakForwardSpeed;
         this.tempoResult         = tempoResult;
         this.tempoQuality        = tempoQuality;
-        this.followThroughResult = followThroughResult;
-        this.followThroughHeight = followThroughHeight;
+        this.followThroughResult   = followThroughResult;
+        this.followThroughAngleDeg = followThroughAngleDeg;
+        this.backswingNorm       = backswingNorm;
+        this.attackAngleDeg      = attackAngleDeg;
     }
 
     @Override
     public String toString() {
         return String.format(
-            "SwingResult{contact=%.2f path=%.1fdeg peakSpd=%.1f tempo=%s(q=%.2f) ft=%s(h=%.2f)}",
+            "SwingResult{contact=%.2f path=%.1fdeg peakSpd=%.1f tempo=%s(q=%.2f) ft=%s(h=%.2f) bk=%.2f atk=%.1fdeg}",
             contactOffset, pathDeg, peakForwardSpeed,
             tempoResult, tempoQuality,
-            followThroughResult, followThroughHeight);
+            followThroughResult, followThroughAngleDeg, backswingNorm, attackAngleDeg);
     }
 }

@@ -54,8 +54,6 @@ public class PauseMenuRenderer {
             drawCenteredShadowedText(batch, font, "[L] PARTICLES: " + (config.particlesEnabled ? "ON" : "OFF"), centerX, currentY, particleColor);
             currentY -= spacing;
 
-            Color swingColor = config.swingModeNew ? Color.GREEN : Color.ORANGE;
-            drawCenteredShadowedText(batch, font, "[G] SWING: " + (config.swingModeNew ? "NEW" : "CLASSIC"), centerX, currentY, swingColor);
             currentY -= (spacing * 0.8f);
 
             if (seedFeedbackTimer > 0) {

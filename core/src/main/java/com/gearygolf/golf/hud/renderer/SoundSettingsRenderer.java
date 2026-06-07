@@ -11,6 +11,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.gearygolf.golf.GameConfig;
+import com.gearygolf.golf.Platform;
 import com.gearygolf.golf.glamour.SoundManager;
 import com.gearygolf.golf.glamour.SoundPrefs;
 import com.gearygolf.golf.hud.UIUtils;
@@ -29,7 +30,7 @@ public class SoundSettingsRenderer {
 
     // ── Panel geometry ────────────────────────────────────────────────────────
     private static final float PANEL_W     = 520f;
-    private static final float PANEL_H     = 560f;   // main page (extra row for cinematic mode)
+    private static final float PANEL_H     = 640f;   // main page (sliders + arcade + cinematic + swing rows)
     private static final float ADV_PANEL_H = 620f;   // advanced page
 
     // ── Slider geometry ───────────────────────────────────────────────────────
@@ -45,16 +46,18 @@ public class SoundSettingsRenderer {
 
     // ── Main page — Y offsets from panelY (bottom = 0) ───────────────────────
     private static final float TITLE_INSET      = 38f;   // top of title text below panel top
-    private static final float[] ROW_Y_OFF      = { 425f, 340f, 255f };  // MASTER, SFX, AMBIENT
+    private static final float[] ROW_Y_OFF      = { 505f, 420f, 335f };  // MASTER, SFX, AMBIENT
 
-    private static final float CB_ROW_Y_OFF     = 185f;  // arcade toggle center Y
-    private static final float CIN_ROW_Y_OFF    = 105f;  // cinematic mode toggle center Y
-    private static final float TOGGLE_X_OFF     = 370f;
+    private static final float CB_ROW_Y_OFF     = 265f;  // arcade toggle center Y
+    private static final float CIN_ROW_Y_OFF    = 185f;  // cinematic mode toggle center Y
+    private static final float SWING_ROW_Y_OFF  = 105f;  // swing mode toggle center Y
+    private static final float TOGGLE_X_OFF     = 340f;
     private static final float TOGGLE_W         =  58f;
+    private static final float SWING_TOGGLE_W   =  90f;  // wider — fits "CLASSIC"
     private static final float TOGGLE_H         =  24f;
 
     private static final float ADV_BTN_Y_OFF = 48f;  // ADVANCED button rect bottom Y
-    private static final float ADV_BTN_W     = 150f;
+    private static final float ADV_BTN_W     = 180f;
     private static final float ADV_BTN_H     =  24f;
 
     // ── Advanced page — Y offsets from panelY ────────────────────────────────
@@ -146,6 +149,13 @@ public class SoundSettingsRenderer {
             : new Color(0.18f, 0.18f, 0.18f, 1f));
         sr.rect(toggleX, cinToggleY, TOGGLE_W, TOGGLE_H);
 
+        // Swing mode toggle
+        float swingToggleY = panelY + SWING_ROW_Y_OFF - TOGGLE_H / 2f;
+        sr.setColor(config.swingModeNew
+            ? new Color(0.55f, 0.40f, 0.05f, 1f)
+            : new Color(0.18f, 0.18f, 0.18f, 1f));
+        sr.rect(toggleX, swingToggleY, SWING_TOGGLE_W, TOGGLE_H);
+
         // ADVANCED button — centered in panel
         float advBtnX = panelX + (PANEL_W - ADV_BTN_W) / 2f;
         float advBtnY = panelY + ADV_BTN_Y_OFF;
@@ -201,6 +211,16 @@ public class SoundSettingsRenderer {
         font.draw(batch, cinLabel,
                   panelX + TOGGLE_X_OFF + (TOGGLE_W - layout.width) / 2f, cinTextY);
 
+        // Swing mode row
+        float swingTextY = panelY + SWING_ROW_Y_OFF + font.getCapHeight() * 0.5f;
+        font.setColor(Color.WHITE);
+        font.draw(batch, "SWING MODE", labelX, swingTextY);
+        String swingLabel = config.swingModeNew ? "NEW" : "CLASSIC";
+        font.setColor(config.swingModeNew ? Color.YELLOW : Color.GRAY);
+        layout.setText(font, swingLabel);
+        font.draw(batch, swingLabel,
+                  panelX + TOGGLE_X_OFF + (SWING_TOGGLE_W - layout.width) / 2f, swingTextY);
+
         // ADVANCED button label
         float advBtnCenterY = panelY + ADV_BTN_Y_OFF + ADV_BTN_H * 0.5f + font.getCapHeight() * 0.5f;
         font.setColor(new Color(0.85f, 0.70f, 0.25f, 1f));
@@ -212,7 +232,7 @@ public class SoundSettingsRenderer {
         // Hint
         font.getData().setScale(baseScale * 0.85f);
         font.setColor(Color.GRAY);
-        String hint = "ESC  /  TAP OUTSIDE  TO CLOSE";
+        String hint = Platform.isAndroid() ? "TAP OUTSIDE TO CLOSE" : "ESC  /  TAP OUTSIDE  TO CLOSE";
         layout.setText(font, hint);
         font.draw(batch, hint,
                   panelX + (PANEL_W - layout.width) / 2f,
@@ -286,7 +306,7 @@ public class SoundSettingsRenderer {
         // Hint
         font.getData().setScale(baseScale * 0.85f);
         font.setColor(Color.GRAY);
-        String hint = "ESC  TO CLOSE";
+        String hint = Platform.isAndroid() ? "TAP OUTSIDE TO CLOSE" : "ESC  TO CLOSE";
         layout.setText(font, hint);
         font.draw(batch, hint,
                   panelX + (PANEL_W - layout.width) / 2f,
@@ -351,6 +371,13 @@ public class SoundSettingsRenderer {
                     config.cinematicMode = !config.cinematicMode;
                     savePrefs(sm, config);
                 }
+                // Swing mode toggle
+                float swingY = panelY + SWING_ROW_Y_OFF - TOGGLE_H / 2f;
+                if (worldMX >= cbX && worldMX <= panelX + TOGGLE_X_OFF + SWING_TOGGLE_W + 10
+                 && worldMY >= swingY - 6 && worldMY <= swingY + TOGGLE_H + 6) {
+                    config.swingModeNew = !config.swingModeNew;
+                    savePrefs(sm, config);
+                }
                 // ADVANCED button
                 float advBtnX = panelX + (PANEL_W - ADV_BTN_W) / 2f;
                 float advBtnY = panelY + ADV_BTN_Y_OFF;
@@ -410,7 +437,7 @@ public class SoundSettingsRenderer {
 
     private void savePrefs(SoundManager sm, GameConfig config) {
         SoundPrefs.save(sm.getMasterVolume(), sm.getSfxVolume(), sm.getAmbientVolume(),
-                        sm.isArcadeFlightSoundsEnabled(), config.cinematicMode);
+                        sm.isArcadeFlightSoundsEnabled(), config.cinematicMode, config.swingModeNew);
     }
 
     private void saveAdvancedPrefs(SoundManager sm) {

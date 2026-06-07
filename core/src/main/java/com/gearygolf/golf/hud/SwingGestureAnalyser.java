@@ -8,7 +8,10 @@ import java.util.List;
 
 /**
  * Analyses the raw touch trail produced by SwingOverlay and classifies it into
- * swing phases.  All velocity values are in raw screen pixels per frame.
+ * swing phases.  All velocity values are in screen widths per second (sw/s):
+ *   speed = (raw_pixel_delta / screen_width_pixels) / elapsed_seconds
+ * This unit is device-independent — identical physical gestures produce the same
+ * value regardless of resolution or frame rate.
  *
  * Step 3: phase detection + basic debug log.
  * Step 4: movement threshold before backswing starts + impact contact/path extraction.
@@ -29,20 +32,31 @@ public class SwingGestureAnalyser {
     public enum FollowThroughResult { NONE, LOW, NEUTRAL, HIGH }
 
     // ── Tuning constants ────────────────────────────────────────────────────
+    /**
+     * Screen X fraction (0→1) that marks the full-backswing reference line.
+     * A backswing drag that reaches this absolute screen position scores 1.0 (full power ceiling).
+     * SwingOverlay draws a visual guide line at the same fraction.
+     * Adjust to taste — moving it left makes a full backswing easier to achieve.
+     */
+    public static final float FULL_SWING_LINE_FRAC = 0.9f;
+
     /** Points to average for smoothed X velocity. */
     private static final int VELOCITY_WINDOW = 6;
-    /** Minimum rightward peak (px/frame) needed before we respect a slowdown as transition. */
-    private static final float BACKSWING_MIN_PEAK = 2.0f;
-    /** Rightward velocity dropping below this triggers TRANSITION (once peak is confirmed). */
-    private static final float TRANSITION_ENTRY  = 0.8f;
-    /** Leftward velocity below this confirms FORWARD_SWING has begun. */
-    private static final float FORWARD_ENTRY     = -0.8f;
     /**
-     * Minimum distance (raw screen pixels) the finger/mouse must travel from the
+     * Minimum rightward peak (sw/s) needed before we respect a slowdown as transition.
+     * sw/s = screen widths per second. 0.10 ≈ 10% of screen width per second.
+     */
+    private static final float BACKSWING_MIN_PEAK = 0.10f;
+    /** Rightward velocity (sw/s) dropping below this triggers TRANSITION (once peak is confirmed). */
+    private static final float TRANSITION_ENTRY  = 0.04f;
+    /** Leftward velocity (sw/s) below this confirms FORWARD_SWING has begun. */
+    private static final float FORWARD_ENTRY     = -0.04f;
+    /**
+     * Minimum distance (fraction of screen width) the finger/mouse must travel from the
      * initial press before the backswing timer starts.  Lets the player hold down
      * in "address" position before committing to a swing.
      */
-    private static final float MOVEMENT_THRESHOLD = 15f;
+    private static final float MOVEMENT_THRESHOLD_FRAC = 0.015f;
     /**
      * Tempo window as a fraction of the expected forward-swing duration.
      * e.g. 0.10 means ±10% of expectedFwdDurationMs counts as PERFECT.
@@ -76,20 +90,27 @@ public class SwingGestureAnalyser {
 
     // ── Step 6a: follow-through ──────────────────────────────────────────────
     /**
-     * Normalised follow-through height relative to the ball line.
-     * +1 = fully above (flip/scoop), 0 = on the line, -1 = fully below (good extension).
+     * Signed follow-through angle in degrees: angle between the projected path line
+     * and the vector to the final pointer position. Positive = flip side, negative = extension.
      */
-    private float              followThroughHeight = 0f;
-    private FollowThroughResult followThroughResult = FollowThroughResult.NONE;
+    private float               followThroughAngleDeg = 0f;
+    private FollowThroughResult followThroughResult   = FollowThroughResult.NONE;
+    /**
+     * Angle threshold (degrees) beyond which the follow-through is classified HIGH or LOW.
+     * Set per difficulty: NOVICE=6°, TOUR_PRO=4°.  Not reset between swings.
+     */
+    private float followThroughThreshold = 5f;
 
     // ── Step 4: contact & path ───────────────────────────────────────────────
     /** Heel-to-toe contact: -1 = full heel, 0 = centre, +1 = full toe. */
     private float contactOffset  = 0f;
+    /** Backswing distance in raw screen pixels. Captured at TRANSITION. For future power-ceiling feature (F-048). */
+    private float backswingDistancePx = 0f;
     /** Path angle at impact in degrees. + = in-to-out (draw bias), - = out-to-in (fade bias). */
     private float pathDeg        = 0f;
     /**
-     * Club-head speed at impact in HUD pixels/frame (raw screen units scaled to HUD viewport).
-     * Primary input to shot power — not yet normalised; the ball physics layer will do that.
+     * Club-head speed at impact in screen widths per second (sw/s).
+     * Stored for logging; actual power comes from {@link #forwardPeakVx} (peak over full forward swing).
      */
     private float impactSpeed    = 0f;
     private boolean impactCaptured = false;
@@ -98,6 +119,19 @@ public class SwingGestureAnalyser {
 
     public Phase getPhase() { return phase; }
 
+    /**
+     * Normalised backswing length: 0 = no backswing, 1.0 = reached the full-swing reference line.
+     * Computed as {@code backswingDistancePx / (FULL_SWING_LINE_FRAC * screenWidth - backswingStartX)},
+     * so the available window always spans from wherever the drag started to the reference line —
+     * regardless of where the ball sits on screen.
+     */
+    public float getBackswingNorm() {
+        float lineScreenX = FULL_SWING_LINE_FRAC * Gdx.graphics.getWidth();
+        float refDist = Math.max(1f, lineScreenX - backswingStartX);
+        return MathUtils.clamp(backswingDistancePx / refDist, 0f, 1f);
+    }
+
+    public float getBackswingDistancePx() { return backswingDistancePx; }
     public float getContactOffset()    { return contactOffset; }
     public float getPathDeg()          { return pathDeg; }
     public float getImpactSpeed()      { return impactSpeed; }
@@ -105,7 +139,9 @@ public class SwingGestureAnalyser {
     public TempoResult getTempoResult()              { return tempoResult; }
     public float getTempoQuality()                   { return tempoQuality; }
     public FollowThroughResult getFollowThroughResult() { return followThroughResult; }
-    public float getFollowThroughHeight()            { return followThroughHeight; }
+    public float getFollowThroughAngleDeg()          { return followThroughAngleDeg; }
+    public void  setFollowThroughThreshold(float degrees) { this.followThroughThreshold = degrees; }
+    public float getFollowThroughThreshold()             { return followThroughThreshold; }
     public long getExpectedFwdDurationMs() { return expectedFwdDurationMs; }
     public long getForwardStartMs()    { return forwardStartMs; }
 
@@ -139,9 +175,10 @@ public class SwingGestureAnalyser {
      * Call every frame that the swing view is active.
      *
      * @param trail    All recorded points this gesture in raw screen pixels (x right, y from top).
+     * @param timesMs  Timestamps (System.currentTimeMillis()) for each trail point — parallel to trail.
      * @param touching Whether the screen / mouse button is currently pressed.
      */
-    public void update(List<Vector2> trail, boolean touching) {
+    public void update(List<Vector2> trail, List<Long> timesMs, boolean touching) {
         if (!touching) {
             if (phase == Phase.FORWARD_SWING) {
                 phase = Phase.COMPLETE;
@@ -160,7 +197,8 @@ public class SwingGestureAnalyser {
             Vector2 last  = trail.get(trail.size() - 1);
             float dx = last.x - first.x;
             float dy = last.y - first.y;
-            if ((float) Math.sqrt(dx * dx + dy * dy) < MOVEMENT_THRESHOLD) return;
+            float distFrac = (float) Math.sqrt(dx * dx + dy * dy) / Gdx.graphics.getWidth();
+            if (distFrac < MOVEMENT_THRESHOLD_FRAC) return;
 
             // Threshold crossed — begin backswing from the current position
             phase = Phase.BACKSWING;
@@ -171,7 +209,7 @@ public class SwingGestureAnalyser {
 
         if (trail.size() < 2) return;
 
-        float vx = smoothedVx(trail);
+        float vx = smoothedVx(trail, timesMs);
 
         switch (phase) {
             case BACKSWING:
@@ -179,6 +217,7 @@ public class SwingGestureAnalyser {
                 if (vx < TRANSITION_ENTRY && backswingPeakVx >= BACKSWING_MIN_PEAK) {
                     phase = Phase.TRANSITION;
                     float dist = trail.get(trail.size() - 1).x - backswingStartX;
+                    backswingDistancePx = dist;
                     Gdx.app.log("SwingDebug", String.format(
                         "[TRANSITION] partial_dur=%.2fs dist_px=%.0f peak_vx=%.1f",
                         (System.currentTimeMillis() - backswingStartMs) / 1000f,
@@ -224,23 +263,33 @@ public class SwingGestureAnalyser {
     /**
      * Builds and returns an immutable snapshot of all swing values.
      * Call after {@link #onFollowThrough} and before {@link #reset}.
+     *
+     * @param attackAngleDeg The total attack angle (club natural + player manual adjustment),
+     *                       supplied by SwingOverlay which owns ball-placement state.
      */
-    public SwingResult buildResult() {
+    public SwingResult buildResult(float attackAngleDeg) {
         // Use peak forward-swing velocity (absolute) rather than instantaneous crossing speed.
         // The crossing speed is a single trail segment and very noisy; peak velocity is stable.
         return new SwingResult(
                 contactOffset, pathDeg, Math.abs(forwardPeakVx),
                 tempoResult, tempoQuality,
-                followThroughResult, followThroughHeight);
+                followThroughResult, followThroughAngleDeg,
+                getBackswingNorm(), attackAngleDeg);
     }
 
-    public void onFollowThrough(float normHeight) {
-        this.followThroughHeight = MathUtils.clamp(normHeight, -1f, 1f);
-        this.followThroughResult = normHeight >  0.25f ? FollowThroughResult.HIGH
-                                 : normHeight < -0.25f ? FollowThroughResult.LOW
-                                 :                       FollowThroughResult.NEUTRAL;
+    /**
+     * Called by SwingOverlay with the signed follow-through angle in degrees.
+     * Positive = flip side (above path line), negative = good extension.
+     * Classification uses the difficulty-set threshold ({@link #setFollowThroughThreshold}).
+     */
+    public void onFollowThrough(float angleDeg) {
+        this.followThroughAngleDeg = angleDeg;
+        this.followThroughResult   = angleDeg >  followThroughThreshold ? FollowThroughResult.HIGH
+                                   : angleDeg < -followThroughThreshold ? FollowThroughResult.LOW
+                                   :                                       FollowThroughResult.NEUTRAL;
         Gdx.app.log("SwingDebug", String.format(
-            "[FOLLOW_THROUGH] height=%.2f result=%s", followThroughHeight, followThroughResult));
+            "[FOLLOW_THROUGH] angle=%.1fdeg threshold=±%.1fdeg result=%s",
+            angleDeg, followThroughThreshold, followThroughResult));
     }
 
     public void onImpact(float heelToeNorm, float pathDegrees, float speedHudPxPerFrame) {
@@ -277,7 +326,7 @@ public class SwingGestureAnalyser {
         long deltaMs       = actualFwdMs - expectedFwdDurationMs;
         long perfectWinMs  = (long)(expectedFwdDurationMs * perfectWindowFraction);
         Gdx.app.log("SwingDebug", String.format(
-            "[IMPACT] contact=%.2f(%s) path=%.1fdeg(%s) speed=%.1fpx/f | fwd=%dms exp=%dms delta=%+dms window=±%dms | tempo=%s(q=%.2f)",
+            "[IMPACT] contact=%.2f(%s) path=%.1fdeg(%s) speed=%.3fsw/s | fwd=%dms exp=%dms delta=%+dms window=±%dms | tempo=%s(q=%.2f)",
             heelToeNorm, contactLabel, pathDegrees, pathLabel, speedHudPxPerFrame,
             actualFwdMs, expectedFwdDurationMs, deltaMs, perfectWinMs,
             tempoResult, tempoQuality));
@@ -295,25 +344,37 @@ public class SwingGestureAnalyser {
         contactOffset         = 0f;
         pathDeg               = 0f;
         impactSpeed           = 0f;
+        backswingDistancePx   = 0f;
         impactCaptured        = false;
         impactCapturedMs      = 0;
         tempoResult           = TempoResult.NONE;
         tempoQuality          = 0f;
-        followThroughHeight   = 0f;
+        followThroughAngleDeg = 0f;
         followThroughResult   = FollowThroughResult.NONE;
+        // followThroughThreshold intentionally not reset — set once per difficulty, persists.
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────
 
-    /** Average X delta over the last VELOCITY_WINDOW points. Positive = rightward. */
-    private float smoothedVx(List<Vector2> trail) {
-        int size   = trail.size();
-        int window = Math.min(VELOCITY_WINDOW, size - 1);
-        float sum  = 0f;
+    /**
+     * Smoothed X velocity in screen widths per second (sw/s) over the last VELOCITY_WINDOW points.
+     * Positive = rightward (backswing direction), negative = leftward (forward swing direction).
+     * Segments where dt ≤ 0 are skipped to guard against duplicate timestamps.
+     */
+    private float smoothedVx(List<Vector2> trail, List<Long> timesMs) {
+        int size      = trail.size();
+        int window    = Math.min(VELOCITY_WINDOW, size - 1);
+        float screenW = Gdx.graphics.getWidth();
+        float sum     = 0f;
+        int   count   = 0;
         for (int i = size - window; i < size; i++) {
-            sum += trail.get(i).x - trail.get(i - 1).x;
+            long dtMs = timesMs.get(i) - timesMs.get(i - 1);
+            if (dtMs <= 0) continue;
+            float dx = (trail.get(i).x - trail.get(i - 1).x) / screenW / (dtMs / 1000f);
+            sum += dx;
+            count++;
         }
-        return sum / window;
+        return count > 0 ? sum / count : 0f;
     }
 
     private void logComplete(List<Vector2> trail) {
@@ -330,7 +391,7 @@ public class SwingGestureAnalyser {
                             : pathDeg < -2f ? "out-to-in" : "straight";
         Gdx.app.log("SwingDebug", String.format(
             "[COMPLETE] bk_dur=%.2fs fwd_dur=%.2fs bk_dist_px=%.0f " +
-            "peak_bk_vx=%.1f peak_fwd_vx=%.1f | " +
+            "peak_bk_vx=%.3fsw/s peak_fwd_vx=%.3fsw/s | " +
             "contact=%.2f(%s) path=%.1fdeg(%s) tempo=%s(q=%.2f)",
             bkDur, fwdDur, dist,
             backswingPeakVx, Math.abs(forwardPeakVx),

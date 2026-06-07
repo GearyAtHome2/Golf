@@ -9,8 +9,9 @@ public final class SoundPrefs {
     private static final String KEY_MASTER  = "vol_master";
     private static final String KEY_SFX     = "vol_sfx";
     private static final String KEY_AMBIENT = "vol_ambient";
-    private static final String KEY_ARCADE   = "arcade_flight";
+    private static final String KEY_ARCADE    = "arcade_flight";
     private static final String KEY_CINEMATIC = "cinematic_mode";
+    private static final String KEY_SWING_NEW = "swing_mode_new";
 
     // Advanced per-channel scales
     private static final String KEY_BOUNCE          = "adv_bounce";
@@ -22,13 +23,14 @@ public final class SoundPrefs {
 
     private SoundPrefs() {}
 
-    public static void save(float master, float sfx, float ambient, boolean arcadeFlight, boolean cinematic) {
+    public static void save(float master, float sfx, float ambient, boolean arcadeFlight, boolean cinematic, boolean swingNew) {
         Preferences p = Gdx.app.getPreferences(PREFS_NAME);
-        p.putFloat(KEY_MASTER,      master);
-        p.putFloat(KEY_SFX,         sfx);
-        p.putFloat(KEY_AMBIENT,     ambient);
-        p.putBoolean(KEY_ARCADE,    arcadeFlight);
-        p.putBoolean(KEY_CINEMATIC, cinematic);
+        p.putFloat(KEY_MASTER,       master);
+        p.putFloat(KEY_SFX,          sfx);
+        p.putFloat(KEY_AMBIENT,      ambient);
+        p.putBoolean(KEY_ARCADE,     arcadeFlight);
+        p.putBoolean(KEY_CINEMATIC,  cinematic);
+        p.putBoolean(KEY_SWING_NEW,  swingNew);
         p.flush();
     }
 
@@ -49,6 +51,7 @@ public final class SoundPrefs {
     public static float   loadAmbient()      { return prefs().getFloat(KEY_AMBIENT,  1f); }
     public static boolean loadArcadeFlight()  { return prefs().getBoolean(KEY_ARCADE,    true);  }
     public static boolean loadCinematicMode() { return prefs().getBoolean(KEY_CINEMATIC, false); }
+    public static boolean loadSwingModeNew()  { return prefs().getBoolean(KEY_SWING_NEW,  false); }
 
     public static float loadBounce()          { return prefs().getFloat(KEY_BOUNCE,          1f); }
     public static float loadArcadeAirborne()  { return prefs().getFloat(KEY_ARCADE_AIRBORNE, 1f); }

@@ -8,7 +8,7 @@ public class GameConfig {
     public Difficulty difficulty = Difficulty.NOVICE;
     public boolean particlesEnabled = true;
     public boolean cinematicMode = false;
-    public boolean swingModeNew = true;
+    public boolean swingModeNew = false;
 
     // Game Speed cycle: 0.25, 0.5, 1, 2, 3, 5
     private final float[] speedValues = {0.25f, 0.5f, 1.0f, 2.0f, 3.0f, 5.0f};
@@ -81,7 +81,7 @@ public class GameConfig {
         public enum ControlStyle {FREE, DRAG} // FREE = Always active, DRAG = Right Click to move
 
         public ControlStyle controlStyle = ControlStyle.FREE;
-        public float mouseSensitivity = 0.3f;
+        public float mouseSensitivity = 0.2f;
         public float lerpSpeed = 6.0f;
         public float fineTuneDivider = 5.0f;
 

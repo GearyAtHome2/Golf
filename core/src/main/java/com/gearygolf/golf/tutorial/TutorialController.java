@@ -31,8 +31,9 @@ public class TutorialController {
 
         STEP_L3_1_SPINDICATOR, // spotlight spindicator — advance when player taps it
         STEP_L3_2_WATCH,       // silent — wait for tee shot to land (not green/tee)
-        STEP_L3_3_LIE,         // hint about projection + slope — advance on any tap
-        STEP_L3_4_TIP,         // hint about club choice + low flight — advance on any tap
+        STEP_L3_3_LIE,         // hint about projection + slope — advance on NEXT tap
+        STEP_L3_4_TIP,         // hint about club choice + low flight — advance on NEXT tap
+        STEP_L3_4B_WIND_TIP,   // hint about club selection vs headwind — advance on NEXT tap
         STEP_L3_5_WAIT_HOLE,   // silent — wait for ball to go in hole (triggerVictory)
         STEP_L3_6_CONGRATS,    // "Congrats!" completion box (advance via tap)
         STEP_L3_7_DAILY_PROMPT, // "Try the daily challenge!" box — shown if daily-1 not submitted today (advance via tap → DONE)
@@ -85,7 +86,17 @@ public class TutorialController {
          */
         public boolean isNoDimHint() {
             return this == STEP_L2_2_HIT || this == STEP_L2_4_APPROACH
-                || this == STEP_L3_3_LIE || this == STEP_L3_4_TIP;
+                || this == STEP_L3_3_LIE || this == STEP_L3_4_TIP || this == STEP_L3_4B_WIND_TIP;
+        }
+
+        /**
+         * Whether to show a "NEXT >" button in the hint box (advance by tapping it).
+         */
+        public boolean isNextButtonStep() {
+            return this == STEP_12_COMPLETE_1 || this == STEP_13_COMPLETE_2
+                || this == STEP_L2_6_COMPLETE_1 || this == STEP_L2_7_COMPLETE_2
+                || this == STEP_L3_3_LIE || this == STEP_L3_4_TIP || this == STEP_L3_4B_WIND_TIP
+                || this == STEP_L3_6_CONGRATS || this == STEP_L3_7_DAILY_PROMPT;
         }
 
         /**
@@ -146,7 +157,8 @@ public class TutorialController {
             case STEP_L3_1_SPINDICATOR -> Step.STEP_L3_2_WATCH;
             case STEP_L3_2_WATCH       -> Step.STEP_L3_3_LIE;
             case STEP_L3_3_LIE         -> Step.STEP_L3_4_TIP;
-            case STEP_L3_4_TIP         -> Step.STEP_L3_5_WAIT_HOLE;
+            case STEP_L3_4_TIP         -> Step.STEP_L3_4B_WIND_TIP;
+            case STEP_L3_4B_WIND_TIP   -> Step.STEP_L3_5_WAIT_HOLE;
             case STEP_L3_5_WAIT_HOLE   -> Step.STEP_L3_6_CONGRATS;
             case STEP_L3_6_CONGRATS    -> Step.STEP_L3_7_DAILY_PROMPT;
             case STEP_L3_7_DAILY_PROMPT -> Step.DONE;

@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -175,6 +176,20 @@ public class UIUtils {
             ws.background = createRoundedRectDrawable(new Color(0.05f, 0.05f, 0.05f, 0.95f), 6);
             skin.add("default", ws);
         }
+    }
+
+    /**
+     * Returns a font scale that fits {@code text} within {@code maxWidth} world units,
+     * starting from {@code baseScale} and shrinking only if needed. Never increases scale.
+     * Resets the font scale to 1.0 after measuring.
+     */
+    public static float fitFontScale(BitmapFont font, GlyphLayout layout, String text, float baseScale, float maxWidth) {
+        font.getData().setScale(1.0f);
+        layout.setText(font, text);
+        float textWidthAtScale = layout.width * baseScale;
+        float result = textWidthAtScale > maxWidth ? baseScale * (maxWidth / textWidthAtScale) : baseScale;
+        font.getData().setScale(1.0f);
+        return result;
     }
 
     public static String getClipboardSeed() {

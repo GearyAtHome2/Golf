@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.gearygolf.golf.hud.renderer.instructions.DesktopInstructionContent;
@@ -67,73 +68,92 @@ public class InstructionRenderer {
         if (ScissorStack.pushScissors(scissor)) {
             batch.begin();
 
-            float titleScale = isAndroid ? 1.5f : 0.8f;
+            float titleScale  = isAndroid ? 1.5f : 0.8f;
             float headerScale = isAndroid ? 1.2f : 0.55f;
-            float bodyScale = isAndroid ? 0.85f : 0.45f;
+            float bodyScale   = isAndroid ? 0.85f : 0.45f;
 
-            float currentY = boxY + boxH - (boxH * 0.05f) + instructionScrollY;
-            float margin = boxX + (boxW * 0.05f);
+            float currentY  = boxY + boxH - (boxH * 0.05f) + instructionScrollY;
+            float margin    = boxX + (boxW * 0.05f);
             float lineSpace = isAndroid ? (viewport.getWorldHeight() * 0.06f) : (boxH * 0.05f);
+            float lineGap   = lineSpace * 0.35f;  // padding added after each wrapped block
 
+            // Width available for indented body text (leaves a right margin too)
+            float textIndent = margin + boxW * 0.02f;
+            float textWidth  = (boxX + boxW) - textIndent - boxW * 0.04f;
+
+            // Two-column layout: description column starts further right
+            float descXFrac = isAndroid ? 0.35f : 0.25f;
+            float descX     = margin + boxW * descXFrac;
+            float descWidth = (boxX + boxW) - descX - boxW * 0.04f;
+
+            // ── Title ──────────────────────────────────────────────────────────
             font.getData().setScale(titleScale);
             font.setColor(Color.GOLD);
             layout.setText(font, content.getTitle());
             font.draw(batch, content.getTitle(), (viewport.getWorldWidth() - layout.width) / 2f, currentY);
-            currentY -= (lineSpace * 1.5f);
+            currentY -= layout.height + lineSpace;
 
+            // ── Controls ───────────────────────────────────────────────────────
             font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
+            layout.setText(font, content.getControlsHeader());
             font.draw(batch, content.getControlsHeader(), margin, currentY);
-            currentY -= lineSpace;
+            currentY -= layout.height + lineGap;
 
             font.getData().setScale(bodyScale);
-            font.setColor(Color.WHITE);
             for (String line : content.getControlLines()) {
-                font.draw(batch, line, margin + (boxW * 0.02f), currentY);
-                currentY -= lineSpace;
+                layout.setText(font, line, Color.WHITE, textWidth, Align.left, true);
+                font.draw(batch, layout, textIndent, currentY);
+                currentY -= layout.height + lineGap;
             }
-            currentY -= (lineSpace * 1.2f);
+            currentY -= lineSpace;
 
+            // ── Clubs ──────────────────────────────────────────────────────────
             font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
+            layout.setText(font, content.getClubsHeader());
             font.draw(batch, content.getClubsHeader(), margin, currentY);
-            currentY -= lineSpace;
+            currentY -= layout.height + lineGap;
 
             font.getData().setScale(bodyScale);
             for (String[] club : content.getClubInfo()) {
                 font.setColor(Color.GOLD);
-                font.draw(batch, club[0] + ": ", margin + (boxW * 0.02f), currentY);
-                font.setColor(Color.WHITE);
-                font.draw(batch, club[1], margin + (boxW * (isAndroid ? 0.35f : 0.25f)), currentY);
-                currentY -= lineSpace;
+                font.draw(batch, club[0] + ": ", textIndent, currentY);
+                layout.setText(font, club[1], Color.WHITE, descWidth, Align.left, true);
+                font.draw(batch, layout, descX, currentY);
+                currentY -= layout.height + lineGap;
             }
-            currentY -= (lineSpace * 1.2f);
+            currentY -= lineSpace;
 
+            // ── Gameplay ───────────────────────────────────────────────────────
             font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
+            layout.setText(font, content.getGameplayHeader());
             font.draw(batch, content.getGameplayHeader(), margin, currentY);
-            currentY -= lineSpace;
+            currentY -= layout.height + lineGap;
 
             font.getData().setScale(bodyScale);
-            font.setColor(Color.WHITE);
             for (String line : content.getGameplayLines()) {
-                font.draw(batch, line, margin + (boxW * 0.02f), currentY);
-                currentY -= lineSpace;
+                layout.setText(font, line, Color.WHITE, textWidth, Align.left, true);
+                font.draw(batch, layout, textIndent, currentY);
+                currentY -= layout.height + lineGap;
             }
-            currentY -= (lineSpace * 1.2f);
+            currentY -= lineSpace;
 
+            // ── Difficulty ─────────────────────────────────────────────────────
             font.getData().setScale(headerScale);
             font.setColor(Color.CYAN);
+            layout.setText(font, content.getDifficultyHeader());
             font.draw(batch, content.getDifficultyHeader(), margin, currentY);
-            currentY -= lineSpace;
+            currentY -= layout.height + lineGap;
 
             font.getData().setScale(bodyScale);
             for (String[] diff : content.getDifficultyInfo()) {
                 font.setColor(Color.GOLD);
-                font.draw(batch, diff[0], margin + (boxW * 0.02f), currentY);
-                font.setColor(Color.WHITE);
-                font.draw(batch, diff[1], margin + (boxW * (isAndroid ? 0.35f : 0.25f)), currentY);
-                currentY -= lineSpace;
+                font.draw(batch, diff[0], textIndent, currentY);
+                layout.setText(font, diff[1], Color.WHITE, descWidth, Align.left, true);
+                font.draw(batch, layout, descX, currentY);
+                currentY -= layout.height + lineGap;
             }
 
             batch.flush();

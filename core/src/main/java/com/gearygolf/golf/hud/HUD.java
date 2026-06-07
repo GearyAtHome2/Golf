@@ -169,9 +169,9 @@ public class HUD {
         float screenW = startMenuStage.getViewport().getWorldWidth();
         float screenH = startMenuStage.getViewport().getWorldHeight();
 
-        float menuWidth = 620f;
-        float minGap = 20f;
-        float edgePadding = 15f;
+        float menuWidth = screenW * 0.485f;
+        float minGap = screenW * 0.016f;
+        float edgePadding = screenW * 0.012f;
 
         float targetLeaderboardWidth = screenW * 0.45f;
         float totalRequired = menuWidth + targetLeaderboardWidth + minGap + edgePadding;
@@ -311,8 +311,6 @@ public class HUD {
         }
         if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_PARTICLES))
             config.particlesEnabled = !config.particlesEnabled;
-        if (input.isActionJustPressed(GameInputProcessor.Action.TOGGLE_SWING_MODE))
-            config.swingModeNew = !config.swingModeNew;
         if (input.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) mainMenuRequested = true;
         if (input.isActionJustPressed(GameInputProcessor.Action.COPY_SEED) && levelData != null) {
             Gdx.app.getClipboard().setContents(String.valueOf(levelData.getSeed()));
@@ -348,7 +346,13 @@ public class HUD {
                 mobileUIPackage.difficultyBtn.setText("DIFFICULTY: " + config.difficulty.name());
             }
             if (!config.difficulty.hasClubInfo()) showInfoDisplay = false;
-            if (infoToggleBtn != null) infoToggleBtn.setVisible(config.difficulty.hasClubInfo() && !showInfoDisplay);
+            if (infoToggleBtn != null) {
+                boolean hasInfo = config.difficulty.hasClubInfo();
+                infoToggleBtn.setVisible(!showInfoDisplay);
+                infoToggleBtn.setDisabled(!hasInfo);
+                infoToggleBtn.getLabel().setColor(hasInfo ? Color.WHITE : Color.GRAY);
+                infoToggleBtn.setColor(hasInfo ? Color.WHITE : Color.DARK_GRAY);
+            }
             boolean isMultiplayer = session != null && session.getMode() == GameSession.GameMode.MULTIPLAYER_9;
             if (scoreboardToggleBtn != null) {
                 boolean sbShowing = mobileUIPackage.liveScoreboard != null && mobileUIPackage.liveScoreboard.isVisible();
@@ -363,7 +367,35 @@ public class HUD {
                 mobileUIPackage.hitBtn.setColor(swingActive ? Color.YELLOW : Color.WHITE);
             }
             if (mobileUIPackage.testSwingBtn != null)
-                mobileUIPackage.testSwingBtn.setVisible(config.swingModeNew);
+//                mobileUIPackage.testSwingBtn.setVisible(config.swingModeNew);todo: this test swing button has been temporarily disabled for release
+
+            // During swing view (gesture + overview): hide all non-essential elements.
+            // Only HIT and TEST remain visible so the player can read the overview undistracted.
+            if (config.swingModeNew && swingOverlay.isActive()) {
+                if (mobileUIPackage.leftPanel != null)
+                    mobileUIPackage.leftPanel.setVisible(false);
+                if (mobileUIPackage.arrowContainer != null)
+                    mobileUIPackage.arrowContainer.setVisible(false);
+                if (mobileUIPackage.resetBallBtn != null)
+                    mobileUIPackage.resetBallBtn.setVisible(false);
+                if (mobileUIPackage.newMapBtn != null)
+                    mobileUIPackage.newMapBtn.setVisible(false);
+                if (infoToggleBtn != null)
+                    infoToggleBtn.setVisible(false);
+                if (scoreboardToggleBtn != null)
+                    scoreboardToggleBtn.setVisible(false);
+            } else if (config.swingModeNew) {
+                // Restore elements hidden above when swing view exits.
+                if (mobileUIPackage.leftPanel != null)
+                    mobileUIPackage.leftPanel.setVisible(true);
+                if (mobileUIPackage.arrowContainer != null)
+                    mobileUIPackage.arrowContainer.setVisible(true);
+                if (mobileUIPackage.resetBallBtn != null)
+                    mobileUIPackage.resetBallBtn.setVisible(true);
+                if (mobileUIPackage.newMapBtn != null)
+                    mobileUIPackage.newMapBtn.setVisible(true);
+                // infoToggleBtn and scoreboardToggleBtn already managed above; don't double-set
+            }
         }
         if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE) && config.difficulty.hasRangeFinder()) {
             distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
@@ -822,9 +854,9 @@ public void renderInstructions(GameInputProcessor input) {
 
     public boolean isTouchInsideClubInfo(float x, float y) {
         boolean isAndroid = Platform.isAndroid();
-        float width = Math.max(viewport.getWorldWidth() * (isAndroid ? 0.22f : 0.25f), isAndroid ? 220f : 280f);
-        float height = Math.max(viewport.getWorldHeight() * (isAndroid ? 0.18f : 0.25f), isAndroid ? 120f : 180f);
-        float boxX = viewport.getWorldWidth() - width - 20;
+        float width = viewport.getWorldWidth() * (isAndroid ? 0.22f : 0.25f);
+        float height = viewport.getWorldHeight() * (isAndroid ? 0.18f : 0.25f);
+        float boxX = viewport.getWorldWidth() - width - viewport.getWorldWidth() * 0.016f;
         float boxY = viewport.getWorldHeight() * (isAndroid ? 0.22f : 0.175f);
         return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
     }
@@ -859,7 +891,7 @@ public void renderInstructions(GameInputProcessor input) {
 
         float w = viewport.getWorldWidth();
         float h = viewport.getWorldHeight();
-        float panelW = 540f, panelH = 210f;
+        float panelW = w * 0.422f, panelH = h * 0.292f;
 
         // Root group — contains dimmer and panel as siblings (no event bubbling between siblings)
         Group root = new Group();
@@ -887,7 +919,8 @@ public void renderInstructions(GameInputProcessor input) {
 
         Label.LabelStyle ls = new Label.LabelStyle(font, Color.RED);
         Label label = new Label("NO VALID SHOT ON CLIPBOARD", ls);
-        label.setFontScale(0.45f);
+        float labelScale = UIUtils.fitFontScale(font, layout, "NO VALID SHOT ON CLIPBOARD", 0.45f, panelW * 0.85f);
+        label.setFontScale(labelScale);
         label.setAlignment(Align.center);
 
         TextButton.TextButtonStyle btnStyle = new TextButton.TextButtonStyle();
@@ -902,9 +935,9 @@ public void renderInstructions(GameInputProcessor input) {
             @Override public void changed(ChangeEvent event, Actor actor) { onRetry.run(); }
         });
 
-        panel.pad(28f);
-        panel.add(label).padBottom(18f).row();
-        panel.add(retryBtn).width(340f).height(78f);
+        panel.pad(panelH * 0.133f);
+        panel.add(label).padBottom(panelH * 0.086f).row();
+        panel.add(retryBtn).width(panelW * 0.63f).height(panelH * 0.371f);
 
         root.addActor(panel);
         importRetryOverlay = root;
@@ -1060,6 +1093,20 @@ public void renderInstructions(GameInputProcessor input) {
     }
 
     /**
+     * Returns true if the player just tapped/clicked the tutorial NEXT button this frame.
+     * The button is rendered directly by TutorialOverlayRenderer; this method hit-tests
+     * the touch/click position against those bounds via viewport unprojection.
+     */
+    public boolean isNextButtonHit() {
+        if (!Gdx.input.justTouched()) return false;
+        com.badlogic.gdx.math.Rectangle btnBounds = tutorialOverlayRenderer.getLastNextButtonBounds();
+        if (btnBounds == null || btnBounds.width == 0) return false;
+        com.badlogic.gdx.math.Vector3 touch = viewport.unproject(
+                new com.badlogic.gdx.math.Vector3(Gdx.input.getX(), Gdx.input.getY(), 0));
+        return btnBounds.contains(touch.x, touch.y);
+    }
+
+    /**
      * Returns the stage-coordinate bounds of the button highlighted for the given tutorial step,
      * or null if the step has no specific button spotlight.
      */
@@ -1073,7 +1120,7 @@ public void renderInstructions(GameInputProcessor input) {
             case STEP_6_HIT, STEP_10_AIM -> mobileUIPackage.hitBtn;
             case STEP_8_PUTTER -> mobileUIPackage.clubArrowRow;
             case STEP_9_PROJECT -> mobileUIPackage.projectBtn;
-            case STEP_L2_1_SPINDICATOR -> spinIndicator;
+            case STEP_L2_1_SPINDICATOR, STEP_L3_1_SPINDICATOR -> spinIndicator;
             default -> null;
         };
         if (actor == null) return null;
@@ -1311,13 +1358,47 @@ public void renderInstructions(GameInputProcessor input) {
         swingOverlay.setDivotEnabled(enabled);
     }
 
+    /** Sets the natural attack angle for the current club before entering swing view. */
+    public void setSwingNaturalAttackAngle(float deg) {
+        swingOverlay.setNaturalAttackAngleDeg(deg);
+    }
+
+    /** Camera aim offset (world units) to pass to CameraController each frame during swing view. */
+    public float getSwingCamAimOffset() {
+        return swingOverlay.getCamAimOffset();
+    }
+
     public SwingGestureAnalyser getSwingAnalyser() {
         return swingOverlay.getAnalyser();
+    }
+
+    /**
+     * Sets the base tempo windows for the current shot (club + difficulty) and stores
+     * them in SwingOverlay so attack-angle placement adjustments can narrow them correctly.
+     * Prefer this over getSwingAnalyser().setTempoWindows() for all shot setup calls.
+     */
+    public void setSwingBaseTempoWindows(float perfectFraction, float maxFraction) {
+        swingOverlay.setBaseTempoWindows(perfectFraction, maxFraction);
+    }
+
+    /** Sets the follow-through angle threshold (degrees) for HIGH/NEUTRAL/LOW classification. */
+    public void setSwingFollowThroughThreshold(float degrees) {
+        swingOverlay.setFollowThroughThreshold(degrees);
+    }
+
+    /** Keeps the overview speed display in sync with ShotController.SWING_FULL_POWER_SPEED. */
+    public void setSwingFullPowerSpeed(float speed) {
+        swingOverlay.setFullPowerSpeed(speed);
     }
 
     /** Returns true while the swing gesture overlay is the active minigame. */
     public boolean isSwingViewActive() {
         return swingOverlay.isActive();
+    }
+
+    /** Returns true while the post-swing overview panel is displayed (waiting for tap to fire). */
+    public boolean isSwingOverviewActive() {
+        return swingOverlay.isShowingOverview();
     }
 
     /**
@@ -1326,6 +1407,11 @@ public void renderInstructions(GameInputProcessor input) {
      */
     public SwingResult consumeSwingResult() {
         return swingOverlay.consumeResult();
+    }
+
+    /** Injects a synthetic result into the overview panel for TEST_SWING debugging. */
+    public void injectTestSwingResult(SwingResult r) {
+        swingOverlay.injectTestResult(r);
     }
 
     public void dispose() {
