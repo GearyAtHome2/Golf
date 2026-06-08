@@ -34,6 +34,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     private final CypressBayouGenerator cypressBayouGenerator;
     private final BadlandsGenerator badlandsGenerator;
     private final TableMountainGenerator tableMountainGenerator;
+    private final GoldsmithBowlGenerator goldsmithBowlGenerator;
 
     private final float MONOLITH_UNDERGROUND_OFFSET = 1.0f;
     private final float MONOLITH_SPAWN_CHANCE = 0.033f;
@@ -115,6 +116,8 @@ public class ClassicGenerator implements ITerrainGenerator {
                 ? new BadlandsGenerator(data) : null;
         this.tableMountainGenerator = (data.getArchetype() == LevelData.Archetype.TABLE_MOUNTAIN)
                 ? new TableMountainGenerator(data) : null;
+        this.goldsmithBowlGenerator = (data.getArchetype() == LevelData.Archetype.GOLDSMITH_BOWL)
+                ? new GoldsmithBowlGenerator(data) : null;
     }
 
     public LevelData getData() {
@@ -289,6 +292,8 @@ public class ClassicGenerator implements ITerrainGenerator {
         } else if (flags.isCypressBayou) {
             data.setWaterLevel(0.0f);
             cypressBayouGenerator.generateCypressBayou(map, h, gX, gZ, 0.0f);
+        } else if (flags.isGoldsmithBowl) {
+            goldsmithBowlGenerator.generateBowl(map, h, gX, gZ);
         }
         PerfLog.log("archetype-specific generator", tArch);
 
@@ -883,7 +888,7 @@ public class ClassicGenerator implements ITerrainGenerator {
     }
 
     private static class ArchetypeFlags {
-        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isOasisDunes, isStoneRun, isWoodlandEdge, isCypressBayou, isBadlands, isTableMountain, isPathDependent;
+        final boolean isCliffMap, isIslandMap, isCraterFields, isRoughBluffs, isWhistlingIsles, isMogulHighlands, isMonolithPlains, isPlungeCenotes, isVineyards, isClippertonRock, isOasisDunes, isStoneRun, isWoodlandEdge, isCypressBayou, isBadlands, isTableMountain, isGoldsmithBowl, isPathDependent;
         ArchetypeFlags(LevelData data) {
             isCliffMap = data.getArchetype() == LevelData.Archetype.CLIFFSIDE_BLUFF;
             isIslandMap = data.getArchetype() == LevelData.Archetype.ISLAND_COAST;
@@ -901,6 +906,7 @@ public class ClassicGenerator implements ITerrainGenerator {
             isCypressBayou = data.getArchetype() == LevelData.Archetype.CYPRESS_BAYOU;
             isBadlands = data.getArchetype() == LevelData.Archetype.BADLANDS;
             isTableMountain = data.getArchetype() == LevelData.Archetype.TABLE_MOUNTAIN;
+            isGoldsmithBowl = data.getArchetype() == LevelData.Archetype.GOLDSMITH_BOWL;
             isPathDependent = data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.RAISED_FAIRWAY || data.getTerrainAlgorithm() == LevelData.TerrainAlgorithm.SUNKEN_FAIRWAY;
         }
     }

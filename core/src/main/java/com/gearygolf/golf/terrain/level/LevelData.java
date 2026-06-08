@@ -369,6 +369,27 @@ public class LevelData {
                 .par(4)
                 .greenSize(20f, 24f)
                 .undulation(0.4f)
+        ),
+
+//         ── Goldsmith Bowl — radial bowl centred on the green ────────────────
+//         GoldsmithBowlGenerator overrides heights with a 5-zone radial profile:
+//         flat green platform → ascending wall → rim plateau → outer descent → tee flats.
+//         The rim always sits above greenH so the ascending-wall shape is guaranteed.
+//         Standard pipeline (bunkers, deep-rough, trees, green undulation) runs after.
+        GOLDSMITH_BOWL(new ArchetypeSpec()
+                .algo(TerrainAlgorithm.MULTI_WAVE)
+                .treeScheme(TreeScheme.DEAD_GRAY)
+                .mudHeight(-99f)
+                .difficulty(3f)
+                .teeH(3f, 1.5f).greenH(28f, 2.5f)
+                .wind(3f, 5f)
+                .treeH(8f, 1f).trees(0.10f, 3f, 0.6f)
+                .terrain(0.04f, 8f)
+                .fairway(50f, 0f).undulation(0.06f).wiggle(0.08f, 0.06f).islands(0.2f).cohesion(0.9f)
+                .par(3)
+                .distance(260, 360)
+                .bunkers(1, 3, 2.0f)
+                .greenSize(18f, 20f)
         );
 
         private final ArchetypeSpec spec;
