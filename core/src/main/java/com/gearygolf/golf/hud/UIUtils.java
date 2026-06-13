@@ -33,7 +33,9 @@ public class UIUtils {
         int size = 64;
         Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         pixmap.setBlending(Pixmap.Blending.None);
-        pixmap.setColor(0, 0, 0, 0);
+        // Use transparent same-colour (not transparent black) so Linear filtering blends
+        // between (r,g,b,a) and (r,g,b,0) at corners — eliminates the dark-halo fringe.
+        pixmap.setColor(color.r, color.g, color.b, 0);
         pixmap.fill();
 
         pixmap.setColor(color);
@@ -65,7 +67,7 @@ public class UIUtils {
         int size = 64;
         Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         pixmap.setBlending(Pixmap.Blending.None);
-        pixmap.setColor(0, 0, 0, 0);
+        pixmap.setColor(base.r, base.g, base.b, 0);
         pixmap.fill();
 
         // Shadow layer: offset down-right, darker
@@ -92,11 +94,14 @@ public class UIUtils {
         int size = 64;
         Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         pixmap.setBlending(Pixmap.Blending.None);
-        pixmap.setColor(0, 0, 0, 0);
-        pixmap.fill();
 
         Color shadow    = new Color(base.r * 0.32f, base.g * 0.32f, base.b * 0.32f, base.a);
         Color highlight = new Color(Math.min(1f, base.r + 0.45f), Math.min(1f, base.g + 0.45f), Math.min(1f, base.b + 0.45f), base.a);
+
+        // Layer 1 fills the full rounded rect — use transparent-highlight so Linear
+        // filtering blends between highlight and (highlight,0) at corners, not black.
+        pixmap.setColor(highlight.r, highlight.g, highlight.b, 0);
+        pixmap.fill();
 
         // Layer 1 — full area in highlight (shows at top/left bevel edges)
         pixmap.setColor(highlight);
@@ -125,12 +130,15 @@ public class UIUtils {
         int size = 64;
         Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
         pixmap.setBlending(Pixmap.Blending.None);
-        pixmap.setColor(0, 0, 0, 0);
-        pixmap.fill();
 
         Color shadow    = new Color(base.r * 0.28f, base.g * 0.28f, base.b * 0.28f, base.a);
         Color highlight = new Color(Math.min(1f, base.r + 0.35f), Math.min(1f, base.g + 0.35f), Math.min(1f, base.b + 0.35f), base.a);
         Color pressed   = new Color(base.r * 0.78f, base.g * 0.78f, base.b * 0.78f, base.a);
+
+        // Layer 1 fills the full rounded rect — use transparent-shadow so Linear
+        // filtering blends between shadow and (shadow,0) at corners, not black.
+        pixmap.setColor(shadow.r, shadow.g, shadow.b, 0);
+        pixmap.fill();
 
         // Layer 1 — full area in shadow (shows at top/left bevel edges)
         pixmap.setColor(shadow);

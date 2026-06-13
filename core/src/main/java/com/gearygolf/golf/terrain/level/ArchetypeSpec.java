@@ -10,6 +10,33 @@ import com.gearygolf.golf.terrain.objects.Tree.TreeScheme;
  */
 public class ArchetypeSpec {
 
+    // ── Feature generator selection ──────────────────────────────────────────
+    /**
+     * Identifies the specialist generator (if any) that runs during post-processing.
+     * NONE = standard pipeline only.  Add a new value here when adding a new archetype
+     * that requires a dedicated generator; wire it up in ClassicGenerator.applyPostProcessing.
+     */
+    public enum TerrainFeature {
+        NONE,
+        BADLANDS,
+        TABLE_MOUNTAIN,
+        GOLDSMITH_BOWL,
+        CENOTES,
+        BEACH_BLUFFS,
+        WHISTLING_ISLES,
+        CRATERS,
+        VINEYARDS,
+        CLIPPERTON_ROCK,
+        OASIS_DUNES,
+        FOREST_EDGE,
+        STONE_RUN,
+        CYPRESS_BAYOU,
+        DOGLEG_RIVER
+    }
+
+    /** Selects the tree-placement algorithm used by ClassicGenerator. */
+    public enum TreeStrategy { RANDOM, VINEYARD, OASIS }
+
     // ── Visuals ──────────────────────────────────────────────────────────────
     /** Primary terrain algorithm. Swap this to test different shapes. */
     public LevelData.TerrainAlgorithm algo    = LevelData.TerrainAlgorithm.MULTI_WAVE;
@@ -63,6 +90,16 @@ public class ArchetypeSpec {
     public int distanceMin = 500, distanceMax = 500;
     /** Override terrain grid width. 0 = default (160).  -1 = match hole distance. */
     public int mapWidthOverride = 0;
+    /**
+     * Tee X position as a fraction of SIZE_X. Default 0.5 = centre.
+     * Used by mapStandardFeatures (tile placement) and finalizePositionsAndTrees (world position).
+     */
+    public float teeXFraction = 0.5f;
+    /**
+     * Green X position as a fraction of SIZE_X. -1 = random (default).
+     * When >= 0 the green is placed deterministically instead of randomly offset from centre.
+     */
+    public float greenXFraction = -1f;
     /** Fixed par (3, 4, or 5).  0 = variable — use per-par distance ranges below. */
     public int parFixed = 0;
 
@@ -89,6 +126,99 @@ public class ArchetypeSpec {
     public boolean distancePenalty  = false;
 
     public boolean isActive = true;
+
+    // ── Archetype feature generator ───────────────────────────────────────────
+    /** Specialist generator to run during post-processing. NONE = standard pipeline only. */
+    public TerrainFeature terrainFeature = TerrainFeature.NONE;
+
+    /**
+     * Water level applied at the start of post-processing.
+     * Float.NaN = no override; LevelDataGenerator's default (typically 0) is kept.
+     * The SUNKEN_FAIRWAY algorithm also sets water level later (computed from heights);
+     * that override is independent and will still apply.
+     */
+    public float waterLevelOverride = Float.NaN;
+
+    // ── Crater generation (terrainFeature == CRATERS) ─────────────────────────
+    /** Craters per SIZE_Z unit. craterCount = (int)(SIZE_Z * craterDensityPerLength) + rng.nextInt(craterCountVariance). */
+    public float craterDensityPerLength = 2.5f / 50f;
+    public int   craterCountVariance    = 15;
+
+    // ── Wave angle orientation ────────────────────────────────────────────────
+    /**
+     * If true, wave angles are biased to near-perpendicular (producing vineyard-style
+     * terrain rows). Default false = fully random wave angles.
+     */
+    public boolean cardinalWaveAngles = false;
+
+    // ── Tree placement ────────────────────────────────────────────────────────
+    /** Selects which tree-placement algorithm ClassicGenerator uses for this archetype. */
+    public TreeStrategy treeStrategy = TreeStrategy.RANDOM;
+
+    // Options for the RANDOM tree placement strategy:
+    /** Z clearance zone around the tee where trees are not placed. */
+    public int teeTreeBufferZ = 40;
+    /** X clearance zone around the tee where trees are not placed. */
+    public int teeTreeBufferX = 30;
+    /** If true, MUD tiles are valid terrain for tree placement (e.g. mangroves). */
+    public boolean allowMudTrees = false;
+    /**
+     * Trees must be at height >= (waterLevel + treeWaterWading).
+     * Positive = trees stay above water (default 0.1).
+     * Negative = trees may stand in shallow water (e.g. -0.5 for bayou mangroves).
+     */
+    public float treeWaterWading = 0.1f;
+    /** If true, trees may only be placed on DEEP_ROUGH tiles (e.g. TABLE_MOUNTAIN mesa top). */
+    public boolean deepRoughTreesOnly = false;
+    /** If true, tree density falls off with distance from the green (BushWorld effect). */
+    public boolean bushDensityFalloff = false;
+    /**
+     * If true, ClassicGenerator will consult the active TerrainFeature generator's gap-cell
+     * set and exclude those cells from tree placement (used by CYPRESS_BAYOU water crossings).
+     */
+    public boolean excludeFeatureGapCells = false;
+
+    // ── Height generation overrides ───────────────────────────────────────────
+    /**
+     * If true, uses a steep sigmoid base-elevation curve (cliff terrain) instead of the
+     * standard power curve. Also causes trees to scale height from tee/green elevation
+     * delta rather than from the treeH spec field.
+     */
+    public boolean useCliffElevation = false;
+    /** If true, uses the mogul-specific noise function and pre-builds a distance cache. */
+    public boolean useMogulNoise = false;
+    /**
+     * If true, the coastline generator wraps the heightmap in an island shape and the
+     * fairway generator treats the map as water-surrounded (ISLAND_COAST).
+     */
+    public boolean islandCoastline = false;
+    /**
+     * Fraction of SIZE_Z used as the green-area radius in the heightmap taper calculation.
+     * Default 0.22.  OASIS_DUNES uses 0.44 to push the surrounding dunes further back.
+     */
+    public float greenHmapRadiusFraction = 0.22f;
+
+    // ── Pipeline behaviour ────────────────────────────────────────────────────
+    /** If true, the fairway generation pass is skipped (archetype provides its own layout). */
+    public boolean skipFairway = false;
+    /**
+     * If true, ROUGH tiles at the green border are also included in the green-border
+     * smoothing pass (ISLAND_COAST blends rough into the island shoreline).
+     */
+    public boolean smoothRoughAtGreenBorder = false;
+    /** If true, monoliths are scattered across the map after post-processing. */
+    public boolean spawnMonoliths = false;
+    /**
+     * Coverage fraction for the sand-scatter pass (0 = disabled).
+     * When > 0, roughly this fraction of ROUGH tiles are converted to SAND.
+     * Used by BADLANDS (0.22).
+     */
+    public float sandPassCoverage = 0f;
+    /**
+     * If true, any remaining ROUGH tiles are converted to STONE after the sand pass.
+     * Gives Badlands maps their bare cracked-rock appearance.
+     */
+    public boolean roughToStone = false;
 
     // ── Fluent builder methods ────────────────────────────────────────────────
 
@@ -129,6 +259,8 @@ public class ArchetypeSpec {
 
     public ArchetypeSpec distance(int min, int max) { distanceMin = min; distanceMax = max; return this; }
     public ArchetypeSpec mapWidth(int w)            { mapWidthOverride = w; return this; }
+    public ArchetypeSpec teeXFraction(float f)      { teeXFraction = f;    return this; }
+    public ArchetypeSpec greenXFraction(float f)    { greenXFraction = f;  return this; }
 
     /** Fixed par value (3, 4, or 5).  Pair with distance(min, max). */
     public ArchetypeSpec par(int fixed)             { parFixed = fixed; return this; }
@@ -159,4 +291,31 @@ public class ArchetypeSpec {
     public ArchetypeSpec distancePenalty()          { distancePenalty = true; return this; }
 
     public ArchetypeSpec isActive(boolean d)        { isActive = d; return this; }
+
+    // ── Archetype feature builder methods ─────────────────────────────────────
+
+    public ArchetypeSpec feature(TerrainFeature f)  { terrainFeature = f;           return this; }
+    public ArchetypeSpec waterLevel(float w)        { waterLevelOverride = w;        return this; }
+    public ArchetypeSpec craterDensity(float perLength, int variance) {
+        craterDensityPerLength = perLength; craterCountVariance = variance; return this;
+    }
+    public ArchetypeSpec cardinalWaveAngles()       { cardinalWaveAngles = true;     return this; }
+    public ArchetypeSpec treeStrategy(TreeStrategy s) { treeStrategy = s;            return this; }
+    public ArchetypeSpec teeTreeBuffer(int bufZ, int bufX) {
+        teeTreeBufferZ = bufZ; teeTreeBufferX = bufX; return this;
+    }
+    public ArchetypeSpec allowMudTrees()            { allowMudTrees = true;          return this; }
+    public ArchetypeSpec treeWaterWading(float w)   { treeWaterWading = w;           return this; }
+    public ArchetypeSpec deepRoughTreesOnly()       { deepRoughTreesOnly = true;     return this; }
+    public ArchetypeSpec bushDensityFalloff()       { bushDensityFalloff = true;     return this; }
+    public ArchetypeSpec excludeFeatureGapCells()   { excludeFeatureGapCells = true; return this; }
+    public ArchetypeSpec useCliffElevation()        { useCliffElevation = true;      return this; }
+    public ArchetypeSpec useMogulNoise()            { useMogulNoise = true;          return this; }
+    public ArchetypeSpec islandCoastline()          { islandCoastline = true;        return this; }
+    public ArchetypeSpec smoothRoughAtGreenBorder() { smoothRoughAtGreenBorder = true; return this; }
+    public ArchetypeSpec greenHmapRadius(float f)   { greenHmapRadiusFraction = f;   return this; }
+    public ArchetypeSpec skipFairway()              { skipFairway = true;            return this; }
+    public ArchetypeSpec spawnMonoliths()           { spawnMonoliths = true;         return this; }
+    public ArchetypeSpec sandPass(float coverage)   { sandPassCoverage = coverage;   return this; }
+    public ArchetypeSpec roughToStone()             { roughToStone = true;           return this; }
 }

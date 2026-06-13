@@ -147,7 +147,14 @@ public class RankBadge {
         sr.end();
 
         // ── Sphere texture (SpriteBatch) ───────────────────────────────────────
+        // Reset tint to white — font rendering (renderText) sets the batch colour to black
+        // for the badge label and never restores it, so without this the sphere renders black.
+        // enableBlending() resets SpriteBatch's internal flag — Scene2D widgets can call
+        // disableBlending() and leave it false, which causes flush() to call glDisable(GL_BLEND)
+        // even after we called glEnable above directly.
         batch.setProjectionMatrix(sr.getProjectionMatrix());
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.enableBlending();
         batch.begin();
         batch.draw(getSphereTexture(), cx - radius, cy - radius, radius * 2f, radius * 2f);
         batch.end();

@@ -15,6 +15,7 @@ import com.gearygolf.golf.Club;
 import com.gearygolf.golf.hud.HUD;
 import com.gearygolf.golf.hud.SwingGestureAnalyser;
 import com.gearygolf.golf.hud.SwingResult;
+import com.gearygolf.golf.hud.SwingUIController;
 import com.gearygolf.golf.input.GameInputProcessor;
 import com.gearygolf.golf.terrain.Terrain;
 
@@ -37,16 +38,16 @@ public class ShotController {
     private Model targetDotModel;
     private ModelInstance targetDotInstance;
 
+    private enum ShotPhase { IDLE, CHARGING, POWER_LOCKED, WAITING, PENDING_SHOT }
+    private ShotPhase phase = ShotPhase.IDLE;
+
     private float spaceHoldTime = 0f;
-    private boolean isCharging = false;
     private final float MAX_POWER = 3f;
 
-    private boolean isPowerLocked = false;
     private float lockedPower = 0f;
     private float lockTimer = 0f;
     private final float LOCK_DURATION = 0.4f;
 
-    private boolean waitingForMinigame = false;
     private float cancelCooldown = 0f;
     private final float CANCEL_COOLDOWN_TIME = 0.5f;
 
@@ -63,7 +64,6 @@ public class ShotController {
      * Tune via playtest; kept in sync with SwingOverlay.fullPowerSpeed.
      */
     public static final float SWING_FULL_POWER_SPEED  = 2.0f;
-    private boolean pendingShot = false;
     private float shotLeadTimer = 0f;
     private MinigameResult pendingResult;
     private Club pendingClub;
@@ -74,40 +74,10 @@ public class ShotController {
     private boolean swingModeNew = false;
     private Terrain.TerrainType lastTerrainType = Terrain.TerrainType.FAIRWAY;
     private Club shotStartClub = Club.DRIVER;
-    /** Heel/toe offset beyond which the putter incurs a contact penalty (0 = always penalise). */
-    private float putterContactThreshold = 0f;
+    /** Difficulty and contact parameters — updated once per shot via setDifficultyParams(). */
+    private SwingDifficultyCalculator difficultyParams = SwingDifficultyCalculator.DEFAULTS;
 
-    // ── Swing difficulty params (set per-shot from GolfGame via setSwingDifficultyParams) ──
-    /** abs(contactOffset) below which non-putter clubs incur zero quality penalty (sweet spot). */
-    private float swingContactSweetSpot  = 0.00f;
-    /** Multiplier on path and gear-effect direction — 1.0 = full effect (Tour Pro), <1 = forgiven. */
-    private float swingPathScale         = 1.00f;
-    /** abs(contactOffset) that triggers a shank — higher means harder to shank at easy difficulties. */
-    private float swingShankThreshold    = 0.85f;
-    /**
-     * Follow-through angle threshold (degrees) — inner band boundary for the tax-bracket
-     * spin calculation.  Kept in sync with the analyser threshold set via HUD.
-     * NOVICE=6°, TOUR_PRO=4°.
-     */
-    private float swingFtAngleThreshold  = 5.0f;
-    /**
-     * First bracket boundary for the non-linear path curve (raw degrees).
-     * Path magnitude below this is linear (rate 1×); above it is 2× per degree.
-     * Scales with difficulty: NOVICE=4°, TOUR_PRO=2°. Second boundary is implicitly 2×B1.
-     */
-    private float swingPathBreakpoint1   = 4.00f;
-
-    public void setPutterContactThreshold(float t) { this.putterContactThreshold = t; }
-
-    public void setFollowThroughAngleThreshold(float degrees) { this.swingFtAngleThreshold = degrees; }
-
-    public void setSwingDifficultyParams(float contactSweetSpot, float pathScale,
-                                         float shankThreshold, float pathBreakpoint1) {
-        this.swingContactSweetSpot = contactSweetSpot;
-        this.swingPathScale        = pathScale;
-        this.swingShankThreshold   = shankThreshold;
-        this.swingPathBreakpoint1  = pathBreakpoint1;
-    }
+    public void setDifficultyParams(SwingDifficultyCalculator p) { this.difficultyParams = p; }
 
     private com.gearygolf.golf.glamour.SoundManager soundManager;
 
@@ -166,10 +136,7 @@ public class ShotController {
     }
 
     public void reset() {
-        isCharging = false;
-        isPowerLocked = false;
-        waitingForMinigame = false;
-        pendingShot = false;
+        phase = ShotPhase.IDLE;
         shotLeadTimer = 0f;
         spaceHoldTime = 0f;
         lockedPower = 0f;
@@ -181,7 +148,7 @@ public class ShotController {
         projectionVector.set(0, 0, 0);
     }
 
-    public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud, Terrain terrain, GameInputProcessor input) {
+    public boolean update(float delta, Ball ball, Vector3 camDir, Club club, HUD hud, SwingUIController swingUI, Terrain terrain, GameInputProcessor input) {
         animationTimer += delta;
         if (cancelCooldown > 0) cancelCooldown -= delta;
 
@@ -191,8 +158,8 @@ public class ShotController {
         if (ballIsStationary) {
             if (isSpinLocked) {
                 calculateShotVector(projectionVector, lockedCamDir, club, lockedSpin, terrain, 0f);
-            } else if (waitingForMinigame || pendingShot) {
-                // pendingShot: swing has resolved but shot hasn't fired yet — keep projection
+            } else if (phase == ShotPhase.WAITING || phase == ShotPhase.PENDING_SHOT) {
+                // PENDING_SHOT: swing has resolved but shot hasn't fired yet — keep projection
                 // locked on lockedCamDir so the guideline doesn't swing with the overhead camera.
                 calculateShotVector(projectionVector, lockedCamDir, club, hud.getSpinOffset(), terrain, 0f);
             } else {
@@ -204,17 +171,17 @@ public class ShotController {
             toggleGuideline();
         }
 
-        if (pendingShot) {
+        if (phase == ShotPhase.PENDING_SHOT) {
             shotLeadTimer -= delta;
             if (shotLeadTimer <= 0f) {
-                pendingShot = false;
+                phase = ShotPhase.IDLE;
                 executeShot(ball, lockedCamDir, pendingClub, pendingPower, lockedSpin, terrain, pendingResult);
                 return true;
             }
             return false;
         }
 
-        if (waitingForMinigame) {
+        if (phase == ShotPhase.WAITING) {
             if (hud.wasMinigameCanceled()) {
                 reset();
                 return false;
@@ -222,7 +189,7 @@ public class ShotController {
 
             // In new swing mode, pressing HIT while waiting cancels the shot —
             // unless the overview panel is up, in which case the tap confirms the shot.
-            if (swingModeNew && !hud.isSwingOverviewActive()
+            if (swingModeNew && !swingUI.isShowingOverview()
                     && (input.isActionJustPressed(GameInputProcessor.Action.CHARGE_SHOT)
                         || input.isActionJustPressed(GameInputProcessor.Action.MAX_POWER_SHOT))) {
                 reset();
@@ -243,13 +210,13 @@ public class ShotController {
                         1.0f,                                        // backswingNorm: full backswing
                         0f                                         // attackAngleDeg: ascending driver blow (+1.4° loft, -5% spin)
                 );
-                hud.injectTestSwingResult(testSwing);
+                swingUI.injectTestResult(testSwing);
                 return false;
             }
 
             // ── New swing gesture path ────────────────────────────────────────
-            if (hud.isSwingViewActive()) {
-                SwingResult swingResult = hud.consumeSwingResult();
+            if (swingUI.isActive()) {
+                SwingResult swingResult = swingUI.consumeResult();
                 if (swingResult != null) {
                     // Power = forward speed fraction × backswing fraction — strictly linear.
                     // 10% backswing + 100% speed = 10% power; 50% backswing + 80% speed = 40% power.
@@ -268,17 +235,16 @@ public class ShotController {
                     if (pendingResult == null) {
                         // Complete whiff — too far from expected impact time.
                         Gdx.app.log("SwingDebug", "[WHIFF] q≈0 — complete miss, resetting");
-                        waitingForMinigame = false;
+                        phase = ShotPhase.IDLE;
                         isSpinLocked = false;
                         cancelCooldown = CANCEL_COOLDOWN_TIME;
                         return false;
                     }
-                    waitingForMinigame = false;
+                    phase = ShotPhase.PENDING_SHOT;
                     isSpinLocked = false;
                     hud.incrementShots();
                     if (soundManager != null) soundManager.playBallStrike(clubSoundCategory(club), pendingPower / MAX_POWER);
                     pendingClub   = club;
-                    pendingShot   = true;
                     shotLeadTimer = SHOT_SOUND_LEAD;
                 }
                 return false;
@@ -286,7 +252,7 @@ public class ShotController {
 
             // ── Legacy spindicator path ───────────────────────────────────────
             if (hud.isMinigameComplete()) {
-                waitingForMinigame = false;
+                phase = ShotPhase.PENDING_SHOT;
                 isSpinLocked = false;
                 // Play the swing sound now — the clip has ~50ms of swing before impact,
                 // so ball.hit() fires after SHOT_SOUND_LEAD to keep them in sync.
@@ -294,7 +260,6 @@ public class ShotController {
                 pendingResult = hud.getMinigameResult();
                 pendingClub   = club;
                 pendingPower  = lockedPower;
-                pendingShot   = true;
                 shotLeadTimer = SHOT_SOUND_LEAD;
             }
             return false;
@@ -308,16 +273,15 @@ public class ShotController {
         Vector2 spinOffset = hud.getSpinOffset();
         currentDifficulty.swingDifficulty = 1.0f + (spinOffset.len() * 0.75f);
 
-        if (isPowerLocked) {
+        if (phase == ShotPhase.POWER_LOCKED) {
             lockTimer += delta;
             if (lockTimer >= LOCK_DURATION) {
-                isPowerLocked = false;
                 float powerMod = 0.5f + (lockedPower / MAX_POWER);
 
                 // lockedCamDir was already captured before the camera started lerping —
                 // do NOT overwrite it here or we'd use the lerped swing-view direction.
                 hud.logShotInitiated(ball.getPosition(), club, currentDifficulty, powerMod);
-                waitingForMinigame = true;
+                phase = ShotPhase.WAITING;
                 lockTimer = 0;
             }
             return false;
@@ -328,19 +292,18 @@ public class ShotController {
             boolean holdingShot = input.isActionPressed(GameInputProcessor.Action.CHARGE_SHOT)
                     || input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT);
             if (holdingShot) {
-                if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0 && !isCharging && !isPowerLocked) {
-                    isCharging = true;
+                if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0 && phase == ShotPhase.IDLE) {
+                    phase = ShotPhase.CHARGING;
                     lockedCamDir.set(camDir);
                     spaceHoldTime = 0f;
                 }
-                if (isCharging) {
+                if (phase == ShotPhase.CHARGING) {
                     float gain = input.isActionPressed(GameInputProcessor.Action.MAX_POWER_SHOT) ? MAX_POWER : delta * 2f;
                     spaceHoldTime = MathUtils.clamp(spaceHoldTime + gain, 0f, MAX_POWER);
                 }
-            } else if (isCharging) {
+            } else if (phase == ShotPhase.CHARGING) {
                 // Released — lock the charged power and wait briefly before starting minigame
-                isCharging = false;
-                isPowerLocked = true;
+                phase = ShotPhase.POWER_LOCKED;
                 lockedPower = spaceHoldTime;
                 spaceHoldTime = 0f;
             }
@@ -350,13 +313,13 @@ public class ShotController {
         // ── New swing mode: tap to start, tap again to cancel ──
         if (input.isActionJustPressed(GameInputProcessor.Action.CHARGE_SHOT)
                 || input.isActionJustPressed(GameInputProcessor.Action.MAX_POWER_SHOT)) {
-            if (waitingForMinigame) {
+            if (phase == ShotPhase.WAITING) {
                 reset(); // second tap cancels
             } else if (ball.getState() == Ball.State.STATIONARY && cancelCooldown <= 0) {
                 lockedCamDir.set(camDir);
                 lastTerrainType = terrain.getTerrainTypeAt(lastBallPos.x, lastBallPos.z);
                 shotStartClub   = club;
-                waitingForMinigame = true;
+                phase = ShotPhase.WAITING;
             }
             return false;
         }
@@ -439,12 +402,12 @@ public class ShotController {
         tempV2.set(aimDirFreeform.x, 0, aimDirFreeform.z).nor();
         projectionVector.set(tempV2).crs(Vector3.Y).nor();
 
-        Vector2 quadOffset = getQuadraticSpinOffset(spin);
+        getQuadraticSpinOffset(spin);
         // New swing mode sets attackAngleDeg on the result (negative = descending blow).
         // Old swing mode leaves it at 0 and derives attack from the spin dial instead.
         float attackAngle = result.attackAngleDeg != 0f
                 ? result.attackAngleDeg          // new swing: e.g. -5° for descending
-                : quadOffset.y * -20.0f;         // old swing: dial position → degrees
+                : tempSpin.y * -20.0f;           // old swing: dial position → degrees
         // Map back to [0,1] scale used by efficiency curves (positive = descending).
         float attackQuadY = -attackAngle / 20.0f;
         float sForce = (float) Math.sin(Math.abs(club.loft - attackAngle) * MathUtils.degreesToRadians);
@@ -480,8 +443,8 @@ public class ShotController {
         attackEfficiency = MathUtils.clamp(attackEfficiency, 0f, 1f);
 
         float backspin = (power * finalPowerMult) * sForce * 9.0f * (1.0f + (attackQuadY * attackAngleCoeff * attackAngleDamping * attackEfficiency)) * quality * spinCurve * terrainSpinMult * club.spinMult;
-        float sidespin = ((quadOffset.x * (power * finalPowerMult) * -10.0f * quality * spinCurve)
-                        - (result.accuracy     * (power * finalPowerMult) * 8.0f * spinCurve)
+        float sidespin = ((tempSpin.x * (power * finalPowerMult) * -10.0f * quality * spinCurve)
+                        + (result.accuracy     * (power * finalPowerMult) * 8.0f * spinCurve)
                         + (result.ftSpinContrib * (power * finalPowerMult) * 5.0f * spinCurve))
                        * terrainSpinMult * club.spinMult;
 
@@ -508,15 +471,15 @@ public class ShotController {
     }
 
     private void calculateShotVector(Vector3 out, Vector3 camDir, Club club, Vector2 spin, Terrain terrain, float accuracy) {
-        Vector2 quadOffset = getQuadraticSpinOffset(spin);
-        Vector3 aimDir = new Vector3(camDir.x, 0, camDir.z).nor();
-        Vector3 rightOfAim = new Vector3(aimDir).crs(Vector3.Y).nor();
+        getQuadraticSpinOffset(spin);
+        projectionVector.set(camDir.x, 0, camDir.z).nor();   // aimDir — reuse pre-allocated field
+        tempV2.set(projectionVector).crs(Vector3.Y).nor();    // rightOfAim — reuse pre-allocated field
 
         Vector3 terrainNormal = terrain.getNormalAt(lastBallPos.x, lastBallPos.z);
-        float physicalKick = terrainNormal.dot(rightOfAim) * 30.0f;
+        float physicalKick = terrainNormal.dot(tempV2) * 30.0f;
 
-        out.set(aimDir);
-        out.rotate(Vector3.Y, (quadOffset.x * 2.5f) - (accuracy * 12.0f) - physicalKick);
+        out.set(projectionVector);
+        out.rotate(Vector3.Y, (tempSpin.x * 2.5f) - (accuracy * 12.0f) - physicalKick);
 
         if (club == Club.PUTTER) {
             // Project the aim direction onto the terrain plane so putts follow the slope.
@@ -528,7 +491,7 @@ public class ShotController {
         }
 
         float deloftAbility = MathUtils.clamp(1.2f - (club.loft / 45f), 0.2f, 1.2f);
-        float adjustedLoft = MathUtils.clamp(club.loft + (quadOffset.y * -65.0f * deloftAbility), 0.1f, 85f);
+        float adjustedLoft = MathUtils.clamp(club.loft + (tempSpin.y * -65.0f * deloftAbility), 0.1f, 85f);
 
         float angleRad = adjustedLoft * MathUtils.degreesToRadians;
         out.y = MathUtils.sin(angleRad);
@@ -538,10 +501,11 @@ public class ShotController {
         out.nor();
     }
 
-    private Vector2 getQuadraticSpinOffset(Vector2 rawOffset) {
+    private void getQuadraticSpinOffset(Vector2 rawOffset) {
         float rawR = MathUtils.clamp(rawOffset.len(), 0f, 1f);
         float quadR = (float) Math.pow(rawR, 2.8f);
-        return (rawR > 0) ? new Vector2(rawOffset).nor().scl(quadR) : new Vector2(0, 0);
+        if (rawR > 0) tempSpin.set(rawOffset).nor().scl(quadR);
+        else tempSpin.set(0, 0);
     }
 
     /** Maps a Club to a SoundManager category string. */
@@ -613,11 +577,11 @@ public class ShotController {
             batch.render(targetDotInstance, env);
         }
 
-        // In new swing-gesture mode, waitingForMinigame is true but there is no power bar to show.
-        if (waitingForMinigame && swingModeNew) return;
+        // In new swing-gesture mode, phase is WAITING but there is no power bar to show.
+        if (phase == ShotPhase.WAITING && swingModeNew) return;
 
-        float height = isPowerLocked ? lockedPower : (isCharging ? spaceHoldTime : 0f);
-        if (height <= 0 && !isCharging && !isPowerLocked && !waitingForMinigame) return;
+        float height = phase == ShotPhase.POWER_LOCKED ? lockedPower : (phase == ShotPhase.CHARGING ? spaceHoldTime : 0f);
+        if (height <= 0 && phase != ShotPhase.CHARGING && phase != ShotPhase.POWER_LOCKED && phase != ShotPhase.WAITING) return;
 
         float dist = camPos.dst(ballPos);
         float currentUnitScale = MathUtils.clamp(dist * DISTANCE_SCALE_FACTOR * HUD.UI_SCALE, MIN_RENDER_SCALE, MAX_RENDER_SCALE);
@@ -625,16 +589,16 @@ public class ShotController {
         float vOffset = BASE_VERTICAL_GAP + (currentUnitScale * GAP_SCALE_MODIFIER);
 
         float bulge = 1.0f;
-        if (isPowerLocked || waitingForMinigame) {
+        if (phase == ShotPhase.POWER_LOCKED || phase == ShotPhase.WAITING) {
             bulge = 1.0f + (MathUtils.sin((lockTimer / LOCK_DURATION) * MathUtils.PI) * 0.4f);
-            if (waitingForMinigame) bulge = 1.4f;
-        } else if (isCharging && spaceHoldTime >= MAX_POWER) {
+            if (phase == ShotPhase.WAITING) bulge = 1.4f;
+        } else if (phase == ShotPhase.CHARGING && spaceHoldTime >= MAX_POWER) {
             bulge = 1.2f + (MathUtils.sin(animationTimer * 18f) * 0.2f);
         }
 
-        float displayH = waitingForMinigame ? lockedPower : height;
+        float displayH = phase == ShotPhase.WAITING ? lockedPower : height;
 
-        if (isCharging || isPowerLocked || waitingForMinigame) {
+        if (phase == ShotPhase.CHARGING || phase == ShotPhase.POWER_LOCKED || phase == ShotPhase.WAITING) {
             maxPowerGhost.transform.setToTranslation(ballPos.x, ballPos.y + vOffset + (MAX_POWER * currentUnitScale / 2f), ballPos.z);
             maxPowerGhost.transform.set(maxPowerGhost.transform).scale(currentUnitScale * 1.1f, MAX_POWER * currentUnitScale, currentUnitScale * 1.1f);
             batch.render(maxPowerGhost, env);
@@ -642,8 +606,8 @@ public class ShotController {
 
         if (displayH > 0) {
             Color color = displayH < (MAX_POWER / 2) ? Color.GREEN.cpy().lerp(Color.YELLOW, displayH / (MAX_POWER / 2)) : Color.YELLOW.cpy().lerp(Color.RED, (displayH - (MAX_POWER / 2)) / (MAX_POWER / 2));
-            color.a = (isPowerLocked || waitingForMinigame) ? 0.85f : 1.0f;
-            if (isPowerLocked || waitingForMinigame) color.lerp(Color.WHITE, 0.5f);
+            color.a = (phase == ShotPhase.POWER_LOCKED || phase == ShotPhase.WAITING) ? 0.85f : 1.0f;
+            if (phase == ShotPhase.POWER_LOCKED || phase == ShotPhase.WAITING) color.lerp(Color.WHITE, 0.5f);
 
             powerBarInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
             ((BlendingAttribute) powerBarInstance.materials.get(0).get(BlendingAttribute.Type)).opacity = color.a;
@@ -655,7 +619,7 @@ public class ShotController {
     }
 
     public boolean isCharging() {
-        return isCharging || isPowerLocked || waitingForMinigame || pendingShot;
+        return phase != ShotPhase.IDLE;
     }
 
     /**
@@ -685,15 +649,15 @@ public class ShotController {
         float absContact = Math.abs(s.contactOffset);
         float contactFactor;
         if (isPutter) {
-            float excess = Math.max(0f, absContact - putterContactThreshold);
-            float range  = Math.max(0.01f, 1f - putterContactThreshold);
+            float excess = Math.max(0f, absContact - difficultyParams.putterContactThreshold);
+            float range  = Math.max(0.01f, 1f - difficultyParams.putterContactThreshold);
             contactFactor = 1f - ((excess / range) * 0.35f); // max 35% penalty at full heel/toe
         } else {
             // Sweet spot: no quality penalty until contact exceeds the difficulty threshold.
             // Beyond it, penalty rises to max 60% at extreme heel/toe — steepness is constant;
             // only the zero-penalty zone widens at easier difficulties.
-            float excess = Math.max(0f, absContact - swingContactSweetSpot);
-            float range  = Math.max(0.01f, 1f - swingContactSweetSpot);
+            float excess = Math.max(0f, absContact - difficultyParams.contactSweetSpot);
+            float range  = Math.max(0.01f, 1f - difficultyParams.contactSweetSpot);
             contactFactor = 1f - ((excess / range) * 0.6f);
         }
 
@@ -712,9 +676,9 @@ public class ShotController {
         // Putters have a flat wide face — skip.
         // shankAngleDeg is signed: positive = LEFT (heel), negative = RIGHT (toe).
         // loftMult = 0.1f: a shanked ball skips out low, not lobbed up.
-        if (!isPutter && s.contactOffset < -swingShankThreshold) {
+        if (!isPutter && s.contactOffset < -difficultyParams.shankThreshold) {
             // Heel shank — ball fires LEFT
-            float t = (absContact - swingShankThreshold) / (1f - swingShankThreshold);
+            float t = (absContact - difficultyParams.shankThreshold) / (1f - difficultyParams.shankThreshold);
             MinigameResult shank = new MinigameResult();
             shank.rating        = MinigameResult.Rating.ABYSMAL;
             shank.shankAngleDeg = MathUtils.lerp(30f, 75f, t);   // positive = LEFT
@@ -725,9 +689,9 @@ public class ShotController {
             Gdx.app.log("SwingDebug", String.format("[SHANK-HEEL] contact=%.2f → %.0f° LEFT", s.contactOffset, shank.shankAngleDeg));
             return shank;
         }
-        if (!isPutter && s.contactOffset > swingShankThreshold) {
+        if (!isPutter && s.contactOffset > difficultyParams.shankThreshold) {
             // Toe shank — ball fires RIGHT
-            float t = (s.contactOffset - swingShankThreshold) / (1f - swingShankThreshold);
+            float t = (s.contactOffset - difficultyParams.shankThreshold) / (1f - difficultyParams.shankThreshold);
             MinigameResult shank = new MinigameResult();
             shank.rating        = MinigameResult.Rating.ABYSMAL;
             shank.shankAngleDeg = -MathUtils.lerp(30f, 75f, t);  // negative = RIGHT
@@ -748,15 +712,15 @@ public class ShotController {
         // B1 is difficulty-scaled (NOVICE=4°, TOUR_PRO=2°) so larger paths are needed to
         // shape a shot on easier settings, while pros see amplified feedback quickly.
         float absPath     = Math.abs(s.pathDeg);
-        float b1          = swingPathBreakpoint1;
+        float b1          = difficultyParams.pathBreakpoint1;
         float effectivePath = Math.signum(s.pathDeg) *
                 (Math.min(absPath, b1) + Math.max(0f, absPath - b1) * 2f);
-        // swingPathScale still applies uniformly — Tour Pro gets full sensitivity everywhere.
-        float scaledPathDeg = effectivePath * swingPathScale;
+        // pathScale still applies uniformly — Tour Pro gets full sensitivity everywhere.
+        float scaledPathDeg = effectivePath * difficultyParams.pathScale;
         float pathAccuracy = (scaledPathDeg / 15f) * (1f - absContact * 0.5f);
         // Gear effect: toe opens the face (fade), heel closes it (draw).
         // Putter base (0.2) is smaller — short putts curve less. Both scaled by difficulty.
-        float gearScale = (isPutter ? 0.2f : 0.5f) * swingPathScale;
+        float gearScale = (isPutter ? 0.2f : 0.5f) * difficultyParams.pathScale;
         r.accuracy = MathUtils.clamp(pathAccuracy + s.contactOffset * gearScale, -1f, 1f);
 
         // ── Follow-through spin contribution ──────────────────────────────────
@@ -767,7 +731,7 @@ public class ShotController {
         // Putter: scaled down by 0.2× — short putts are barely affected by follow-through.
         {
             float absFt       = Math.abs(s.followThroughAngleDeg);
-            float ftThresh    = swingFtAngleThreshold;
+            float ftThresh    = difficultyParams.ftAngleThreshold;
             float effectiveFt = Math.signum(s.followThroughAngleDeg) *
                     (Math.min(absFt, ftThresh) + Math.max(0f, absFt - ftThresh) * 2f);
             float putterScale = isPutter ? 0.2f : 1.0f;
@@ -838,8 +802,8 @@ public class ShotController {
         // Stacks multiplicatively with tempo penalties. Putter skipped — its contact
         // penalty already flows through compositeQuality into powerMod above.
         if (!isPutter) {
-            float excess = Math.max(0f, absContact - swingContactSweetSpot);
-            float range  = Math.max(0.01f, 1f - swingContactSweetSpot);
+            float excess = Math.max(0f, absContact - difficultyParams.contactSweetSpot);
+            float range  = Math.max(0.01f, 1f - difficultyParams.contactSweetSpot);
             float contactPenalty = MathUtils.clamp(excess / range, 0f, 1f);
             r.powerMod *= 1f - contactPenalty * 0.4f;
         }

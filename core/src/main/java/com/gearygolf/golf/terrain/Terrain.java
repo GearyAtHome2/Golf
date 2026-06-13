@@ -25,7 +25,7 @@ import java.util.List;
 
 public class Terrain {
 
-    private final int SIZE_X = 160;
+    private final int SIZE_X;
     private final int SIZE_Z;
     private final int CHUNK_Z = 64;
     private final float SCALE = 1f;
@@ -65,12 +65,17 @@ public class Terrain {
     private int gridCols, gridRows;
     private final Vector3 tempRayDir = new Vector3();
 
-    // Pre-allocated buffers for getTreesAt / getMonolithsAt — callers consume immediately via for-each.
+    // Reusable buffers for getTreesAt / getMonolithsAt — callers consume immediately via for-each.
+    // ArrayList auto-resizes, so these never silently drop items; initial capacities are just hints.
+    // The assert in getNearbyObjects fires if a single query returns an unexpectedly large result,
+    // which would indicate the generator is placing far too many objects in adjacent grid cells.
+    private static final int NEARBY_OVERFLOW_WARN = 200;
     private final List<TerrainObject> nearbyBuffer = new ArrayList<>(50);
     private final List<Tree> treeBuffer = new ArrayList<>(20);
     private final List<Monolith> monolithBuffer = new ArrayList<>(10);
 
-    public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ) {
+    public Terrain(ITerrainGenerator generator, float initialWaterLevel, int dynamicSizeZ, int sizeX) {
+        this.SIZE_X = sizeX;
         this.SIZE_Z = dynamicSizeZ;
         this.waterLevel = initialWaterLevel;
         this.terrainMap = new TerrainType[SIZE_X][SIZE_Z];
@@ -294,6 +299,8 @@ public class Terrain {
                 }
             }
         }
+        assert nearbyBuffer.size() <= NEARBY_OVERFLOW_WARN
+                : "nearbyBuffer unexpectedly large (" + nearbyBuffer.size() + "); check generator object density";
         return nearbyBuffer;
     }
 

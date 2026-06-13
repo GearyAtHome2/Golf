@@ -38,7 +38,7 @@ import com.gearygolf.golf.ball.ShotController;
 import com.gearygolf.golf.ball.ShotDifficulty;
 import com.gearygolf.golf.gameManagers.MenuManager;
 import com.gearygolf.golf.hud.minigame.MinigameController;
-import com.gearygolf.golf.hud.mobile.MobileUIFactory;
+import com.gearygolf.golf.hud.mobile.MobileHUDController;
 import com.gearygolf.golf.hud.renderer.*;
 import com.gearygolf.golf.input.GameInputProcessor;
 import com.gearygolf.golf.input.MobileInputProcessor;
@@ -50,11 +50,10 @@ import com.gearygolf.golf.terrain.Terrain;
 import com.gearygolf.golf.terrain.level.LevelData;
 import com.gearygolf.golf.shot.ShotExportPacket;
 import com.gearygolf.golf.tutorial.TutorialController;
-import com.gearygolf.golf.tutorial.TutorialOverlayRenderer;
 
 public class HUD {
     private final MainMenuRenderer mainMenuRenderer = new MainMenuRenderer();
-    private final TutorialOverlayRenderer tutorialOverlayRenderer = new TutorialOverlayRenderer();
+    private final TutorialHUDCoordinator tutorialCoordinator;
     private LeaderboardUI leaderboardUI;
     private final HighscoreService highscoreService = new HighscoreService();
     private java.util.function.Consumer<GameSession.GameMode> leaderboardPlayDailyCallback;
@@ -65,7 +64,6 @@ public class HUD {
     private final GameConfig config;
     private final MinigameController minigameController = new MinigameController();
     private final VictoryRenderer victoryRenderer = new VictoryRenderer();
-    private com.badlogic.gdx.scenes.scene2d.ui.Label mobileClubLabel;
     private final WindIndicatorRenderer windRenderer = new WindIndicatorRenderer();
     private final GameInfoRenderer gameInfoRenderer = new GameInfoRenderer();
     private final TerrainToastRenderer terrainToastRenderer = new TerrainToastRenderer();
@@ -79,14 +77,12 @@ public class HUD {
     private final NotificationManager notificationManager = new NotificationManager();
     private final ShotDistanceTracker distanceTracker = new ShotDistanceTracker();
     private final HoleTimerRenderer holeTimerRenderer = new HoleTimerRenderer();
-    private Table startMenuTable;
-    private boolean mobileUIInitialized = false;
-    private MobileUIFactory.MobileUIPackage mobileUIPackage;
-    private MainMenuRenderer.MenuState lastMobileMenuState = null;
     private int shotCount = 0;
     private final Vector2 spinDot = new Vector2(0, 0);
     private float distanceDisplayTimer = 0;
     private String distanceText = "";
+    private Club lastRenderedClub = null;
+    private final Color tempDistanceColor = new Color();
     private float seedFeedbackTimer = 0;
     private float shotExportFeedbackTimer = 0;
     private boolean mainMenuRequested = false;
@@ -94,21 +90,24 @@ public class HUD {
     private Skin skin;
     private Stage startMenuStage;
     private Stage pauseMenuStage;
-    private Table gameplayTable;
-    private Table victoryTable;
     private Actor importRetryOverlay;
-    private final SwingOverlay swingOverlay = new SwingOverlay();
+    private final SwingUIController swingUIController;
     private final SpinIndicator spinIndicator;
     private final PreShotDebugActor preShotDebugActor;
-    private TextButton infoToggleBtn;
-    private TextButton scoreboardToggleBtn;
+    private final MobileHUDController mobileHUD;
 
     private GameSession activeSession;
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout layout = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
-    private boolean showInfoDisplay = false;
-    private boolean infoJustToggled = false;
     private final Vector3 tempV3 = new Vector3();
     public static final float UI_SCALE = Platform.isAndroid() ? 2.0f : 1.0f;
+
+    // Distance display: Y offset from top of viewport, in world units, at base font scale.
+    private static final float DISTANCE_TEXT_TOP_OFFSET = 55f;
+
+    // Shot-replay overlay: vertical positions as fractions of viewport height.
+    private static final float SHOT_REPLAY_TITLE_Y  = 0.88f;
+    private static final float SHOT_REPLAY_INFO_Y   = 0.82f;
+    private static final float SHOT_REPLAY_PROMPT_Y = 0.14f;
 
     public HUD(GameConfig config) {
         this.config = config;
@@ -130,6 +129,9 @@ public class HUD {
         this.preShotDebugActor = new PreShotDebugActor(font);
         this.minigameController.setNotificationManager(this.notificationManager);
         this.minigameController.setOnShotFinalized(this::incrementShots);
+        this.swingUIController = new SwingUIController(batch, shapeRenderer, font, viewport);
+        this.mobileHUD = new MobileHUDController(viewport, batch, font, config, spinIndicator, swingUIController);
+        this.tutorialCoordinator = new TutorialHUDCoordinator(batch, shapeRenderer, font, viewport, mobileHUD);
     }
 
     public void setActiveSession(GameSession session) {
@@ -188,6 +190,7 @@ public class HUD {
         leaderboardUI.setPosition(screenW - edgePadding, screenH * 0.42f, com.badlogic.gdx.utils.Align.right);
         leaderboardUI.rebuild(squeeze);
 
+        Table startMenuTable = mobileHUD.getStartMenuTable();
         if (startMenuTable != null) {
             startMenuTable.setTransform(true);
             startMenuTable.setScale(squeeze);
@@ -195,43 +198,12 @@ public class HUD {
     }
 
     public void setupMobileUI(MobileInputProcessor input) {
-        if (mobileUIInitialized) return;
-        this.mobileUIPackage = MobileUIFactory.create(
-                viewport, batch, font, config, input, spinIndicator, preShotDebugActor
-        );
-        this.stage = mobileUIPackage.stage;
-        this.startMenuStage = mobileUIPackage.startMenuStage;
-        this.pauseMenuStage = mobileUIPackage.pauseMenuStage;
-        this.gameplayTable = mobileUIPackage.gameplayTable;
-        this.victoryTable = mobileUIPackage.victoryTable;
-        this.infoToggleBtn = mobileUIPackage.infoToggleBtn;
-        this.scoreboardToggleBtn = mobileUIPackage.scoreboardToggleBtn;
-        this.skin = mobileUIPackage.skin;
-        this.startMenuTable = mobileUIPackage.startMenuTable;
-        this.mobileClubLabel = mobileUIPackage.clubLabel;
-
-        this.infoToggleBtn.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                showInfoDisplay = !showInfoDisplay;
-                infoToggleBtn.setVisible(!showInfoDisplay);
-                infoJustToggled = true;
-            }
-        });
-
-        if (scoreboardToggleBtn != null) {
-            scoreboardToggleBtn.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, Actor actor) {
-                    if (mobileUIPackage.liveScoreboard != null) {
-                        mobileUIPackage.liveScoreboard.setVisible(true);
-                    }
-                    scoreboardToggleBtn.setVisible(false);
-                }
-            });
-        }
-
-        mobileUIInitialized = true;
+        if (mobileHUD.isInitialized()) return;
+        mobileHUD.setup(input, preShotDebugActor);
+        this.stage = mobileHUD.getStage();
+        this.startMenuStage = mobileHUD.getStartMenuStage();
+        this.pauseMenuStage = mobileHUD.getPauseMenuStage();
+        this.skin = mobileHUD.getSkin();
     }
 
     public void renderStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, com.gearygolf.golf.scoreBoard.DailySubmissionCache dailyCache, com.gearygolf.golf.glamour.SoundManager soundManager) {
@@ -269,12 +241,7 @@ public class HUD {
         }
 
         if (startMenuStage != null) {
-            if (Platform.isAndroid()) {
-                if (lastMobileMenuState != menuManager.getCurrentMenuState()) {
-                    setupMobileStartMenu(menuManager, callback, sessions, dailyCache, soundManager);
-                    lastMobileMenuState = menuManager.getCurrentMenuState();
-                }
-            }
+            if (Platform.isAndroid()) mobileHUD.syncStartMenu(menuManager, callback, sessions, dailyCache, soundManager);
             if (leaderboardUI != null) {
                 leaderboardUI.setVisible(menuManager.getCurrentMenuState() == MainMenuRenderer.MenuState.MAIN);
             }
@@ -282,12 +249,6 @@ public class HUD {
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             startMenuStage.draw();
         }
-    }
-
-    private void setupMobileStartMenu(MenuManager menuManager, MenuManager.MenuHandler callback, CompetitiveSessions sessions, com.gearygolf.golf.scoreBoard.DailySubmissionCache dailyCache, com.gearygolf.golf.glamour.SoundManager soundManager) {
-        if (startMenuTable == null) return;
-        startMenuTable.clearChildren();
-        MobileUIFactory.buildStartMenuButtons(startMenuTable, menuManager, callback, sessions, dailyCache, viewport, font, soundManager);
     }
 
     public void renderPauseMenu(LevelData levelData, GameInputProcessor input, GameSession session, boolean blockInput, String lastShotExport) {
@@ -326,77 +287,23 @@ public class HUD {
 
     public void renderPlayingHUD(Club currentClub, Ball ball, boolean isPractice, LevelData levelData, Camera gameCamera, Terrain terrain, GameSession session, GameInputProcessor input, boolean showClubInfo, ShotController shotController) {
         if (batch.isDrawing()) batch.end();
-        boolean isAndroid = Platform.isAndroid();
         float delta = Gdx.graphics.getDeltaTime();
+        boolean shouldShowDebug = updateGameplayState(currentClub, ball, isPractice, terrain, session, input, shotController, gameCamera, delta);
+        renderGameplay(currentClub, ball, isPractice, levelData, gameCamera, terrain, session, input, showClubInfo, shotController, delta, shouldShowDebug);
+    }
+
+    /** Processes input and advances per-frame game state. Returns whether the debug actor should be shown. */
+    private boolean updateGameplayState(Club currentClub, Ball ball, boolean isPractice, Terrain terrain,
+                                        GameSession session, GameInputProcessor input,
+                                        ShotController shotController, Camera gameCamera, float delta) {
+        boolean isAndroid = Platform.isAndroid();
         if (isAndroid) {
-            if (!mobileUIInitialized) setupMobileUI((MobileInputProcessor) input);
+            if (!mobileHUD.isInitialized()) setupMobileUI((MobileInputProcessor) input);
             this.spinDot.set(spinIndicator.getSpinDot());
         }
-        if (mobileClubLabel != null) mobileClubLabel.setText(currentClub.name.toUpperCase());
+        this.lastRenderedClub = currentClub;
         if (!config.swingModeNew) updateSpinInput(delta, input);
-        if (Platform.isAndroid() && mobileUIPackage != null) {
-            boolean inCompetitive = session != null;
-            mobileUIPackage.newMapBtn.setDisabled(inCompetitive);
-            mobileUIPackage.newMapBtn.getLabel().setColor(inCompetitive ? Color.GRAY : Color.WHITE);
-            mobileUIPackage.newMapBtn.setColor(inCompetitive ? Color.DARK_GRAY : Color.WHITE);
-            if (mobileUIPackage.difficultyBtn != null) {
-                mobileUIPackage.difficultyBtn.setDisabled(inCompetitive);
-                mobileUIPackage.difficultyBtn.getLabel().setColor(inCompetitive ? Color.GRAY : Color.WHITE);
-                mobileUIPackage.difficultyBtn.setColor(inCompetitive ? Color.GRAY : Color.WHITE);
-                mobileUIPackage.difficultyBtn.setText("DIFFICULTY: " + config.difficulty.name());
-            }
-            if (!config.difficulty.hasClubInfo()) showInfoDisplay = false;
-            if (infoToggleBtn != null) {
-                boolean hasInfo = config.difficulty.hasClubInfo();
-                infoToggleBtn.setVisible(!showInfoDisplay);
-                infoToggleBtn.setDisabled(!hasInfo);
-                infoToggleBtn.getLabel().setColor(hasInfo ? Color.WHITE : Color.GRAY);
-                infoToggleBtn.setColor(hasInfo ? Color.WHITE : Color.DARK_GRAY);
-            }
-            boolean isMultiplayer = session != null && session.getMode() == GameSession.GameMode.MULTIPLAYER_9;
-            if (scoreboardToggleBtn != null) {
-                boolean sbShowing = mobileUIPackage.liveScoreboard != null && mobileUIPackage.liveScoreboard.isVisible();
-                scoreboardToggleBtn.setVisible(isMultiplayer && !sbShowing);
-            }
-            setUtilityButtonState(mobileUIPackage.projectBtn, config.difficulty.hasShotProjection());
-            setUtilityButtonState(mobileUIPackage.distanceBtn, config.difficulty.hasRangeFinder());
-            if (mobileUIPackage.maxHitBtn != null)
-                mobileUIPackage.maxHitBtn.setVisible(!config.swingModeNew);
-            if (mobileUIPackage.hitBtn != null) {
-                boolean swingActive = config.swingModeNew && shotController.isCharging();
-                mobileUIPackage.hitBtn.setColor(swingActive ? Color.YELLOW : Color.WHITE);
-            }
-            if (mobileUIPackage.testSwingBtn != null)
-//                mobileUIPackage.testSwingBtn.setVisible(config.swingModeNew);todo: this test swing button has been temporarily disabled for release
-
-            // During swing view (gesture + overview): hide all non-essential elements.
-            // Only HIT and TEST remain visible so the player can read the overview undistracted.
-            if (config.swingModeNew && swingOverlay.isActive()) {
-                if (mobileUIPackage.leftPanel != null)
-                    mobileUIPackage.leftPanel.setVisible(false);
-                if (mobileUIPackage.arrowContainer != null)
-                    mobileUIPackage.arrowContainer.setVisible(false);
-                if (mobileUIPackage.resetBallBtn != null)
-                    mobileUIPackage.resetBallBtn.setVisible(false);
-                if (mobileUIPackage.newMapBtn != null)
-                    mobileUIPackage.newMapBtn.setVisible(false);
-                if (infoToggleBtn != null)
-                    infoToggleBtn.setVisible(false);
-                if (scoreboardToggleBtn != null)
-                    scoreboardToggleBtn.setVisible(false);
-            } else if (config.swingModeNew) {
-                // Restore elements hidden above when swing view exits.
-                if (mobileUIPackage.leftPanel != null)
-                    mobileUIPackage.leftPanel.setVisible(true);
-                if (mobileUIPackage.arrowContainer != null)
-                    mobileUIPackage.arrowContainer.setVisible(true);
-                if (mobileUIPackage.resetBallBtn != null)
-                    mobileUIPackage.resetBallBtn.setVisible(true);
-                if (mobileUIPackage.newMapBtn != null)
-                    mobileUIPackage.newMapBtn.setVisible(true);
-                // infoToggleBtn and scoreboardToggleBtn already managed above; don't double-set
-            }
-        }
+        if (isAndroid) mobileHUD.updateButtonStates(currentClub, session, shotController);
         if (input.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE) && config.difficulty.hasRangeFinder()) {
             distanceText = String.format("RANGE: %.1f yds", ball.getFlatDistanceToHole(terrain));
             distanceDisplayTimer = 3.0f;
@@ -406,6 +313,15 @@ public class HUD {
         preShotDebugActor.update(terrain, ball, gameCamera);
         boolean shouldShowDebug = (ball.getState() == Ball.State.STATIONARY);
         preShotDebugActor.setVisible(!isAndroid && shouldShowDebug);
+        return shouldShowDebug;
+    }
+
+    /** Draws all gameplay HUD elements for the current frame. */
+    private void renderGameplay(Club currentClub, Ball ball, boolean isPractice, LevelData levelData,
+                                Camera gameCamera, Terrain terrain, GameSession session,
+                                GameInputProcessor input, boolean showClubInfo, ShotController shotController,
+                                float delta, boolean shouldShowDebug) {
+        boolean isAndroid = Platform.isAndroid();
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
@@ -469,12 +385,12 @@ public class HUD {
     }
 
     private void renderOverlays(Club currentClub, Camera gameCamera, Terrain terrain, GameInputProcessor input, float delta, boolean showClubInfo, ShotController shotController) {
-        if (mobileUIInitialized && stage != null && Platform.isAndroid()) {
+        if (mobileHUD.isInitialized() && stage != null && Platform.isAndroid()) {
             stage.act(delta);
             stage.draw();
-            if (showInfoDisplay) {
+            if (mobileHUD.isShowingInfo()) {
                 renderClubInfo(currentClub);
-                handleMobileInfoClick(input);
+                mobileHUD.handleInfoClick(input);
             }
             if (!config.swingModeNew && spinIndicator.isBigModeActive()) {
                 batch.begin();
@@ -497,18 +413,6 @@ public class HUD {
         }
         if (!config.swingModeNew && minigameController.isActive()) {
             minigameController.updateAndDraw(delta, gameCamera, terrain, spinDot, config.animSpeed, config.difficulty, shapeRenderer, batch, font, viewport, input, shotController);
-        }
-    }
-
-    private void handleMobileInfoClick(GameInputProcessor input) {
-        if (Gdx.input.justTouched()) {
-            tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            viewport.unproject(tempV3);
-            if (isTouchInsideClubInfo(tempV3.x, tempV3.y)) {
-                showInfoDisplay = false;
-                if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
-                if (input instanceof MobileInputProcessor mobileInput) mobileInput.consumeCurrentTouch();
-            }
         }
     }
 
@@ -538,7 +442,7 @@ public class HUD {
             float fontSize = baseScale * 0.6f;
             font.getData().setScale(fontSize);
             layout.setText(font, distanceText);
-            UIUtils.drawShadowedText(batch, font, distanceText, (viewport.getWorldWidth() / 2f) - (layout.width / 2f), viewport.getWorldHeight() - (40 * (fontSize / 0.6f)), new Color(1, 1, 0, Math.min(1, distanceDisplayTimer)));
+            UIUtils.drawShadowedText(batch, font, distanceText, (viewport.getWorldWidth() / 2f) - (layout.width / 2f), viewport.getWorldHeight() - (DISTANCE_TEXT_TOP_OFFSET * (fontSize / 0.6f)), tempDistanceColor.set(1, 1, 0, Math.min(1, distanceDisplayTimer)));
             font.getData().setScale(1.0f);
         }
     }
@@ -573,21 +477,7 @@ public class HUD {
     }
 
     public void renderVictory(int shots, LevelData levelData, GameSession session, boolean uploadDone, boolean isTutorial) {
-        if (gameplayTable != null) gameplayTable.setVisible(false);
-        if (infoToggleBtn != null) infoToggleBtn.setVisible(false);
-        if (victoryTable != null) victoryTable.setVisible(true);
-        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null)
-            mobileUIPackage.arrowContainer.setVisible(false);
-
-        if (mobileUIPackage != null && Platform.isAndroid()) {
-            boolean isFinished  = (session != null && session.isFinished());
-            boolean isDaily     = (session != null && isDailyMode(session.getMode()));
-            boolean isStandard18 = (session != null && session.getMode() == GameSession.GameMode.STANDARD_18);
-            mobileUIPackage.nextLevelBtn.setVisible(!isTutorial && !isFinished);
-            mobileUIPackage.submitScoreBtn.setVisible(!isTutorial && isFinished && isDaily);
-            mobileUIPackage.uploadScoreBtn.setVisible(!isTutorial && isFinished && isStandard18 && !uploadDone);
-            mobileUIPackage.mainMenuBtn.setVisible(!isTutorial && isFinished);
-        }
+        if (Platform.isAndroid()) mobileHUD.onVictoryShown(isTutorial, session, uploadDone);
 
         batch.begin();
         victoryRenderer.render(batch, shapeRenderer, font, viewport, shots, levelData, session, uploadDone);
@@ -599,24 +489,8 @@ public class HUD {
         }
     }
 
-    private boolean isDailyMode(GameSession.GameMode mode) {
-        return mode == GameSession.GameMode.DAILY_18
-            || mode == GameSession.GameMode.DAILY_9
-            || mode == GameSession.GameMode.DAILY_PAR3
-            || mode == GameSession.GameMode.DAILY_PAR4
-            || mode == GameSession.GameMode.DAILY_PAR5;
-    }
-
     public void reset() {
-        if (gameplayTable != null) gameplayTable.setVisible(true);
-        if (victoryTable != null) victoryTable.setVisible(false);
-        if (mobileUIPackage != null && mobileUIPackage.arrowContainer != null)
-            mobileUIPackage.arrowContainer.setVisible(true);
-        showInfoDisplay = false;
-        if (infoToggleBtn != null) infoToggleBtn.setVisible(true);
-        if (scoreboardToggleBtn != null) scoreboardToggleBtn.setVisible(false);
-        if (mobileUIPackage != null && mobileUIPackage.liveScoreboard != null)
-            mobileUIPackage.liveScoreboard.setVisible(false);
+        if (Platform.isAndroid()) mobileHUD.resetForNewHole();
         minigameController.reset();
         distanceDisplayTimer = 0;
         seedFeedbackTimer = 0;
@@ -672,7 +546,7 @@ public class HUD {
         String title = "-- SHOT REPLAY --";
         layout.setText(font, title);
         font.setColor(Color.YELLOW);
-        font.draw(batch, title, (screenW - layout.width) / 2f, screenH * 0.88f);
+        font.draw(batch, title, (screenW - layout.width) / 2f, screenH * SHOT_REPLAY_TITLE_Y);
 
         // Archetype + hole
         font.getData().setScale(scale);
@@ -681,7 +555,7 @@ public class HUD {
             String info = archetypeName + "  |  HOLE " + (replayData.holeIndex + 1);
             layout.setText(font, info);
             font.setColor(Color.WHITE);
-            font.draw(batch, info, (screenW - layout.width) / 2f, screenH * 0.82f);
+            font.draw(batch, info, (screenW - layout.width) / 2f, screenH * SHOT_REPLAY_INFO_Y);
         }
 
         // Launch prompt
@@ -689,7 +563,7 @@ public class HUD {
         String prompt = Platform.isAndroid() ? "TAP THE SCREEN TO LAUNCH" : "PRESS [SPACE] TO LAUNCH";
         layout.setText(font, prompt);
         font.setColor(new Color(0.4f, 1f, 0.4f, 1f));
-        font.draw(batch, prompt, (screenW - layout.width) / 2f, screenH * 0.14f);
+        font.draw(batch, prompt, (screenW - layout.width) / 2f, screenH * SHOT_REPLAY_PROMPT_Y);
 
         font.getData().setScale(1f);
         font.setColor(Color.WHITE);
@@ -810,6 +684,7 @@ public class HUD {
         if (batch.isDrawing()) batch.end();
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
+        batch.enableBlending();
         shapeRenderer.setProjectionMatrix(viewport.getCamera().combined);
         rankInfoRenderer.render(batch, shapeRenderer, font, viewport, mainMenuRenderer.getBadge());
     }
@@ -853,23 +728,16 @@ public void renderInstructions(GameInputProcessor input) {
     }
 
     public boolean isTouchInsideClubInfo(float x, float y) {
-        boolean isAndroid = Platform.isAndroid();
-        float width = viewport.getWorldWidth() * (isAndroid ? 0.22f : 0.25f);
-        float height = viewport.getWorldHeight() * (isAndroid ? 0.18f : 0.25f);
-        float boxX = viewport.getWorldWidth() - width - viewport.getWorldWidth() * 0.016f;
-        float boxY = viewport.getWorldHeight() * (isAndroid ? 0.22f : 0.175f);
+        if (Platform.isAndroid()) return mobileHUD.isTouchInsideClubInfo(x, y);
+        float width  = viewport.getWorldWidth()  * 0.25f;
+        float height = viewport.getWorldHeight() * 0.25f;
+        float boxX   = viewport.getWorldWidth()  - width - viewport.getWorldWidth() * 0.016f;
+        float boxY   = viewport.getWorldHeight() * 0.175f;
         return x >= boxX && x <= boxX + width && y >= boxY && y <= boxY + height;
     }
 
     public void setClubInfoVisible(boolean visible) {
-        if (infoToggleBtn != null) infoToggleBtn.setVisible(!visible);
-    }
-
-    private void setUtilityButtonState(TextButton btn, boolean available) {
-        if (btn == null) return;
-        btn.setDisabled(!available);
-        btn.getLabel().setColor(available ? Color.WHITE : Color.GRAY);
-        btn.setColor(available ? Color.WHITE : Color.DARK_GRAY);
+        if (Platform.isAndroid()) mobileHUD.setClubInfoVisible(visible);
     }
 
     public boolean isMinigameComplete() {
@@ -942,6 +810,7 @@ public void renderInstructions(GameInputProcessor input) {
         root.addActor(panel);
         importRetryOverlay = root;
         startMenuStage.addActor(root);
+        Table startMenuTable = mobileHUD.getStartMenuTable();
         if (startMenuTable != null) startMenuTable.setTouchable(Touchable.disabled);
     }
 
@@ -950,6 +819,7 @@ public void renderInstructions(GameInputProcessor input) {
             importRetryOverlay.remove();
             importRetryOverlay = null;
         }
+        Table startMenuTable = mobileHUD.getStartMenuTable();
         if (startMenuTable != null) startMenuTable.setTouchable(Touchable.childrenOnly);
     }
 
@@ -969,6 +839,10 @@ public void renderInstructions(GameInputProcessor input) {
         spinIndicator.reset();
     }
 
+    public SwingUIController getSwingUIController() {
+        return swingUIController;
+    }
+
     public Stage getStage() {
         return stage;
     }
@@ -981,11 +855,8 @@ public void renderInstructions(GameInputProcessor input) {
         return pauseMenuStage;
     }
 
-    /**
-     * Forces the mobile start menu buttons to rebuild on next render (e.g. after a resubmit).
-     */
     public void invalidateMobileMenuState() {
-        lastMobileMenuState = null;
+        mobileHUD.invalidateMenuState();
     }
 
     private Skin initSkin() {
@@ -1083,147 +954,85 @@ public void renderInstructions(GameInputProcessor input) {
     }
 
     /**
+     * Computes the screen bounds of the RANGE distance display (top-centre text).
+     * Returns null when the display is not currently visible.
+     */
+    private com.badlogic.gdx.math.Rectangle getRangeDisplayBounds() {
+        if (distanceDisplayTimer <= 0 || distanceText == null || distanceText.isEmpty()) return null;
+        float rangeScale = Platform.isAndroid() ? 2.8f : 1.8f;
+        float fontSize = rangeScale * 0.6f;
+        font.getData().setScale(fontSize);
+        layout.setText(font, distanceText);
+        float tw = layout.width;
+        float th = layout.height;
+        font.getData().setScale(1.0f);
+        float w = viewport.getWorldWidth();
+        float h = viewport.getWorldHeight();
+        float textX = w / 2f - tw / 2f;
+        float textY = h - DISTANCE_TEXT_TOP_OFFSET * (fontSize / 0.6f); // ascent line
+        float pad = 8f;
+        return new com.badlogic.gdx.math.Rectangle(textX - pad, textY - th - pad, tw + pad * 2f, th + pad * 2f);
+    }
+
+    /**
+     * Computes the screen bounds of the club-name text drawn bottom-right by GameInfoRenderer.
+     * Returns null when no club has been rendered yet.
+     */
+    private com.badlogic.gdx.math.Rectangle getClubNameDisplayBounds() {
+        if (lastRenderedClub == null) return null;
+        float h = viewport.getWorldHeight();
+        float w = viewport.getWorldWidth();
+        boolean isAndroid = Platform.isAndroid();
+        float baseScale = (h * 0.0015f) * (isAndroid ? 1.5f : 1.0f);
+        float lineSpacing = h * (isAndroid ? 0.06f : 0.045f);
+        float bottomY = h * 0.06f;
+        float clubYOffset = isAndroid ? (lineSpacing * 2.05f) : (lineSpacing * 1.8f);
+        float textY = bottomY + clubYOffset; // ascent line
+        font.getData().setScale(baseScale);
+        String clubName = lastRenderedClub.name().replace("_", " ");
+        layout.setText(font, clubName);
+        float tw = layout.width;
+        float th = layout.height;
+        font.getData().setScale(1.0f);
+        float rightX = w * 0.98f;
+        float pad = 6f;
+        return new com.badlogic.gdx.math.Rectangle(rightX - tw - pad, textY - th - pad, tw + pad * 2f, th + pad * 2f);
+    }
+
+    /**
      * Draws the tutorial step overlay on top of the gameplay UI.
      *
      * @param wind Current level wind (for aim-hint text), may be null.
      */
     public void renderTutorialOverlay(TutorialController.Step step, com.badlogic.gdx.math.Vector3 wind, float aimYawDelta) {
-        com.badlogic.gdx.math.Rectangle bounds = getTutorialHighlightBounds(step);
-        tutorialOverlayRenderer.render(batch, shapeRenderer, font, viewport, step, bounds, wind, aimYawDelta);
+        com.badlogic.gdx.math.Rectangle highlightBounds = tutorialCoordinator.getTutorialHighlightBounds(step, getClubNameDisplayBounds());
+        com.badlogic.gdx.math.Rectangle rangeBounds =
+                (step == TutorialController.Step.STEP_2_AIM) ? getRangeDisplayBounds() : null;
+        tutorialCoordinator.renderOverlay(step, wind, aimYawDelta, highlightBounds, rangeBounds);
     }
 
-    /**
-     * Returns true if the player just tapped/clicked the tutorial NEXT button this frame.
-     * The button is rendered directly by TutorialOverlayRenderer; this method hit-tests
-     * the touch/click position against those bounds via viewport unprojection.
-     */
     public boolean isNextButtonHit() {
-        if (!Gdx.input.justTouched()) return false;
-        com.badlogic.gdx.math.Rectangle btnBounds = tutorialOverlayRenderer.getLastNextButtonBounds();
-        if (btnBounds == null || btnBounds.width == 0) return false;
-        com.badlogic.gdx.math.Vector3 touch = viewport.unproject(
-                new com.badlogic.gdx.math.Vector3(Gdx.input.getX(), Gdx.input.getY(), 0));
-        return btnBounds.contains(touch.x, touch.y);
+        return tutorialCoordinator.isNextButtonHit();
     }
 
-    /**
-     * Returns the stage-coordinate bounds of the button highlighted for the given tutorial step,
-     * or null if the step has no specific button spotlight.
-     */
     public com.badlogic.gdx.math.Rectangle getTutorialHighlightBounds(TutorialController.Step step) {
-        if (!Platform.isAndroid() || mobileUIPackage == null || step == null) return null;
-        com.badlogic.gdx.scenes.scene2d.Actor actor = switch (step) {
-            case STEP_1_DISTANCE -> mobileUIPackage.distanceBtn;
-            case STEP_3_INFO -> mobileUIPackage.infoToggleBtn;
-            case STEP_4_CLUB -> mobileUIPackage.clubArrowRow;
-            case STEP_5_POWER -> mobileUIPackage.maxHitBtn;
-            case STEP_6_HIT, STEP_10_AIM -> mobileUIPackage.hitBtn;
-            case STEP_8_PUTTER -> mobileUIPackage.clubArrowRow;
-            case STEP_9_PROJECT -> mobileUIPackage.projectBtn;
-            case STEP_L2_1_SPINDICATOR, STEP_L3_1_SPINDICATOR -> spinIndicator;
-            default -> null;
-        };
-        if (actor == null) return null;
-        com.badlogic.gdx.math.Vector2 pos = new com.badlogic.gdx.math.Vector2(0, 0);
-        actor.localToStageCoordinates(pos);
-        return new com.badlogic.gdx.math.Rectangle(pos.x, pos.y, actor.getWidth(), actor.getHeight());
+        return tutorialCoordinator.getTutorialHighlightBounds(step, getClubNameDisplayBounds());
     }
 
-    /**
-     * Returns true (once) if the INFO button was tapped on mobile since the last call.
-     */
     public boolean consumeInfoToggled() {
-        boolean v = infoJustToggled;
-        infoJustToggled = false;
-        return v;
+        return Platform.isAndroid() && mobileHUD.consumeInfoToggled();
     }
 
-    /**
-     * Disables all gameplay buttons except the one needed for the current tutorial step.
-     * Pass {@code null} to re-enable all buttons (e.g. when tutorial is inactive).
-     */
-    public void clearTutorialBlock(){
-        if (!Platform.isAndroid() || mobileUIPackage == null) return;
-        setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
+    public void clearTutorialBlock() {
+        tutorialCoordinator.clearTutorialBlock();
     }
 
     public void applyTutorialButtonBlock(TutorialController.Step step) {
-        if (!Platform.isAndroid() || mobileUIPackage == null) return;
-
-        // Non-blocking steps (silent watch steps, hint-bar steps, info steps):
-        // re-enable all buttons so the player can interact freely.
-        if (step == null || !step.isBlockingInput()) {
-            setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
-            return;
-        }
-
-        // Blocking steps only — disable all buttons first, then re-enable the target.
-        setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
-
-        switch (step) {
-            case STEP_1_DISTANCE:
-                if (mobileUIPackage.distanceBtn != null)
-                    mobileUIPackage.distanceBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
-                break;
-            case STEP_3_INFO:
-                if (mobileUIPackage.infoToggleBtn != null)
-                    mobileUIPackage.infoToggleBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
-                break;
-            case STEP_L2_1_SPINDICATOR:
-            case STEP_L2_1B_AIM:
-                // SpinIndicator is not in the standard button set — stays touchable automatically.
-                // All other gameplay buttons remain disabled so the player focuses on the spindicator.
-                break;
-            case STEP_4_CLUB:
-            case STEP_8_PUTTER:
-                if (mobileUIPackage.arrowContainer != null)
-                    mobileUIPackage.arrowContainer.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.childrenOnly);
-                break;
-            case STEP_5_POWER:
-                if (mobileUIPackage.maxHitBtn != null)
-                    mobileUIPackage.maxHitBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
-                break;
-            case STEP_6_HIT:
-            case STEP_10_AIM:
-                if (mobileUIPackage.hitBtn != null)
-                    mobileUIPackage.hitBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
-                break;
-            case STEP_9_PROJECT:
-                if (mobileUIPackage.projectBtn != null)
-                    mobileUIPackage.projectBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.enabled);
-                break;
-        }
+        tutorialCoordinator.applyTutorialButtonBlock(step);
     }
 
-    private void setGameplayButtonsTouchable(com.badlogic.gdx.scenes.scene2d.Touchable t) {
-        if (mobileUIPackage == null) return;
-        if (mobileUIPackage.hitBtn != null) mobileUIPackage.hitBtn.setTouchable(t);
-        if (mobileUIPackage.maxHitBtn != null) mobileUIPackage.maxHitBtn.setTouchable(t);
-        if (mobileUIPackage.distanceBtn != null) mobileUIPackage.distanceBtn.setTouchable(t);
-        if (mobileUIPackage.infoToggleBtn != null) mobileUIPackage.infoToggleBtn.setTouchable(t);
-        if (mobileUIPackage.projectBtn != null) mobileUIPackage.projectBtn.setTouchable(t);
-        if (mobileUIPackage.resetBallBtn != null) mobileUIPackage.resetBallBtn.setTouchable(t);
-        if (mobileUIPackage.newMapBtn != null) mobileUIPackage.newMapBtn.setTouchable(t);
-        // arrowContainer is fillParent (covers the whole screen). Setting it to Touchable.enabled
-        // would make it intercept all touches as a full-screen absorber, blocking gameplayTable buttons.
-        // Use childrenOnly so only the actual arrow buttons inside it are hittable.
-        if (mobileUIPackage.arrowContainer != null) {
-            mobileUIPackage.arrowContainer.setTouchable(
-                t == com.badlogic.gdx.scenes.scene2d.Touchable.disabled
-                    ? com.badlogic.gdx.scenes.scene2d.Touchable.disabled
-                    : com.badlogic.gdx.scenes.scene2d.Touchable.childrenOnly
-            );
-        }
-    }
-
-    /**
-     * Feeds fresh player data to the live multiplayer scoreboard.
-     * Call every frame (or on each poll) while a multiplayer session is active.
-     * No-op when not on Android or when the scoreboard actor is not yet created.
-     */
     public void updateLiveScoreboard(java.util.List<LiveScoreboardActor.ScoreEntry> entries) {
-        if (mobileUIPackage == null || mobileUIPackage.liveScoreboard == null) return;
-        mobileUIPackage.liveScoreboard.update(entries);
+        mobileHUD.updateLiveScoreboard(entries);
     }
 
     private static final com.badlogic.gdx.graphics.Color[] REMOTE_TAG_COLORS = {
@@ -1332,86 +1141,6 @@ public void renderInstructions(GameInputProcessor input) {
 
         font.getData().setScale(1f);
         font.setColor(com.badlogic.gdx.graphics.Color.WHITE);
-    }
-
-    public void updateSwingOverlay(boolean inSwingView) {
-        swingOverlay.setActive(inSwingView);
-        swingOverlay.update();
-    }
-
-    public void renderSwingOverlay(com.badlogic.gdx.graphics.Camera gameCamera, Vector3 ballWorldPos) {
-        if (!swingOverlay.isActive()) return;
-        viewport.apply();
-        swingOverlay.render(shapeRenderer, batch, font, viewport, gameCamera, ballWorldPos);
-    }
-
-    public void setSwingTerrainType(com.gearygolf.golf.terrain.Terrain.TerrainType type) {
-        swingOverlay.setTerrainType(type);
-    }
-
-    /** Sets the rendered club head size; larger values make contact more forgiving. */
-    public void setSwingClubSize(float w, float h) {
-        swingOverlay.setClubSize(w, h);
-    }
-
-    public void setSwingDivotEnabled(boolean enabled) {
-        swingOverlay.setDivotEnabled(enabled);
-    }
-
-    /** Sets the natural attack angle for the current club before entering swing view. */
-    public void setSwingNaturalAttackAngle(float deg) {
-        swingOverlay.setNaturalAttackAngleDeg(deg);
-    }
-
-    /** Camera aim offset (world units) to pass to CameraController each frame during swing view. */
-    public float getSwingCamAimOffset() {
-        return swingOverlay.getCamAimOffset();
-    }
-
-    public SwingGestureAnalyser getSwingAnalyser() {
-        return swingOverlay.getAnalyser();
-    }
-
-    /**
-     * Sets the base tempo windows for the current shot (club + difficulty) and stores
-     * them in SwingOverlay so attack-angle placement adjustments can narrow them correctly.
-     * Prefer this over getSwingAnalyser().setTempoWindows() for all shot setup calls.
-     */
-    public void setSwingBaseTempoWindows(float perfectFraction, float maxFraction) {
-        swingOverlay.setBaseTempoWindows(perfectFraction, maxFraction);
-    }
-
-    /** Sets the follow-through angle threshold (degrees) for HIGH/NEUTRAL/LOW classification. */
-    public void setSwingFollowThroughThreshold(float degrees) {
-        swingOverlay.setFollowThroughThreshold(degrees);
-    }
-
-    /** Keeps the overview speed display in sync with ShotController.SWING_FULL_POWER_SPEED. */
-    public void setSwingFullPowerSpeed(float speed) {
-        swingOverlay.setFullPowerSpeed(speed);
-    }
-
-    /** Returns true while the swing gesture overlay is the active minigame. */
-    public boolean isSwingViewActive() {
-        return swingOverlay.isActive();
-    }
-
-    /** Returns true while the post-swing overview panel is displayed (waiting for tap to fire). */
-    public boolean isSwingOverviewActive() {
-        return swingOverlay.isShowingOverview();
-    }
-
-    /**
-     * Returns the completed swing result and clears it, or null if not ready.
-     * Consume-once: calling twice in the same frame returns null on the second call.
-     */
-    public SwingResult consumeSwingResult() {
-        return swingOverlay.consumeResult();
-    }
-
-    /** Injects a synthetic result into the overview panel for TEST_SWING debugging. */
-    public void injectTestSwingResult(SwingResult r) {
-        swingOverlay.injectTestResult(r);
     }
 
     public void dispose() {

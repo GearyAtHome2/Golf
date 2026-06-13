@@ -33,14 +33,17 @@ public class TutorialOverlayRenderer {
     private final GlyphLayout layout = new GlyphLayout();
 
     /**
-     * @param btnBounds   Stage-coord bounds of the button to spotlight, or null if no spotlight.
-     * @param wind        Current level wind vector (used for STEP_2_AIM hint text), may be null.
-     * @param aimYawDelta Current camera yaw minus the yaw recorded at STEP_2_AIM start, in degrees.
-     *                    Pass Float.NaN when not at STEP_2_AIM.
+     * @param btnBounds      Stage-coord bounds of the button to spotlight, or null if no spotlight.
+     * @param wind           Current level wind vector (used for STEP_2_AIM hint text), may be null.
+     * @param aimYawDelta    Current camera yaw minus the yaw recorded at STEP_2_AIM start, in degrees.
+     *                       Pass Float.NaN when not at STEP_2_AIM.
+     * @param extraHighlight Additional screen-space rectangle to outline with a gold border (e.g. the
+     *                       RANGE distance text during STEP_2_AIM), or null if not needed.
      */
     public void render(SpriteBatch batch, ShapeRenderer sr, BitmapFont font,
                        Viewport viewport, TutorialController.Step step,
-                       Rectangle btnBounds, Vector3 wind, float aimYawDelta) {
+                       Rectangle btnBounds, Vector3 wind, float aimYawDelta,
+                       Rectangle extraHighlight) {
         if (step == null || !step.isOverlayVisible()) return;
 
         boolean mobile  = Platform.isAndroid();
@@ -79,6 +82,10 @@ public class TutorialOverlayRenderer {
 
         if (step == TutorialController.Step.STEP_2_AIM && !Float.isNaN(aimYawDelta)) {
             drawAimBar(sr, w, h, aimYawDelta, wind);
+        }
+
+        if (extraHighlight != null) {
+            drawHighlightBorder(sr, extraHighlight);
         }
     }
 
@@ -344,8 +351,8 @@ public class TutorialOverlayRenderer {
 
     /** Place the text box above or below the spotlight button, or centred for non-spotlight steps. */
     private float chooseBoxY(float h, TutorialController.Step step, Rectangle btnBounds, float boxH) {
-        if (step.isDimHandledExternally()) {
-            return h - boxH - h * 0.04f; // top of screen, above the large spin overlay
+        if (step.isDimHandledExternally() || step == TutorialController.Step.STEP_4_CLUB) {
+            return h - boxH - h * 0.04f; // top of screen — avoids covering the club name display
         }
         if (!step.isSpotlightStyle() || btnBounds == null) {
             return h * 0.05f; // bottom strip for hint-only / desktop

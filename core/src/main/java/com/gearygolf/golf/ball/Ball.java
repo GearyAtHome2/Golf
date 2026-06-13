@@ -207,12 +207,6 @@ public class Ball {
                 spin.x, spin.y, spin.z);
         }
         physicsStepCount++;
-        if (physicsStepCount % 24 == 0) {
-            Gdx.app.log("DET", String.format("L S%04d %-7s p=%08x,%08x,%08x v=%08x,%08x,%08x",
-                    physicsStepCount, state.name(),
-                    Float.floatToRawIntBits(position.x), Float.floatToRawIntBits(position.y), Float.floatToRawIntBits(position.z),
-                    Float.floatToRawIntBits(velocity.x), Float.floatToRawIntBits(velocity.y), Float.floatToRawIntBits(velocity.z)));
-        }
     }
 
     /** Attach a recorder to capture per-step physics state for determinism testing. */
@@ -293,9 +287,9 @@ public class Ball {
                                 position.x, position.y, position.z, n.x, n.y, n.z, impactDot, pendingBounceImpact, state));
                         velocity.set(BallPhysics.calculateBounceWithSpin(velocity, tempV2, spin, BOUNCE_RESTITUTION, 0.4f, 0f));
                         // Push position horizontally to clear wall geometry
-                        Vector3 wn = new Vector3(n.x, 0, n.z).nor();
-                        wn.set(q(wn.x), 0f, q(wn.z));
-                        if (wn.len() > 0.05f) position.add(tempV1.set(wn).scl(0.15f));
+                        vNormal.set(n.x, 0, n.z).nor();
+                        vNormal.set(q(vNormal.x), 0f, q(vNormal.z));
+                        if (vNormal.len() > 0.05f) position.add(tempV1.set(vNormal).scl(0.15f));
                         hitCooldown = 0.05f;
                         lastInteraction = Interaction.TERRAIN;
                         if (!isGoodShot) renderer.lerpTrailColor(Color.GRAY, 0.4f);

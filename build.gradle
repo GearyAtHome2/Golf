@@ -4,7 +4,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.3.0'
+        classpath 'com.android.tools.build:gradle:8.9.1'
     }
 }
 
@@ -15,7 +15,7 @@ allprojects {
     version = '1.0'
     ext {
         appName = "Golf Game 2026"
-        gdxVersion = '1.12.1'
+        gdxVersion = '1.14.2'
     }
 
     repositories {

@@ -44,4 +44,17 @@ public class MobileUIValues {
     protected static float getEdgePad(Viewport v) { return v.getWorldWidth() * 0.01f; }
     protected static float getStackSpacing(Viewport v) { return v.getWorldHeight() * 0.015f; }
     protected static float getLeftStackTopPad(Viewport v) { return v.getWorldHeight() * 0.31f; }
+
+    // --- START MENU LAYOUT FRACTIONS ---
+    protected static final float MENU_TABLE_WIDTH_FRAC   = 0.485f;
+    protected static final float MENU_PAD_LEFT_FRAC      = 0.016f;
+    protected static final float MENU_PAD_TOP_FRAC       = 0.255f;
+    protected static final float MENU_BUTTON_WIDTH_FRAC  = 0.453f;
+    protected static final float MENU_BUTTON_HEIGHT_FRAC = 0.09f;
+    protected static final float MENU_SPACING_FRAC       = 0.010f;
+    protected static final float MENU_SCROLL_HEIGHT_FRAC = 0.70f;
+
+    // --- CLUB ARROW ROW GAPS ---
+    protected static final float CLUB_ARROW_GAP_INNER_FRAC = 0.02f;  // gap between < and >
+    protected static final float CLUB_ARROW_GAP_OUTER_FRAC = 0.01f;  // gap between outer and inner arrows
 }

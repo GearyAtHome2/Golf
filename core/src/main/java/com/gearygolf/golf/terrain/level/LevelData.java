@@ -73,6 +73,7 @@ public class LevelData {
                 .distance(520, 720)
                 .par(5)
                 .greenSize(28f, 30f)
+                .feature(ArchetypeSpec.TerrainFeature.WHISTLING_ISLES).waterLevel(0f)
         ),
 
         // ── Mid-range ─────────────────────────────────────────────────────────
@@ -87,6 +88,7 @@ public class LevelData {
                 .trees(0.03f, 2.5f, 0.4f).terrain(0.02f, 15f)
                 .fairway(55f, 35f).islands(0f).wiggle(0.25f, 0.06f).cohesion(0.9f)
                 .par45(500, 570, 630, 730)
+                .islandCoastline().smoothRoughAtGreenBorder()
         ),
 
         CLIFFSIDE_BLUFF(new ArchetypeSpec()
@@ -101,6 +103,7 @@ public class LevelData {
                 .bunkers(1, 2, 0.8f)
                 .distance(370, 450)
                 .par(4)
+                .useCliffElevation()
         ),
 
         REDWOOD_FOREST(new ArchetypeSpec()
@@ -128,6 +131,7 @@ public class LevelData {
                 .terrain(0.06f, 12f)
                 .fairway(50f, 0f).undulation(0.28f).wiggle(0.1f, 0.08f).islands(0.4f).cohesion(0.9f)
                 .par45(500, 600, 690, 810)
+                .feature(ArchetypeSpec.TerrainFeature.CRATERS).waterLevel(-10f)
         ),
 
         PLUNGE_CENOTES(new ArchetypeSpec()
@@ -141,6 +145,7 @@ public class LevelData {
                 .fairway(35f, 0f).wiggle(0.1f, 0.1f)
                 .distance(480, 580)
                 .par(4)
+                .feature(ArchetypeSpec.TerrainFeature.CENOTES).waterLevel(-8f)
         ),
 
         ROUGH_HOUGH_BLUFFS(new ArchetypeSpec()
@@ -155,6 +160,7 @@ public class LevelData {
                 .fairway(50f, 28f).undulation(0.4f).wiggle(0.1f, 0.1f)
                 .distance(400, 500)
                 .par(4)
+                .feature(ArchetypeSpec.TerrainFeature.BEACH_BLUFFS).waterLevel(-1f)
         ),
 
         // ── Challenging ───────────────────────────────────────────────────────
@@ -170,6 +176,7 @@ public class LevelData {
                 .fairway(35f, 0f).wiggle(0.4f, 0.3f).islands(0.7f).cohesion(0.42f)
                 .bunkers(1, 1, 2.2f)
                 .par45(580, 680, 750, 860)
+                .bushDensityFalloff()
         ),
 
         SHADOW_CANYON(new ArchetypeSpec()
@@ -196,6 +203,7 @@ public class LevelData {
                 .fairway(60f, 0f).undulation(0.9f).wiggle(0.05f, 0.1f).islands(0.25f).cohesion(1.3f)
                 .bunkers(1, 4, 2.5f, 1.0f)
                 .par45(600, 660, 720, 800)
+                .waterLevel(-2f).spawnMonoliths()
         ),
 
         MOGUL_HIGHLANDS(new ArchetypeSpec()
@@ -210,6 +218,7 @@ public class LevelData {
                 .fairway(40f, 27f).undulation(0.2f).wiggle(0.16f, 0.08f).islands(0.3f).cohesion(0.6f)
                 .bunkers(1, 1, 3.5f)
                 .par45(600, 660, 720, 750)
+                .useMogulNoise()
         ),
 
         WETLANDS(new ArchetypeSpec()
@@ -242,6 +251,8 @@ public class LevelData {
                 .bunkers(2, 3, 1.1f)
                 .distance(520, 660)
                 .par(4)
+                .feature(ArchetypeSpec.TerrainFeature.VINEYARDS).cardinalWaveAngles()
+                .treeStrategy(ArchetypeSpec.TreeStrategy.VINEYARD)
         ),
 
         CLIPPERTON_ROCK(new ArchetypeSpec()
@@ -258,6 +269,7 @@ public class LevelData {
                 .distance(450, 500)
                 .mapWidth(-1)   // terrain grid width matches hole distance
                 .par(4)
+                .feature(ArchetypeSpec.TerrainFeature.CLIPPERTON_ROCK).waterLevel(0f)
         ),
 
         // ── New archetypes — uses the previously-unused terrain algorithms ─────
@@ -277,6 +289,8 @@ public class LevelData {
                 .par(3)
                 .greenSize(20f, 24f)
                 .undulation(1.8f)
+                .feature(ArchetypeSpec.TerrainFeature.OASIS_DUNES)
+                .treeStrategy(ArchetypeSpec.TreeStrategy.OASIS).greenHmapRadius(0.44f)
         ),
 
         STONE_RUN(new ArchetypeSpec()
@@ -293,6 +307,7 @@ public class LevelData {
                 .par45(600, 700, 860, 1150)
                 .greenSize(29f, 32f)
                 .undulation(0.3f)
+                .feature(ArchetypeSpec.TerrainFeature.STONE_RUN)
         ),
         WOODLAND_EDGE(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.SMOOTH_SINE)
@@ -309,6 +324,7 @@ public class LevelData {
                 .par(3)
                 .greenSize(18f, 22f)
                 .undulation(0.2f)
+                .feature(ArchetypeSpec.TerrainFeature.FOREST_EDGE).teeTreeBuffer(20, 5)
         ),
         CYPRESS_BAYOU(new ArchetypeSpec()
                 .algo(TerrainAlgorithm.MULTI_WAVE)
@@ -325,6 +341,8 @@ public class LevelData {
                 .par34(260, 320, 480, 690)
                 .greenSize(28f, 34f)
                 .deepRough(14f)
+                .feature(ArchetypeSpec.TerrainFeature.CYPRESS_BAYOU).waterLevel(0f)
+                .allowMudTrees().treeWaterWading(-0.5f).excludeFeatureGapCells()
         ),
 
         // ── Badlands — dry cracked earth with fissure network and stone patches ──
@@ -347,6 +365,8 @@ public class LevelData {
                 .par(4)
                 .greenSize(22f, 26f)
                 .undulation(0.3f)
+                .feature(ArchetypeSpec.TerrainFeature.BADLANDS).waterLevel(-15f)
+                .sandPass(0.22f).roughToStone()
         ),
 
 //         ── Table Mountain — custom TableMountainGenerator ────────────────────
@@ -369,6 +389,7 @@ public class LevelData {
                 .par(4)
                 .greenSize(20f, 24f)
                 .undulation(0.4f)
+                .feature(ArchetypeSpec.TerrainFeature.TABLE_MOUNTAIN).skipFairway().deepRoughTreesOnly()
         ),
 
 //         ── Goldsmith Bowl — radial bowl centred on the green ────────────────
@@ -390,6 +411,34 @@ public class LevelData {
                 .distance(260, 360)
                 .bunkers(1, 3, 2.0f)
                 .greenSize(18f, 20f)
+                .feature(ArchetypeSpec.TerrainFeature.GOLDSMITH_BOWL)
+        ),
+
+//         ── Dogleg River — square map, tee bottom-left, green top-right ─────────
+//         DoglegRiverGenerator carves a two-leg fairway arc: straight up the left
+//         side then bending right to the green.  An elliptical pond sits in the
+//         interior of the bend below water level, forcing the player to shape a
+//         shot around it rather than taking the direct diagonal line.
+        DOGLEG_RIVER(new ArchetypeSpec()
+                .algo(TerrainAlgorithm.MULTI_WAVE)
+                .treeScheme(TreeScheme.OAK).treeSchemeAlt(TreeScheme.BIRCH)
+                .mudHeight(-99f)
+                .difficulty(4f)
+                .teeH(2f, 0f).greenH(2f, 0f)
+                .wind(2f, 8f)
+                .treeH(9f, 2f).trees(0.12f, 3f, 0.5f)
+                .terrain(0.02f, 3f)
+                .fairway(45f, 20f).wiggle(0f, 0f).undulation(0.2f)
+                .bunkers(1, 3, 1.5f)
+                .distance(400, 400)
+                .mapWidth(400)
+                .par(4)
+                .greenSize(22f, 26f)
+                .teeXFraction(0.1f)
+                .greenXFraction(0.9f)
+                .waterLevel(0f)
+                .feature(ArchetypeSpec.TerrainFeature.DOGLEG_RIVER)
+                .skipFairway()
         );
 
         private final ArchetypeSpec spec;

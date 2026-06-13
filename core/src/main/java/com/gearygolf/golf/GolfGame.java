@@ -5,14 +5,11 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
-import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g3d.*;
-import com.badlogic.gdx.graphics.g3d.attributes.BlendingAttribute;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
@@ -23,9 +20,8 @@ import com.gearygolf.golf.auth.GoogleSignInProvider;
 import com.gearygolf.golf.auth.LoginScreen;
 import com.gearygolf.golf.auth.UserSession;
 import com.gearygolf.golf.multiplayer.DeterminismRecorder;
-import com.gearygolf.golf.multiplayer.LiveScoreboardActor;
+import com.gearygolf.golf.multiplayer.MultiplayerCoordinator;
 import com.gearygolf.golf.multiplayer.MultiplayerLobbyScreen;
-import com.gearygolf.golf.multiplayer.MultiplayerScoreboardOverlay;
 import com.gearygolf.golf.multiplayer.RemoteBall;
 import com.gearygolf.golf.multiplayer.RoomService;
 import com.gearygolf.golf.multiplayer.ShotPacket;
@@ -39,6 +35,7 @@ import com.gearygolf.golf.gameManagers.MenuManager;
 import com.gearygolf.golf.glamour.ParticleManager;
 import com.gearygolf.golf.glamour.WindManager;
 import com.gearygolf.golf.hud.HUD;
+import com.gearygolf.golf.hud.SwingUIController;
 import com.gearygolf.golf.hud.renderer.MainMenuRenderer.MenuState;
 import com.gearygolf.golf.input.DesktopInputProcessor;
 import com.gearygolf.golf.input.GameInputProcessor;
@@ -50,19 +47,19 @@ import com.gearygolf.golf.scoreBoard.SkillRatingStore;
 import com.gearygolf.golf.scoreBoard.SubmissionCoordinator;
 import com.gearygolf.golf.session.GameSession;
 import com.gearygolf.golf.session.SessionManager;
-import com.gearygolf.golf.terrain.ClassicGenerator;
 import com.gearygolf.golf.terrain.ITerrainGenerator;
 import com.gearygolf.golf.terrain.Terrain;
 import com.gearygolf.golf.terrain.level.LevelData;
 import com.gearygolf.golf.terrain.level.LevelDataGenerator;
 import com.gearygolf.golf.terrain.level.LevelFactory;
-import com.gearygolf.golf.terrain.tutorial.TutorialGenerator;
-import com.gearygolf.golf.terrain.tutorial.TutorialGenerator2;
-import com.gearygolf.golf.terrain.tutorial.TutorialGenerator3;
 import com.gearygolf.golf.shot.ShotExportPacket;
 import com.gearygolf.golf.terrain.TerrainGenVersion;
-import com.gearygolf.golf.tutorial.TutorialController;
+import com.gearygolf.golf.flow.GameFlowController;
+import com.gearygolf.golf.flow.GameState;
+import com.gearygolf.golf.flow.LevelLifecycleManager;
+import com.gearygolf.golf.tutorial.TutorialBridge;
 import com.gearygolf.golf.tutorial.TutorialPrefs;
+import com.gearygolf.golf.render.RenderOrchestrator;
 
 public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHandler, HazardManager.HazardListener {
 
@@ -74,14 +71,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         this.googleSignInProvider = googleSignInProvider;
     }
 
-    private enum GameState {LOGIN, START, LOADING, PLAYING, COMPETITIVE, PRACTICE_RANGE, PUTTING_GREEN, PAUSED, INSTRUCTIONS, CAMERA_CONFIG, DETERM_TEST, MULTIPLAYER_LOBBY, SOUND_SETTINGS, PROFILE_SCREEN, RANK_INFO, SHOT_REPLAY}
-
-    private GameState currentState = GameState.LOGIN;
-    private GameState previousState = GameState.START;
-    private GameState gameplayState = GameState.PLAYING;
-    private LevelData.Archetype selectedArchetype = null;
-    private boolean pendingTutorial  = false;
-    private boolean tutorialCompletionTapConsumed = false;
+    private LevelLifecycleManager levelLifecycle;
+    private GameFlowController gameFlow;
 
     private GhostManager ghostManager;
     private MenuManager menuManager;
@@ -97,6 +88,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private final GameConfig config = new GameConfig();
     private CameraController cameraController;
     private HUD hud;
+    private SwingUIController swingUI;
     private GameInputProcessor inputProcessor;
     private ShotController shotController;
     private LevelData currentLevelData;
@@ -106,71 +98,18 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private com.gearygolf.golf.glamour.SoundManager soundManager;
     private float foliageRustleCooldown = 0f;
     private float twigSnapCooldown      = 0f;
-    private final com.badlogic.gdx.math.Vector3 cachedWaterPos   = new com.badlogic.gdx.math.Vector3();
-    private final com.badlogic.gdx.math.Vector3 cachedFoliagePos = new com.badlogic.gdx.math.Vector3();
-    private boolean waterPosValid   = false;
-    private boolean foliagePosValid = false;
-    private float ambientPosTimer   = 0f;
-    private static final float AMBIENT_POS_INTERVAL  = 0.5f;
-    private static final float AMBIENT_TREE_RADIUS   = 80f;
-    private static final float AMBIENT_WATER_RADIUS  = 80f;
-    private boolean isVictory = false;
-    private boolean standard18UploadDone = false;
     private boolean wasChargingShot   = false; // tracks swing-view camera transition
     private boolean wasImpactCaptured = false; // guards one-shot divot particle spawn
-    private boolean standard18UploadInProgress = false;
     private Ball.State prevBallState      = Ball.State.STATIONARY;
     private Ball.State prevBallStateToast = Ball.State.STATIONARY;
-    private boolean showClubInfo = false;
-    private TutorialSession tutorialSession = null;
+    private TutorialBridge tutorialBridge;
     private SubmissionCoordinator submissionCoordinator;
     private final RoundHistoryService profileHistoryService = new RoundHistoryService();
-    // The encoded export string for the most recently fired shot. Never cleared between
-    // holes or game modes so the user can pause on hole N+1 and still export hole N's shot.
-    private String lastShotExport = null;
-    private ShotExportPacket.ShotReplayData pendingShotReplay = null;
-    private boolean shotReplayReady = false;
-    private boolean showImportRetryPrompt = false;
-    private Model highlightModel;
-    private ModelInstance highlightInstance;
+    private RenderOrchestrator renderOrchestrator;
     private final Vector3 zeroWind = new Vector3(0, 0, 0);
 
-    private boolean isMultiplayer = false;
-
-    // Multiplayer shot replay state
-    private RoomService.RoomState      currentMultiplayerRoom = null;
-    private int                        localStrokeNum         = 0;   // 1-indexed, reset per hole
-    private final java.util.Map<String, Integer>        consumedStrokes      = new java.util.HashMap<>();
-    private final java.util.Map<String, RemoteBall>     remoteBalls          = new java.util.LinkedHashMap<>();
-    private final java.util.Map<String, Ball.State>     remoteBallLastStates = new java.util.HashMap<>();
-    private float                      shotPollTimer          = 0f;
-    private static final float         SHOT_POLL_INTERVAL     = 0.5f;
-    // Per remote player: one ModelInstance for the ball + TRAIL_LENGTH instances for trail points.
-    private com.badlogic.gdx.graphics.g3d.Model remoteBallModel = null;
-    private final java.util.Map<String, java.util.List<com.badlogic.gdx.graphics.g3d.ModelInstance>>
-            remoteBallInstances = new java.util.LinkedHashMap<>();
-
-
     //max driver distance on new mode = 527.1yds
-    // Multiplayer scoreboard state
-    private boolean mpScoreboardVisible       = false;
-    private boolean mpAllPlayersFinishedHole  = false;
-    private boolean mpIsFinalScoreboard       = false;
-    private float   mpScoreboardPollTimer     = 0f;
-    private final java.util.Map<String, int[]>  mpHoleScores         = new java.util.LinkedHashMap<>();
-    private final java.util.Map<String, String> mpPlayerDifficulties = new java.util.LinkedHashMap<>();
-    private MultiplayerScoreboardOverlay mpScoreboardOverlay = null;
-
-    // Pending upload retry queues — populated on network failure, flushed each poll tick.
-    // Shots and rest positions use idempotent PUTs, so retrying is always safe.
-    private static class PendingShot { ShotPacket packet; int holeIndex; }
-    private final java.util.List<PendingShot> pendingShotUploads   = new java.util.ArrayList<>();
-    private RoomService.RestPacket            pendingBallRest      = null; // ball-at-rest position
-    private int                               pendingBallRestHole  = -1;
-    private RoomService.RestPacket            pendingHoleRest      = null; // hole-out position
-    private int                               pendingHoleRestHole  = -1;
-    private int                               pendingScoreHoleIdx  = -1;   // score for completed hole
-    private int                               pendingScoreStrokes  = -1;
+    private MultiplayerCoordinator mpCoordinator;
 
     // Determinism self-test state
     // phases: 0=pre-fire1, 1=flight1, 2=pre-fire2, 3=flight2, 4=L-vs-R setup,
@@ -181,8 +120,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private String determLLResult    = "";  // L vs L one-liner
     private RemoteBall determRemoteBall = null;
     private final Vector3 determShotDir = new Vector3();
-    private final Vector3 tempV3 = new Vector3();
-    private final Vector2 stageTouch = new Vector2();
     private AuthService authService;
     private UserSession userSession;
     private LoginScreen loginScreen;
@@ -195,6 +132,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         try {
             initCoreSystems();
             initInputSystems();
+            initLevelLifecycle();
+            initGameFlow();
+            initRenderOrchestrator();
             setupHighlight();
             setupInputProcessor();
         } catch (Exception e) {
@@ -207,6 +147,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         setupEnvironment();
         modelBatch = new ModelBatch();
         hud = new HUD(config);
+        swingUI = hud.getSwingUIController();
         levelManager = new LevelManager();
         levelFactory = new LevelFactory();
         ghostManager = new GhostManager(8);
@@ -253,6 +194,11 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         authService = new AuthService();
         userSession = new UserSession();
         userSession.load();
+        // Pre-load daily sessions using the uid already stored in prefs — don't wait for async
+        // auto-login. This ensures "CONTINUE" buttons appear even if token exchange is slow/fails.
+        if (userSession.isLoggedIn()) {
+            sessionManager.reloadDailySessions(userSession.getUid());
+        }
 
         submissionCoordinator = new SubmissionCoordinator(
                 sessionManager, userSession, authService, dailySubmissionCache,
@@ -277,7 +223,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
                     @Override
                     public void onSubmitSuccess() {
-                        exitToMainMenu();
+                        gameFlow.exitToMainMenu();
                     }
 
                     @Override
@@ -317,11 +263,17 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         });
 
         roomService = new RoomService();
+        mpCoordinator = new MultiplayerCoordinator(
+                roomService, userSession, sessionManager, hud, particleManager, camera, soundManager,
+                new MultiplayerCoordinator.Host() {
+                    @Override public void onStartLoadingNextHole() { levelLifecycle.startLoadingLevel(GameState.COMPETITIVE, -1); }
+                    @Override public void onScoreboardStateChanged() { setupInputProcessor(); }
+                    @Override public void onExitToMainMenu() { exitToMainMenu(); }
+                });
         multiplayerLobbyScreen = new MultiplayerLobbyScreen(
             hud.getSkin(), roomService, userSession,
             new MultiplayerLobbyScreen.Callback() {
                 @Override public void onStartGame(RoomService.RoomState room) {
-                    // Read this player's chosen difficulty from per-player meta
                     String localUid = userSession.getUid();
                     RoomService.PlayerMeta localMeta = room.playerMeta.get(localUid);
                     GameConfig.Difficulty diff = GameConfig.Difficulty.NOVICE;
@@ -330,29 +282,21 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                         catch (Exception ignored) {}
                     }
                     config.setDifficulty(diff);
-
-                    // Build uid → difficulty map for scoreboard display
-                    mpPlayerDifficulties.clear();
-                    for (java.util.Map.Entry<String, RoomService.PlayerMeta> e : room.playerMeta.entrySet()) {
-                        if (e.getValue() != null && e.getValue().difficulty != null) {
-                            mpPlayerDifficulties.put(e.getKey(), e.getValue().difficulty);
-                        }
-                    }
-
-                    isMultiplayer = true;
-                    currentMultiplayerRoom = room;
-                    mpHoleScores.clear();
-                    mpScoreboardVisible = false;
+                    mpCoordinator.startMatch(room, diff);
                     sessionManager.startMultiplayerMatch(room.seed, diff);
-                    startLoadingLevel(GameState.COMPETITIVE, -1);
+                    levelLifecycle.startLoadingLevel(GameState.COMPETITIVE, -1);
                 }
                 @Override public void onBack() {
                     changeState(GameState.START);
                 }
             });
 
-        mpScoreboardOverlay = new MultiplayerScoreboardOverlay(
-            hud.getSkin(), this::onMpNextHole, this::exitToMainMenu);
+        tutorialBridge = new TutorialBridge(hud, dailySubmissionCache,
+                new TutorialBridge.Listener() {
+                    @Override public void onLoadTutorialLevel() { levelLifecycle.startLoadingLevel(GameState.PLAYING, -1); }
+                    @Override public void onTutorialComplete()  { exitToMainMenu(); }
+                    @Override public void onToggleClubInfo()    { if (gameFlow != null) gameFlow.setShowClubInfo(!gameFlow.isShowClubInfo()); }
+                });
 
         if (userSession.isLoggedIn()) {
             userSession.tryAutoLogin(authService, new AuthService.AuthCallback() {
@@ -377,6 +321,69 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 }
             });
         }
+    }
+
+    private void initLevelLifecycle() {
+        levelLifecycle = new LevelLifecycleManager(
+                levelManager, levelFactory, particleManager, sessionManager,
+                hazardManager, ghostManager, shotController, hud,
+                tutorialBridge, mpCoordinator, config, camera, soundManager,
+                inputProcessor,
+                new LevelLifecycleManager.Listener() {
+                    @Override public void onStartLoading(GameState targetState) {
+                        changeState(GameState.LOADING);
+                    }
+                    @Override public void onClearBall() {
+                        if (ball != null) { ball.dispose(); ball = null; }
+                    }
+                    @Override public void onBallReady(Ball b, CameraController cam, Ball.State toastState) {
+                        ball = b;
+                        cameraController = cam;
+                        prevBallState      = Ball.State.STATIONARY;
+                        prevBallStateToast = toastState;
+                        if (renderOrchestrator != null) renderOrchestrator.resetAmbientTimer();
+                    }
+                    @Override public void onLevelReady(GameState targetState, LevelData levelData, Club defaultClub) {
+                        currentLevelData = levelData;
+                        currentClub      = defaultClub;
+                        if (gameFlow != null) gameFlow.resetForNewLevel();
+                        setupInputProcessor();
+                        changeState(targetState);
+                    }
+                    @Override public void onBallReset(Ball b) {
+                        if (gameFlow != null) gameFlow.setVictory(false);
+                        if (cameraController != null) cameraController.update(b.getPosition(), inputProcessor);
+                    }
+                });
+    }
+
+    private void initGameFlow() {
+        gameFlow = new GameFlowController(
+                hud, soundManager, levelLifecycle, submissionCoordinator,
+                menuManager, sessionManager, tutorialBridge, mpCoordinator,
+                config, shotController, authService, userSession, dailySubmissionCache,
+                this, // MenuManager.MenuHandler
+                new GameFlowController.Host() {
+                    @Override public void onSetupInputProcessor()    { setupInputProcessor(); }
+                    @Override public void onCameraSetPaused(boolean p) {
+                        if (cameraController != null) cameraController.setPaused(p);
+                    }
+                    @Override public void onCameraSetNull()          { cameraController = null; }
+                    @Override public void onLoginReset()             { loginScreen.reset(); }
+                });
+    }
+
+    private void initRenderOrchestrator() {
+        renderOrchestrator = new RenderOrchestrator(
+                modelBatch, environment, camera,
+                hud, swingUI, levelManager,
+                shotController, particleManager,
+                ghostManager, windManager,
+                soundManager,
+                mpCoordinator, tutorialBridge,
+                sessionManager, submissionCoordinator,
+                gameFlow, levelLifecycle,
+                config);
     }
 
     private void initInputSystems() {
@@ -404,41 +411,32 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     private void setupHighlight() {
         ModelBuilder mb = new ModelBuilder();
-        highlightModel = mb.createSphere(8f, 8f, 8f, 24, 24,
-                new Material(ColorAttribute.createDiffuse(Color.WHITE), new BlendingAttribute(0.4f)),
-                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
-        highlightInstance = new ModelInstance(highlightModel);
-
-        // Small red sphere used to render each remote player's ball during replay.
-        // BlendingAttribute enables distance-based alpha fading (see render loop).
-        float d = Ball.BALL_RADIUS * 2f;
-        remoteBallModel = mb.createSphere(d, d, d, 12, 12,
-                new Material(ColorAttribute.createDiffuse(new Color(1f, 0.2f, 0.2f, 1f)),
-                             new BlendingAttribute(1f)),
-                VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal);
+        renderOrchestrator.initHighlight(mb);
+        mpCoordinator.initModels(mb);
     }
 
     private void setupInputProcessor() {
         com.badlogic.gdx.InputMultiplexer multiplexer = new com.badlogic.gdx.InputMultiplexer();
 
+        GameState cs = gameFlow != null ? gameFlow.getCurrentState() : GameState.LOGIN;
         com.badlogic.gdx.scenes.scene2d.Stage activeStage;
-        if (currentState == GameState.LOGIN) {
+        if (cs == GameState.LOGIN) {
             activeStage = loginScreen.getStage();
-        } else if (currentState == GameState.MULTIPLAYER_LOBBY) {
+        } else if (cs == GameState.MULTIPLAYER_LOBBY) {
             activeStage = multiplayerLobbyScreen.getStage();
-        } else if (currentState == GameState.START) {
+        } else if (cs == GameState.START) {
             activeStage = hud.getStartMenuStage();
-        } else if (currentState == GameState.PAUSED) {
+        } else if (cs == GameState.PAUSED) {
             activeStage = hud.getPauseMenuStage();
-        } else if (isOverlayState(currentState)) {
+        } else if (isOverlayState(cs)) {
             activeStage = null; // overlay input handled via Gdx.input directly; no stage needed
         } else {
             activeStage = hud.getStage();
         }
 
-        if (mpScoreboardVisible && mpScoreboardOverlay != null) {
-            mpScoreboardOverlay.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-            multiplexer.addProcessor(mpScoreboardOverlay.getStage());
+        if (mpCoordinator.isScoreboardVisible()) {
+            multiplexer.addProcessor(mpCoordinator.resizeAndGetScoreboardStage(
+                    Gdx.graphics.getWidth(), Gdx.graphics.getHeight()));
         }
 
         if (activeStage != null) {
@@ -456,641 +454,47 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void changeState(GameState newState) {
-        if (this.currentState == newState) return;
-        Gdx.app.log("STATE_CHANGE", currentState + " -> " + newState);
-
-        GameState oldState = this.currentState;
-
-        if (oldState == GameState.PROFILE_SCREEN) refreshSkillRatingDisplay();
-
-        // Sound: exiting old state
-        if (soundManager != null) {
-            if (oldState == GameState.START) soundManager.onMenuExit();
-            else if (isGameplayState(oldState) && (newState == GameState.LOADING || newState == GameState.START)) soundManager.onHoleExit();
-        }
-
-        if (isGameplayState(newState)) this.gameplayState = newState;
-        if (!isOverlayState(this.currentState)) this.previousState = this.currentState;
-
-        this.currentState = newState;
-
-        // Sound: entering new state
-        if (soundManager != null) {
-            if (newState == GameState.START) soundManager.onMenuEnter();
-            else if (oldState == GameState.LOADING && isGameplayState(newState)) soundManager.onHoleEnter(false); // TODO: pass true for canyon/reverb maps
-        }
-
-        if (newState == GameState.START && oldState != GameState.LOGIN) {
-            hud.refreshLeaderboard();
-        }
-
-        switch (newState) {
-            case LOGIN:
-            case START:
-            case PAUSED:
-            case INSTRUCTIONS:
-            case CAMERA_CONFIG:
-            case SOUND_SETTINGS:
-            case PROFILE_SCREEN:
-            case RANK_INFO:
-            case MULTIPLAYER_LOBBY:
-                Gdx.input.setCursorCatched(false);
-                break;
-            default:
-                Gdx.input.setCursorCatched(!(isVictory || submissionCoordinator.isSubmissionInProgress()));
-                break;
-        }
-
-        if (cameraController != null) {
-            cameraController.setPaused(newState == GameState.PAUSED || newState == GameState.START || isOverlayState(newState));
-        }
-        setupInputProcessor();
+        gameFlow.changeState(newState);
     }
 
-    private void handleInput() {
-        if (currentState == GameState.LOADING) return;
-        if (hud.wasMainMenuRequested()) {
-            exitToMainMenu();
-            return;
-        }
-        if (submissionCoordinator.isSubmissionInProgress()) return;
+    /**
+     * Handles club selection scrolling/buttons. Called each frame from render().
+     * Kept in GolfGame because currentClub ownership stays here until Step 5.
+     */
+    private void updateClubSelection() {
+        if (!GameFlowController.isGameplayState(gameFlow.getCurrentState())) return;
+        if (gameFlow.isVictory()) return;
+        if (levelLifecycle.isShotReplayReady()) return;
+        if (shotController.isCharging()) return;
+        if (inputProcessor.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) return;
 
-        switch (currentState) {
-            case LOGIN -> {
-            } // input handled by the login stage via the input multiplexer
-            case START -> {
-                if (showImportRetryPrompt) {
-                    if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.IMPORT_SHOT)) {
-                        onImportShot();
-                    } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
-                        dismissImportOverlay();
-                    }
-                    break;
-                }
-                menuManager.handleInput(inputProcessor, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache);
-                // Badge click — opens rank info overlay (desktop + Android)
-                if (Gdx.input.justTouched()
-                        && menuManager.getCurrentMenuState() == com.gearygolf.golf.hud.renderer.MainMenuRenderer.MenuState.MAIN) {
-                    tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-                    hud.getStage().getViewport().unproject(tempV3);
-                    if (hud.isBadgeTouched(tempV3.x, tempV3.y)) {
-                        changeState(GameState.RANK_INFO);
-                        break;
-                    }
-                }
-                // Android: tap the right half of the screen to go back from any sub-menu
-                if (Platform.isAndroid()
-                        && menuManager.getCurrentMenuState() != com.gearygolf.golf.hud.renderer.MainMenuRenderer.MenuState.MAIN
-                        && com.badlogic.gdx.Gdx.input.justTouched()) {
-                    stageTouch.set(com.badlogic.gdx.Gdx.input.getX(), com.badlogic.gdx.Gdx.input.getY());
-                    hud.getStartMenuStage().getViewport().unproject(stageTouch);
-                    if (stageTouch.x > hud.getStartMenuStage().getViewport().getWorldWidth() / 2f) {
-                        menuManager.navigateBack();
-                    }
-                }
-            }
-            case INSTRUCTIONS, CAMERA_CONFIG, SOUND_SETTINGS, PROFILE_SCREEN, RANK_INFO -> handleOverlayInput();
-            case PAUSED -> handlePauseInput();
-            default -> handleGameplayInput();
+        int direction = 0;
+        if (!Platform.isAndroid() && !config.cinematicMode) {
+            float scroll = inputProcessor.getActionValue(GameInputProcessor.Action.SCROLL_Y);
+            if (scroll != 0) direction = scroll > 0 ? 1 : -1;
+        } else if (Platform.isAndroid()) {
+            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) direction = -1;
+            else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) direction = 1;
         }
+
+        if (direction != 0) {
+            int index = MathUtils.clamp(currentClub.ordinal() + direction, 0, Club.values().length - 1);
+            currentClub = Club.values()[index];
+        }
+
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_FIRST))
+            currentClub = Club.values()[0];
+        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_LAST))
+            currentClub = Club.values()[Club.values().length - 1];
     }
 
-    private void handleTutorialInput() {
-        if (tutorialSession == null || !tutorialSession.controller.isActive()) return;
-        switch (tutorialSession.controller.getCurrentStep()) {
-            case STEP_1_DISTANCE:
-                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SHOW_RANGE)) {
-                    tutorialSession.controller.advance(); // → STEP_2_AIM
-                    tutorialSession.aimStartYaw = (cameraController != null) ? cameraController.getYaw() : Float.NaN;
-                }
-                break;
-
-            case STEP_2_AIM:
-                if (cameraController != null && !Float.isNaN(tutorialSession.aimStartYaw)) {
-                    float delta = cameraController.getYaw() - tutorialSession.aimStartYaw;
-                    while (delta >  180f) delta -= 360f;
-                    while (delta < -180f) delta += 360f;
-                    com.badlogic.gdx.math.Vector3 aimWind = (currentLevelData != null) ? currentLevelData.getWind() : null;
-                    // Tighter aim window: must have rotated at least 4.5° but no more than 15°
-                    // in the correct direction. Also require the player to have released
-                    // (DRAG_X ≈ 0) so we don't advance mid-pan.
-                    final float AIM_MIN = 4.5f;
-                    final float AIM_MAX = 15f; // tweak this to widen/narrow the accepted zone
-                    boolean notDragging = !com.badlogic.gdx.Gdx.input.isTouched();
-                    boolean aimed;
-                    if (aimWind != null && aimWind.len() >= 0.3f
-                            && Math.abs(aimWind.x) >= Math.abs(aimWind.z)) {
-                        // Lateral wind: must rotate toward the correct side, within AIM_MIN..AIM_MAX
-                        aimed = aimWind.x > 0
-                                ? (delta > AIM_MIN && delta < AIM_MAX)
-                                : (delta < -AIM_MIN && delta > -AIM_MAX);
-                    } else {
-                        // Straight/calm wind: any small rotation in either direction counts
-                        aimed = Math.abs(delta) > AIM_MIN && Math.abs(delta) < AIM_MAX;
-                    }
-                    if (aimed && notDragging) {
-                        tutorialSession.controller.advance(); // → STEP_3_INFO
-                    }
-                }
-                break;
-
-            case STEP_3_INFO:
-                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) {
-                    showClubInfo = !showClubInfo; // allow the club info panel to open normally
-                    tutorialSession.controller.advance(); // → STEP_4_CLUB
-                } else if (hud.consumeInfoToggled()) {
-                    tutorialSession.controller.advance();
-                }
-                break;
-
-            case STEP_4_CLUB:
-                if (currentClub == Club.IRON_9) {
-                    tutorialSession.controller.advance();
-                }
-                break;
-            case STEP_5_POWER:
-                // Advance once the shot controller starts charging (MAX was triggered)
-                if (shotController.isCharging()) {
-                    tutorialSession.controller.advance(); // → STEP_6_HIT
-                }
-                break;
-
-            case STEP_8_PUTTER:
-                if (currentClub == Club.PUTTER) {
-                    tutorialSession.controller.advance();
-                }
-                break;
-
-            case STEP_9_PROJECT:
-                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PROJECTION)) {
-                    tutorialSession.controller.advance();
-                }
-                break;
-
-            // --- Level 2 ---
-            case STEP_L2_1_SPINDICATOR:
-                if (hud.isSpinBigMode()) {
-                    tutorialSession.controller.advance(); // → STEP_L2_1B_AIM
-                }
-                break;
-
-            case STEP_L2_1B_AIM:
-                hud.setSpinBigMode(true);
-                {
-                    com.badlogic.gdx.math.Vector2 spin = hud.getSpinOffset();
-                    if (spin.x < -0.2f && spin.y < -0.2f) {
-                        tutorialSession.controller.advance(); // → STEP_L2_2_HIT
-                    }
-                }
-                break;
-
-            case STEP_L2_2_HIT:
-            case STEP_L2_4_APPROACH:
-                // Overlay disappears as soon as the player starts charging their shot
-                if (shotController.isCharging()) {
-                    tutorialSession.controller.advance();
-                }
-                break;
-
-            // --- Level 3 ---
-            case STEP_L3_1_SPINDICATOR:
-                if (hud.isSpinBigMode()) {
-                    tutorialSession.controller.advance(); // → STEP_L3_2_WATCH
-                }
-                break;
-
-            case STEP_L3_3_LIE:
-            case STEP_L3_4_TIP:
-            case STEP_L3_4B_WIND_TIP:
-                if (hud.isNextButtonHit() || inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) {
-                    tutorialSession.controller.advance();
-                }
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    private void handleGameplayInput() {
-        if (isVictory) {
-            handleVictoryInput();
-            return;
-        }
-
-        // Shot replay: waiting for launch trigger before normal gameplay begins
-        if (gameplayState == GameState.SHOT_REPLAY && shotReplayReady && pendingShotReplay != null) {
-            boolean fire = inputProcessor.isActionJustPressed(GameInputProcessor.Action.CHARGE_SHOT)
-                    || (Platform.isAndroid() && Gdx.input.justTouched());
-            if (fire) {
-                ball.launchReplay(pendingShotReplay.vx, pendingShotReplay.vy, pendingShotReplay.vz,
-                        pendingShotReplay.wx, pendingShotReplay.wy, pendingShotReplay.wz);
-                hazardManager.setBallHit(true);
-                shotReplayReady = false;
-                if (soundManager != null) {
-                    String cat = currentClub == Club.DRIVER ? "driver"
-                            : currentClub == Club.PUTTER ? "putter"
-                            : currentClub.name().contains("WEDGE") ? "wedge" : "iron";
-                    soundManager.playBallStrike(cat, 1.0f);
-                    soundManager.startFlightSound(com.gearygolf.golf.ball.MinigameResult.Rating.GREAT);
-                }
-            }
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) changeState(GameState.PAUSED);
-            return;
-        }
-
-        if (tutorialSession != null) {
-            handleTutorialInput();
-            // No early return — club changes and normal input continue.
-            // Mobile: unwanted buttons are blocked via Touchable in applyTutorialButtonBlock().
-            // Desktop: tutorial is hint-only, free input is fine.
-        }
-
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
-            changeState(GameState.PAUSED);
-            return;
-        }
-
-        if (!shotController.isCharging() &&
-                !inputProcessor.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION)) {
-
-            int direction = 0;
-            if (!Platform.isAndroid() && !config.cinematicMode) {
-                float scroll = inputProcessor.getActionValue(GameInputProcessor.Action.SCROLL_Y);
-                if (scroll != 0) direction = scroll > 0 ? 1 : -1;
-            } else if (Platform.isAndroid()) {
-                if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_UP)) direction = -1;
-                else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_DOWN)) direction = 1;
-            }
-
-            if (direction != 0) {
-                int index = MathUtils.clamp(currentClub.ordinal() + direction, 0, Club.values().length - 1);
-                currentClub = Club.values()[index];
-            }
-
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_FIRST))
-                currentClub = Club.values()[0];
-            if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CLUB_LAST))
-                currentClub = Club.values()[Club.values().length - 1];
-        }
-
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP) && config.difficulty.hasClubInfo())
-            showClubInfo = !showClubInfo;
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.RESET_BALL)) resetBallToLastShot();
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) handleNewLevelInput();
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_UP)) config.adjustGameSpeed(true);
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.SPEED_DOWN)) config.adjustGameSpeed(false);
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.TRAILER_MODE) && !Platform.isAndroid()) {
-            config.cinematicMode = !config.cinematicMode;
-            if (cameraController != null) cameraController.setDetached(config.cinematicMode);
-        }
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.REPLAY_SHOT) && config.cinematicMode) {
-            if (ball != null) ball.replayShot();
-        }
-        if (config.cinematicMode && cameraController != null && cameraController.isDetached()) {
-            float fwd   = inputProcessor.isActionPressed(GameInputProcessor.Action.CLUB_UP)          ?  1f : 0f;
-            float back  = inputProcessor.isActionPressed(GameInputProcessor.Action.CLUB_DOWN)         ?  1f : 0f;
-            float right = inputProcessor.isActionPressed(GameInputProcessor.Action.TRAILER_PAN_RIGHT) ?  1f : 0f;
-            float left  = inputProcessor.isActionPressed(GameInputProcessor.Action.TRAILER_PAN_LEFT)  ?  1f : 0f;
-            float fwdInput   = fwd  - back;
-            float rightInput = right - left;
-            if (fwdInput != 0 || rightInput != 0)
-                cameraController.panFocalPoint(fwdInput, rightInput, Gdx.graphics.getDeltaTime());
-        }
-    }
-
-    private void handlePauseInput() {
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) {
-            exitToMainMenu();
-        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.PAUSE)) {
-            changeState(gameplayState);
-        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.OPEN_SOUND_SETTINGS)) {
-            enterSoundSettings();
-        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.HELP)) {
-            enterInstructions();
-        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CAM_CONFIG)) {
-            enterCameraConfig();
-        }
-    }
-
-    private void handleOverlayInput() {
-        if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.CANCEL_MENU)) {
-            // Profile screen: ESC goes back to overview first, then closes on second press
-            if (currentState == GameState.PROFILE_SCREEN && hud.handleProfileBack()) return;
-            changeState(previousState);
-        }
-
-        if (Gdx.input.justTouched()) {
-            tempV3.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            hud.getStage().getViewport().unproject(tempV3);
-            if (currentState == GameState.PROFILE_SCREEN) {
-                if (!hud.handleProfileClick(tempV3.x, tempV3.y)) changeState(previousState);
-            } else if (currentState == GameState.RANK_INFO) {
-                if (!hud.isTouchInsideRankInfo(tempV3.x, tempV3.y)) changeState(previousState);
-            } else if (Platform.isAndroid()) {
-                if ((currentState == GameState.INSTRUCTIONS && !hud.isTouchInsideInstructions(tempV3.x, tempV3.y)) ||
-                        (currentState == GameState.CAMERA_CONFIG  && !hud.isTouchInsideCameraConfig(tempV3.x, tempV3.y)) ||
-                        (currentState == GameState.SOUND_SETTINGS && !hud.isTouchInsideSoundSettings(tempV3.x, tempV3.y))) {
-                    changeState(previousState);
-                }
-            }
-        }
-    }
-
-    private void handleNewLevelInput() {
-        if (isOverlayState(currentState) || currentState == GameState.LOGIN || currentState == GameState.START || currentState == GameState.PAUSED)
-            return;
-
-        if (gameplayState == GameState.COMPETITIVE) {
-            GameSession active = sessionManager.getActive();
-            if (isVictory && active != null && !active.isFinished()) {
-                sessionManager.saveActive();
-                startLoadingLevel(GameState.COMPETITIVE, -1);
-            }
-        } else {
-            startLoadingLevel(gameplayState, -1);
-        }
-    }
-
-    private void handleVictoryInput() {
-        if (isMultiplayer && mpScoreboardVisible) return; // scoreboard stage handles input
-        // Tutorial: intercept input during post-hole info boxes and handle level transitions.
-        if (tutorialSession != null) {
-            TutorialController.Step ts = tutorialSession.controller.getCurrentStep();
-            if (!tutorialSession.controller.isActive()) {
-                TutorialPrefs.markComplete();
-                exitToMainMenu();
-                return;
-            }
-            if (ts.isCompletionStep()) {
-                // All completion steps now use the NEXT button — require deliberate tap on button.
-                boolean advance = inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)
-                        || hud.isNextButtonHit();
-                if (advance) {
-                    tutorialSession.controller.advance();
-                    TutorialController.Step next = tutorialSession.controller.getCurrentStep();
-                    if (next.isNewLevelStep()) {
-                        startLoadingLevel(GameState.PLAYING, -1);
-                    } else if (next == TutorialController.Step.STEP_L3_7_DAILY_PROMPT
-                            && dailySubmissionCache.hasSubmitted(com.gearygolf.golf.scoreBoard.CourseType.HOLES_1_PAR3)) {
-                        // Daily 1-hole already submitted today — skip the prompt
-                        tutorialSession.controller.advance(); // → DONE
-                        TutorialPrefs.markComplete();
-                        exitToMainMenu();
-                    } else if (!tutorialSession.controller.isActive()) {
-                        TutorialPrefs.markComplete();
-                        exitToMainMenu();
-                    }
-                }
-                return;
-            }
-            // Tutorial active but not at a completion step — block all other victory input
-            return;
-        }
-        if (isVictoryCourseComplete()) {
-            if (sessionManager.isDailyActive() && inputProcessor.isActionJustPressed(GameInputProcessor.Action.SUBMIT_SCORE)) {
-                processScoreSubmission();
-            } else if (!standard18UploadDone && !standard18UploadInProgress && inputProcessor.isActionJustPressed(GameInputProcessor.Action.UPLOAD_SCORE)) {
-                processStandard18Upload();
-            } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.MAIN_MENU)) {
-                exitToMainMenu();
-            }
-        } else if (inputProcessor.isActionJustPressed(GameInputProcessor.Action.NEW_LEVEL)) {
-            handleNewLevelInput();
-        }
-    }
-
-    private void processScoreSubmission() {
-        Gdx.app.log("GOLF_GAME", "Starting Score Submission Process");
-        submissionCoordinator.submitEndOfRound(sessionManager.getActive());
-        setupInputProcessor();
-    }
-
-    private void refreshSkillRatingDisplay() {
-        hud.setSkillRating(SkillRatingStore.load(userSession.getUid()));
-    }
-
-    private void uploadPendingStandard18IfPresent() {
-        GameSession pending = sessionManager.drainPendingStandard18Upload();
-        if (pending == null) return;
-        Gdx.app.log("GOLF_GAME", "Uploading abandoned Standard 18 round from previous session");
-        submissionCoordinator.saveStandard18Round(pending, new RoundHistoryService.SaveCallback() {
-            @Override public void onSuccess() {
-                Gdx.app.log("GOLF_GAME", "Abandoned Standard 18 round uploaded OK");
-            }
-            @Override public void onFailure(String reason) {
-                Gdx.app.error("GOLF_GAME", "Abandoned Standard 18 upload failed: " + reason);
-            }
-        });
-    }
-
-    private void processStandard18Upload() {
-        GameSession active = sessionManager.getActive();
-        if (active == null || active.getMode() != GameSession.GameMode.STANDARD_18) return;
-        standard18UploadInProgress = true;
-        submissionCoordinator.saveStandard18Round(active, new RoundHistoryService.SaveCallback() {
-            @Override public void onSuccess() {
-                standard18UploadDone = true;
-                standard18UploadInProgress = false;
-                Gdx.app.log("GOLF_GAME", "Standard 18 round uploaded to history");
-            }
-            @Override public void onFailure(String reason) {
-                standard18UploadInProgress = false;
-                Gdx.app.error("GOLF_GAME", "Standard 18 upload failed: " + reason);
-            }
-        });
-    }
-
-    private void startLoadingLevel(GameState targetState, long seed) {
-        if (isGameplayState(targetState)) gameplayState = targetState;
-        changeState(GameState.LOADING);
-        Gdx.app.postRunnable(() -> {
-            initLevel(seed);
-            changeState(targetState);
-        });
-    }
-
-    private void initLevel() {
-        initLevel(-1);
-    }
-
-    private void initLevel(long manualSeed) {
-        clearCurrentLevelState();
-        LevelFactory.LevelCreationResult result = generateLevelResult(manualSeed);
-
-        currentLevelData = result.data;
-        currentClub = result.defaultClub;
-        // Propagate the new level seed to all remote balls so foliage RNG matches.
-        long levelSeed = currentLevelData != null ? currentLevelData.getSeed() : 0L;
-        for (RemoteBall rb : remoteBalls.values()) rb.setLevelSeed(levelSeed);
-
-        levelManager.buildLevel(result.generator, result.waterLevel, result.distance);
-        setupSpawnAndPins();
-        setupInputProcessor();
-
-        isVictory = false;
-        standard18UploadDone = false;
-        standard18UploadInProgress = false;
-        hazardManager.resetTimer();
-        particleManager.clear();
-    }
-
-    private void clearCurrentLevelState() {
-        if (ball != null) ball.dispose();
-        ghostManager.clear();
-        shotController.reset();
-        hud.reset();
-        resetMultiplayerReplayState();
-    }
-
-    private void resetMultiplayerReplayState() {
-        localStrokeNum = 0;
-        shotPollTimer  = 0f;
-        consumedStrokes.clear();
-        // Discard any per-hole pending uploads — they belong to the hole just completed.
-        // pendingScore and pendingHoleRest are left intact: they survive into the scoreboard
-        // phase and are cleared when successfully retried or when exitToMainMenu() is called.
-        pendingShotUploads.clear();
-        pendingBallRest = null; pendingBallRestHole = -1;
-        remoteBalls.clear();
-        remoteBallLastStates.clear();
-        remoteBallInstances.clear();
-        if (isMultiplayer && currentMultiplayerRoom != null && remoteBallModel != null) {
-            String myUid = userSession.getUid();
-            // ball instance (index 0) + one instance per trail point (indices 1..TRAIL_LENGTH)
-            int instancesNeeded = 1 + RemoteBall.TRAIL_LENGTH;
-            for (java.util.Map.Entry<String, String> e : currentMultiplayerRoom.players.entrySet()) {
-                if (e.getKey().equals(myUid)) continue;
-                remoteBalls.put(e.getKey(),
-                        new RemoteBall(e.getKey(), e.getValue(), particleManager));
-                java.util.List<com.badlogic.gdx.graphics.g3d.ModelInstance> instances =
-                        new java.util.ArrayList<>();
-                for (int i = 0; i < instancesNeeded; i++) {
-                    instances.add(new com.badlogic.gdx.graphics.g3d.ModelInstance(remoteBallModel));
-                }
-                remoteBallInstances.put(e.getKey(), instances);
-            }
-        }
-    }
-
-    private LevelFactory.LevelCreationResult generateLevelResult(long manualSeed) {
-        if (pendingTutorial) {
-            pendingTutorial = false;
-            hud.resetShots();
-            LevelData tutorialData = new LevelData();
-            tutorialData.setWind(new Vector3(-4f, 0f, 0f));  // gentle right-to-left crosswind
-            tutorialData.setWaterLevel(-1f);
-            tutorialData.setPar(3);
-            tutorialData.setDistance(250);
-            return new LevelFactory.LevelCreationResult(new TutorialGenerator(), tutorialData, Club.DRIVER, -1f, 250);
-        }
-
-        if (tutorialSession != null) {
-            TutorialController.Step ts = tutorialSession.controller.getCurrentStep();
-            if (ts == TutorialController.Step.STEP_L2_1_SPINDICATOR) {
-                hud.resetShots();
-                LevelData tutorialData2 = new LevelData();
-                tutorialData2.setWind(new Vector3(4.5f, 0f, 7.8f));  // ~9 m/s from back-right, blowing left
-                tutorialData2.setWaterLevel(-1f);
-                tutorialData2.setPar(4);
-                tutorialData2.setDistance(700);
-                return new LevelFactory.LevelCreationResult(new TutorialGenerator2(), tutorialData2, Club.DRIVER, -1f, 700);
-            }
-            if (ts == TutorialController.Step.STEP_L3_1_SPINDICATOR) {
-                hud.resetShots();
-                LevelData tutorialData3 = new LevelData();
-                tutorialData3.setWind(new Vector3(0f, 0f, -8f));  // 8 m/s pure headwind
-                tutorialData3.setWaterLevel(-10f);
-                tutorialData3.setPar(4);
-                tutorialData3.setDistance(700);
-                return new LevelFactory.LevelCreationResult(new TutorialGenerator3(), tutorialData3, Club.DRIVER, -10f, 700);
-            }
-        }
-
-        if (gameplayState == GameState.SHOT_REPLAY && pendingShotReplay != null) {
-            LevelData data = LevelDataGenerator.createFixedLevelData(pendingShotReplay.holeSeed, pendingShotReplay.archetype);
-            ITerrainGenerator generator = LevelFactory.createGeneratorForData(data);
-            hud.resetShots();
-            return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
-        }
-
-        LevelFactory.GameMode mode = switch (gameplayState) {
-            case START -> LevelFactory.GameMode.START;
-            case PRACTICE_RANGE -> LevelFactory.GameMode.PRACTICE_RANGE;
-            case PUTTING_GREEN -> LevelFactory.GameMode.PUTTING_GREEN;
-            default -> LevelFactory.GameMode.PLAYING;
-        };
-
-        GameSession active = sessionManager.getActive();
-        if (gameplayState == GameState.COMPETITIVE && active != null) {
-            hud.setActiveSession(active);
-            LevelData data = active.getCourseLayout().get(active.getCurrentHoleIndex());
-            ITerrainGenerator generator = LevelFactory.createGeneratorForData(data);
-            return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
-        } else if (mode == LevelFactory.GameMode.PLAYING && selectedArchetype != null) {
-            long seed = (manualSeed == -1) ? System.nanoTime() : manualSeed;
-            LevelData data = LevelDataGenerator.createFixedLevelData(seed, selectedArchetype);
-            ITerrainGenerator generator = LevelFactory.createGeneratorForData(data);
-            hud.resetShots();
-            return new LevelFactory.LevelCreationResult(generator, data, Club.DRIVER, data.getWaterLevel(), data.getDistance());
-        } else {
-            LevelFactory.LevelCreationResult res = levelFactory.createLevel(mode, manualSeed);
-            hud.resetShots();
-            return res;
-        }
-    }
-
-    private void setupSpawnAndPins() {
-        Terrain terrain = levelManager.getTerrain();
-        Vector3 tee = terrain.getTeePosition();
-        Vector3 hole = terrain.getHolePosition();
-        if (soundManager != null) soundManager.setWindGroundLevel((tee.y + hole.y) * 0.5f);
-
-        if (gameplayState == GameState.SHOT_REPLAY && pendingShotReplay != null) {
-            // Spawn at the exported shot position — ball is STATIONARY, user fires it manually
-            ball = new Ball(new Vector3(pendingShotReplay.sx, pendingShotReplay.sy, pendingShotReplay.sz),
-                    particleManager, config, pendingShotReplay.holeSeed);
-        } else if (gameplayState == GameState.PUTTING_GREEN) {
-            terrain.setTeePosition(new Vector3(tee.x, terrain.getHeightAt(tee.x, tee.z), tee.z));
-            terrain.setHolePosition(new Vector3(hole.x, terrain.getHeightAt(hole.x, hole.z), hole.z));
-            ball = new Ball(new Vector3(tee.x, tee.y + 0.5f, tee.z), particleManager, config, 100L);
-            ball.setState(Ball.State.AIR);
-        } else {
-            long seed = currentLevelData != null ? currentLevelData.getSeed() : 100L;
-            Vector3 spawnPos = new Vector3(tee.x, tee.y + 0.17f, tee.z);
-            if (gameplayState == GameState.COMPETITIVE) {
-                GameSession active = sessionManager.getActive();
-                if (active != null) {
-                    float[] rest = active.getBallRestPosition();
-                    if (rest != null) spawnPos.set(rest[0], rest[1], rest[2]);
-                }
-            }
-            ball = new Ball(spawnPos, particleManager, config, seed);
-        }
-        prevBallState      = Ball.State.STATIONARY; // suppress spurious save on first frame
-        prevBallStateToast = (gameplayState == GameState.SHOT_REPLAY)
-                ? Ball.State.STATIONARY : Ball.State.AIR; // AIR triggers TEE toast; skip in replay
-        ambientPosTimer = 0f; // recompute water/foliage positions immediately on new hole
-        hazardManager.setBallHit(false);
-        refreshCameraController(hole);
-    }
-
-    private void resetBallToLastShot() {
-        if (ball != null) {
-            ball.resetToLastPosition();
-            ball.setState(Ball.State.STATIONARY);
-            shotController.reset();
-            hud.cancelMinigame();
-            hazardManager.setBallHit(false);
-            isVictory = false;
-            hazardManager.resetTimer();
-            if (cameraController != null) cameraController.update(ball.getPosition(), inputProcessor);
-        }
-    }
+    private void refreshSkillRatingDisplay() { gameFlow.refreshSkillRatingDisplay(); }
+    private void uploadPendingStandard18IfPresent() { gameFlow.uploadPendingStandard18IfPresent(); }
+    private void tryAutoRetryPending() { gameFlow.tryAutoRetryPending(); }
 
     private void triggerVictory() {
         Terrain terrain = levelManager.getTerrain();
-        isVictory = true;
+        gameFlow.setVictory(true);
         float vel = ball.getVelocity().len();
         ball.getVelocity().setZero();
         if (soundManager != null) soundManager.playBallCup(vel);
@@ -1125,105 +529,54 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         particleManager.spawn(terrain.getHolePosition(), celebColor, 40, celebForce, 50.0f, 4.0f);
 
         GameSession active = sessionManager.getActive();
-        if (gameplayState == GameState.COMPETITIVE && active != null) {
-            if (isMultiplayer) {
-                int holeIdx = active.getCurrentHoleIndex();
-                int strokes = hud.getShotCount();
-                mpHoleScores.computeIfAbsent(userSession.getUid(), k -> new int[9])[holeIdx] = strokes;
-                roomService.submitScore(
-                    userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                    userSession.getUid(), holeIdx, strokes,
-                    new RoomService.SimpleCallback() {
-                        @Override public void onSuccess() {}
-                        @Override public void onFailure(String msg) {
-                            Gdx.app.error("Multiplayer", "Score submit failed — queuing for retry: " + msg);
-                            pendingScoreHoleIdx = holeIdx;
-                            pendingScoreStrokes = strokes;
-                        }
-                    });
-                // Broadcast authoritative hole position as rest packet so remote
-                // balls lerp to the hole even if their physics replay fell short.
-                Vector3 holePos = terrain.getHolePosition();
-                RoomService.RestPacket holeRest = new RoomService.RestPacket();
-                holeRest.x = holePos.x; holeRest.y = holePos.y; holeRest.z = holePos.z;
-                holeRest.strokeNum = localStrokeNum;
-                holeRest.holed = true;
-                roomService.broadcastRest(
-                    userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                    holeIdx, userSession.getUid(), holeRest,
-                    new RoomService.SimpleCallback() {
-                        @Override public void onSuccess() {}
-                        @Override public void onFailure(String msg) {
-                            Gdx.app.error("Multiplayer", "broadcastRest (hole) failed — queuing for retry: " + msg);
-                            pendingHoleRest = holeRest;
-                            pendingHoleRestHole = holeIdx;
-                        }
-                    });
-                mpScoreboardVisible = true;
-                mpAllPlayersFinishedHole = false;
-                mpIsFinalScoreboard = false;
-                mpScoreboardPollTimer = 0f;
-                if (mpScoreboardOverlay != null) mpScoreboardOverlay.resetHidden();
-                refreshMpScoreboard();
-                setupInputProcessor(); // add scoreboard stage to multiplexer
+        if (levelLifecycle.getGameplayState() == GameState.COMPETITIVE && active != null) {
+            if (mpCoordinator.isActive()) {
+                mpCoordinator.onVictory(terrain, active.getCurrentHoleIndex(), hud.getShotCount());
             } else {
                 active.advanceHole();
                 sessionManager.saveActive();
             }
         }
 
-        if (tutorialSession != null) {
-            // Advance once. For L3: if victory fires while hint steps are still showing,
-            // keep advancing past them so we land on STEP_L3_6_CONGRATS directly.
-            TutorialController.Step cur;
-            do {
-                tutorialSession.controller.advance();
-                cur = tutorialSession.controller.getCurrentStep();
-            } while (cur == TutorialController.Step.STEP_L3_3_LIE
-                  || cur == TutorialController.Step.STEP_L3_4_TIP
-                  || cur == TutorialController.Step.STEP_L3_4B_WIND_TIP
-                  || cur == TutorialController.Step.STEP_L3_5_WAIT_HOLE);
-        }
-    }
-
-    private void refreshCameraController(Vector3 lookAtTarget) {
-        cameraController = new CameraController(camera, 12f, ball.getPosition(), config.cameraSettings);
-        cameraController.setOrientation(lookAtTarget);
-        cameraController.update(ball.getPosition(), inputProcessor);
+        // For L3: if victory fires while hint steps are still showing, advance past them
+        // so we land on STEP_L3_6_CONGRATS directly.
+        tutorialBridge.onVictory();
     }
 
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
         inputProcessor.update(delta);
-        handleInput();
+        gameFlow.handleInput(ball, levelManager.getTerrain(), cameraController, inputProcessor, currentLevelData, currentClub);
+        updateClubSelection();
 
         gameViewport.apply();
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
-        if (currentState == GameState.LOGIN) {
+        GameState cs = gameFlow.getCurrentState();
+        if (cs == GameState.LOGIN) {
             loginScreen.render();
-        } else if (currentState == GameState.MULTIPLAYER_LOBBY) {
+        } else if (cs == GameState.MULTIPLAYER_LOBBY) {
             multiplayerLobbyScreen.render(delta);
-        } else if (currentState == GameState.START) {
+        } else if (cs == GameState.START) {
             if (soundManager != null) soundManager.updateMenu(delta);
             hud.renderStartMenu(menuManager, this, sessionManager.getCompetitiveSessions(), dailySubmissionCache, soundManager);
-        } else if (currentState == GameState.SOUND_SETTINGS) {
+        } else if (cs == GameState.SOUND_SETTINGS) {
             hud.renderSoundSettings(config);
-        } else if (currentState == GameState.PROFILE_SCREEN) {
+        } else if (cs == GameState.PROFILE_SCREEN) {
             hud.renderProfileScreen(profileHistoryService, userSession.getUid(), userSession.getIdToken());
-        } else if (currentState == GameState.RANK_INFO) {
+        } else if (cs == GameState.RANK_INFO) {
             hud.renderRankInfo();
-        } else if (currentState == GameState.INSTRUCTIONS) {
+        } else if (cs == GameState.INSTRUCTIONS) {
             hud.renderInstructions(inputProcessor);
-        } else if (currentState == GameState.CAMERA_CONFIG) {
+        } else if (cs == GameState.CAMERA_CONFIG) {
             hud.renderCameraConfig(inputProcessor);
-        } else if (currentState == GameState.LOADING) {
+        } else if (cs == GameState.LOADING) {
             hud.renderLoadingScreen();
         } else {
             updateLogic(delta);
-            renderScene();
-            renderUI();
+            renderOrchestrator.renderScene(ball, cameraController, currentLevelData);
+            renderOrchestrator.renderUI(ball, cameraController, currentLevelData, currentClub, inputProcessor, determResultText, determPhase);
         }
         if (inputProcessor instanceof MobileInputProcessor) ((MobileInputProcessor) inputProcessor).resetDrags();
     }
@@ -1232,13 +585,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         Terrain terrain = levelManager.getTerrain();
         if (terrain == null) return;
 
+        GameState cs = gameFlow.getCurrentState();
+        boolean victory = gameFlow.isVictory();
         float speedMultiplier = config.getGameSpeed();
-        float effDelta = (currentState == GameState.PAUSED) ? 0 : delta * speedMultiplier;
-        float particleDelta = (isVictory || currentState == GameState.PAUSED) ? delta * 0.06f : delta * speedMultiplier;
+        float effDelta = (cs == GameState.PAUSED) ? 0 : delta * speedMultiplier;
+        float particleDelta = (victory || cs == GameState.PAUSED) ? delta * 0.06f : delta * speedMultiplier;
 
-        if (currentState == GameState.DETERM_TEST) {
+        if (cs == GameState.DETERM_TEST) {
             updateDetermTest(effDelta, terrain);
-        } else if (isGameplayState() || currentState == GameState.PAUSED) {
+        } else if (isGameplayState() || cs == GameState.PAUSED) {
             updateGameplaySystems(delta, effDelta, particleDelta, terrain);
         }
 
@@ -1247,38 +602,18 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         terrain.updateCameraOcclusion(camera.position, ball.getPosition(), delta);
         terrain.updateFlag(camera.position, ball.getPosition());
 
-        // Tutorial L1: once ball is stationary on the green, prompt the putt
-        if (tutorialSession != null
-                && tutorialSession.controller.getCurrentStep() == TutorialController.Step.STEP_7_WATCH
-                && ball != null && ball.getState() == com.gearygolf.golf.ball.Ball.State.STATIONARY) {
-            if (terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z)
-                    == com.gearygolf.golf.terrain.Terrain.TerrainType.GREEN) {
-                tutorialSession.controller.advance();
-            }
-        }
-
-        // Tutorial L2/L3: tee shot landed anywhere except green/tee
-        if (tutorialSession != null && ball != null
-                && ball.getState() == com.gearygolf.golf.ball.Ball.State.STATIONARY) {
-            TutorialController.Step watchStep = tutorialSession.controller.getCurrentStep();
-            if (watchStep == TutorialController.Step.STEP_L2_3_WATCH
-                    || watchStep == TutorialController.Step.STEP_L3_2_WATCH) {
-                com.gearygolf.golf.terrain.Terrain.TerrainType type =
-                        terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
-                if (type != com.gearygolf.golf.terrain.Terrain.TerrainType.GREEN
-                        && type != com.gearygolf.golf.terrain.Terrain.TerrainType.TEE) {
-                    tutorialSession.controller.advance();
-                }
-            }
-        }
+        // Tutorial watch-step transitions (L1 green putt prompt, L2/L3 landing checks).
         // STEP_L2_5_WATCH is silent until triggerVictory fires (ball goes in hole).
+        tutorialBridge.updateWatchSteps(ball, terrain);
     }
 
     /**
      * Advances the elapsed timer for DAILY_PAR3/4/5 modes when gameplay is active.
      */
     private void updateDaily1Timer(float delta) {
-        if (gameplayState != GameState.COMPETITIVE || currentState == GameState.PAUSED || isVictory) return;
+        if (levelLifecycle.getGameplayState() != GameState.COMPETITIVE
+                || gameFlow.getCurrentState() == GameState.PAUSED
+                || gameFlow.isVictory()) return;
         GameSession active = sessionManager.getActive();
         if (active == null) return;
         GameSession.GameMode m = active.getMode();
@@ -1290,21 +625,19 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     }
 
     private void updateGameplaySystems(float delta, float effDelta, float particleDelta, Terrain terrain) {
-        Vector3 currentWind = (gameplayState == GameState.PUTTING_GREEN || currentLevelData == null) ? zeroWind : currentLevelData.getWind();
+        Vector3 currentWind = (levelLifecycle.getGameplayState() == GameState.PUTTING_GREEN || currentLevelData == null) ? zeroWind : currentLevelData.getWind();
 
-        if (currentState != GameState.PAUSED) {
+        GameState cs = gameFlow.getCurrentState();
+        boolean victory = gameFlow.isVictory();
+
+        if (cs != GameState.PAUSED) {
             windManager.update(effDelta, currentWind, camera.position);
             if (soundManager != null) {
                 soundManager.update(effDelta, currentWind, camera.position);
-                updateAmbientPositions(effDelta, terrain);
-                soundManager.updateSpatialAmbient(
-                    camera.position,
-                    waterPosValid   ? cachedWaterPos   : null,
-                    foliagePosValid ? cachedFoliagePos : null,
-                    null);
+                renderOrchestrator.updateAmbientPositions(effDelta, terrain);
             }
 
-            if (!isVictory && !(gameplayState == GameState.SHOT_REPLAY && shotReplayReady)) {
+            if (!victory && !(levelLifecycle.getGameplayState() == GameState.SHOT_REPLAY && levelLifecycle.isShotReplayReady())) {
                 updateShotLogic(delta, terrain);
             }
 
@@ -1359,59 +692,45 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                 cameraController.setSwingAimDir(camera.direction);
                 com.gearygolf.golf.terrain.Terrain.TerrainType swingTerrain =
                         terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
-                hud.setSwingTerrainType(swingTerrain);
+                swingUI.setTerrainType(swingTerrain);
                 // No divot on tee (ball is elevated — can't strike the ground first).
-                hud.setSwingDivotEnabled(clubMakesDivot(currentClub)
+                swingUI.setDivotEnabled(clubMakesDivot(currentClub)
                         && swingTerrain != com.gearygolf.golf.terrain.Terrain.TerrainType.TEE);
                 // Seed attack angle from the current club's natural arc-bottom position.
-                hud.setSwingNaturalAttackAngle(currentClub.naturalAttackAngleDeg);
+                swingUI.setNaturalAttackAngle(currentClub.naturalAttackAngleDeg);
                 wasImpactCaptured = false;
-                // Set difficulty-scaled swing params (contact, path, follow-through, shank).
-                // These are the same for every club type — putter contact threshold is separate.
-                shotController.setSwingDifficultyParams(
-                        swingContactSweetSpot(config.difficulty),
-                        swingPathScale(config.difficulty),
-                        swingShankThreshold(config.difficulty),
-                        swingPathBreakpoint1(config.difficulty));
-                float ftThreshold = swingFollowThroughAngleThreshold(config.difficulty);
-                hud.setSwingFollowThroughThreshold(ftThreshold);
-                shotController.setFollowThroughAngleThreshold(ftThreshold);
-                float[] clubSz = swingClubSize(config.difficulty);
-                hud.setSwingClubSize(clubSz[0], clubSz[1]);
-                hud.setSwingFullPowerSpeed(com.gearygolf.golf.ball.ShotController.SWING_FULL_POWER_SPEED);
-                // Set tempo tolerance based on difficulty level + club type.
-                if (currentClub == Club.PUTTER) {
-                    // Putter: tempo direction is irrelevant — any timing is valid except a
-                    // complete whiff (q≈0). Use very wide windows so quality is always high.
-                    hud.setSwingBaseTempoWindows(5.0f, 10.0f);
-                    shotController.setPutterContactThreshold(putterContactThreshold(config.difficulty));
+                boolean isPutter = currentClub == Club.PUTTER;
+                com.gearygolf.golf.ball.SwingDifficultyCalculator diffParams =
+                        com.gearygolf.golf.ball.SwingDifficultyCalculator.build(config.difficulty, isPutter);
+                shotController.setDifficultyParams(diffParams);
+                swingUI.setFollowThroughThreshold(diffParams.ftAngleThreshold);
+                float[] clubSz = com.gearygolf.golf.ball.SwingDifficultyCalculator.clubSize(config.difficulty);
+                swingUI.setClubSize(clubSz[0], clubSz[1]);
+                swingUI.setFullPowerSpeed(com.gearygolf.golf.ball.ShotController.SWING_FULL_POWER_SPEED);
+                if (isPutter) {
+                    swingUI.setBaseTempoWindows(5.0f, 10.0f);
                 } else {
-                    // Scale tempo windows by lie difficulty: harder terrain = tighter windows.
-                    // tempoDifficulty > 1.0 narrows (harder), < 1.0 widens (easier — e.g. tee, stone).
                     float terrainTempoMult = com.badlogic.gdx.math.MathUtils.clamp(
                             1.0f / swingTerrain.tempoDifficulty, 0.5f, 2.0f);
-                    hud.setSwingBaseTempoWindows(
-                            swingPerfectFraction(config.difficulty, currentClub) * terrainTempoMult,
-                            swingMaxFraction(config.difficulty, currentClub) * terrainTempoMult);
-                    shotController.setPutterContactThreshold(0f);
+                    swingUI.setBaseTempoWindows(
+                            com.gearygolf.golf.ball.SwingDifficultyCalculator.perfectFraction(config.difficulty, currentClub) * terrainTempoMult,
+                            com.gearygolf.golf.ball.SwingDifficultyCalculator.maxFraction(config.difficulty, currentClub) * terrainTempoMult);
                 }
             }
             if (!chargingNow) wasImpactCaptured = false;
             wasChargingShot = chargingNow;
             cameraController.setSwingViewActive(config.swingModeNew && chargingNow);
-            // Keep camera offset in sync with ball-placement adjustments every frame.
             if (config.swingModeNew) {
-                cameraController.setSwingCamAimOffset(hud.getSwingCamAimOffset());
+                cameraController.setSwingCamAimOffset(swingUI.getCamAimOffset());
             }
             cameraController.update(ball.getPosition(), inputProcessor);
         }
 
         boolean inSwingView = cameraController != null && cameraController.isInSwingView();
-        hud.updateSwingOverlay(inSwingView);
+        swingUI.update(inSwingView);
 
-        // Fire divot particles exactly once when the gesture crosses the ball.
         if (inSwingView && config.particlesEnabled) {
-            boolean nowCaptured = hud.getSwingAnalyser().isImpactCaptured();
+            boolean nowCaptured = swingUI.getAnalyser().isImpactCaptured();
             if (nowCaptured && !wasImpactCaptured) {
                 particleManager.spawnDivot(
                         ball.getPosition().cpy(),
@@ -1423,12 +742,12 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
         if (config.particlesEnabled) particleManager.handleBallInteraction(ball, terrain, camera.position);
 
-        if (!isVictory) {
-            hazardManager.update(effDelta, ball, terrain, gameplayState == GameState.PRACTICE_RANGE, this);
+        if (!victory) {
+            hazardManager.update(effDelta, ball, terrain, levelLifecycle.getGameplayState() == GameState.PRACTICE_RANGE, this);
             if (ball.checkVictory(terrain)) triggerVictory();
         }
 
-        if (!isVictory && gameplayState == GameState.COMPETITIVE) {
+        if (!victory && levelLifecycle.getGameplayState() == GameState.COMPETITIVE) {
             Ball.State currentBallState = ball.getState();
             if (currentBallState == Ball.State.STATIONARY && prevBallState != Ball.State.STATIONARY) {
                 GameSession active = sessionManager.getActive();
@@ -1437,32 +756,16 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     active.setBallRestPosition(pos.x, pos.y, pos.z);
                     sessionManager.saveActive();
                 }
-                if (isMultiplayer && localStrokeNum > 0 && currentMultiplayerRoom != null) {
-                    RoomService.RestPacket rp = new RoomService.RestPacket();
-                    Vector3 pos = ball.getPosition();
-                    rp.x = pos.x; rp.y = pos.y; rp.z = pos.z;
-                    rp.strokeNum = localStrokeNum;
-                    int holeIdx = sessionManager.getActive() != null
-                            ? sessionManager.getActive().getCurrentHoleIndex() : 0;
-                    roomService.broadcastRest(
-                        userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                        holeIdx, userSession.getUid(), rp,
-                        new RoomService.SimpleCallback() {
-                            @Override public void onSuccess() {}
-                            @Override public void onFailure(String msg) {
-                                Gdx.app.error("Multiplayer", "broadcastRest failed — queuing for retry: " + msg);
-                                pendingBallRest = rp;
-                                pendingBallRestHole = holeIdx;
-                            }
-                        });
-                }
+                int holeIdx = sessionManager.getActive() != null
+                        ? sessionManager.getActive().getCurrentHoleIndex() : 0;
+                mpCoordinator.onBallRested(ball, holeIdx);
             }
             prevBallState = currentBallState;
         }
 
         // Terrain toast: show label on rest, dismiss on shot (all game modes).
         Ball.State toastState = ball.getState();
-        if (!isVictory && toastState == Ball.State.STATIONARY && prevBallStateToast != Ball.State.STATIONARY) {
+        if (!victory && toastState == Ball.State.STATIONARY && prevBallStateToast != Ball.State.STATIONARY) {
             com.gearygolf.golf.terrain.Terrain.TerrainType restType =
                     terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
             hud.triggerTerrainToast(restType, ball.getPosition(), camera);
@@ -1471,71 +774,10 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
         prevBallStateToast = toastState;
 
-        // Continuous 500ms shot poll + per-ball physics (multiplayer only).
-        if (isMultiplayer && !remoteBalls.isEmpty()) {
-            Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
-            for (RemoteBall rb : remoteBalls.values()) rb.update(effDelta, terrain, wind);
-
-            // Per-ball spatial audio
-            if (soundManager != null) {
-                for (java.util.Map.Entry<String, RemoteBall> entry : remoteBalls.entrySet()) {
-                    String uid = entry.getKey();
-                    RemoteBall rb = entry.getValue();
-                    if (!rb.hasRestPosition() || rb.isHoledOut()) {
-                        soundManager.stopRemoteWhoosh(uid);
-                        soundManager.stopRemoteRoll(uid);
-                        continue;
-                    }
-                    Ball.State prev = remoteBallLastStates.getOrDefault(uid, Ball.State.STATIONARY);
-                    Ball.State cur  = rb.getState();
-                    remoteBallLastStates.put(uid, cur);
-
-                    Vector3 ballPos = rb.isInFlight() ? rb.getPosition() : rb.getLastRestPosition();
-                    float pan = calcRemotePan(ballPos);
-
-                    // Whoosh
-                    if (cur == Ball.State.AIR) {
-                        if (prev != Ball.State.AIR) soundManager.startRemoteWhoosh(uid);
-                        soundManager.updateRemoteWhoosh(uid, rb.getVelocity().len(),
-                                camera.position, ballPos, pan);
-                    } else if (prev == Ball.State.AIR) {
-                        soundManager.stopRemoteWhoosh(uid);
-                    }
-
-                    // Bounce
-                    if (rb.consumeBounceEvent()) {
-                        soundManager.playRemoteBounce(camera.position, ballPos,
-                                rb.getVelocity().len(), rb.getLastBounceSurface(), pan);
-                    }
-
-                    // Roll
-                    if (cur == Ball.State.ROLLING || cur == Ball.State.CONTACT) {
-                        Terrain.TerrainType surface = terrain.getTerrainTypeAt(ballPos.x, ballPos.z);
-                        soundManager.updateRemoteRoll(uid, effDelta, rb.getVelocity().len(),
-                                camera.position, ballPos, pan, surface);
-                    } else if (prev == Ball.State.ROLLING || prev == Ball.State.CONTACT) {
-                        soundManager.stopRemoteRoll(uid);
-                    }
-                }
-            }
-
-            shotPollTimer += effDelta;
-            if (shotPollTimer >= SHOT_POLL_INTERVAL) {
-                shotPollTimer = 0f;
-                pollRemoteShots();
-            }
-        }
-
-        if (isMultiplayer && currentMultiplayerRoom != null) {
-            hud.updateLiveScoreboard(buildLiveScoreEntries());
-        }
-
-        if (isMultiplayer && mpScoreboardVisible) {
-            mpScoreboardPollTimer += effDelta;
-            if (mpScoreboardPollTimer >= SHOT_POLL_INTERVAL) {
-                mpScoreboardPollTimer = 0f;
-                pollMultiplayerScoreboard();
-            }
+        // Multiplayer: remote ball physics, audio, shot polling, live scoreboard, scoreboard polling.
+        if (mpCoordinator.isActive()) {
+            Vector3 mpWind = (currentLevelData != null) ? currentLevelData.getWind() : zeroWind;
+            mpCoordinator.update(effDelta, terrain, mpWind);
         }
 
         particleManager.update(particleDelta, terrain);
@@ -1547,56 +789,21 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         PhysicsProfiler.startSection("ShotControllerCharge");
         shotController.setSwingModeNew(config.swingModeNew);
         shotController.setGuidelineAvailable(config.difficulty.hasShotProjection());
-        if (shotController.update(delta, ball, camera.direction, currentClub, hud, terrain, inputProcessor)) {
+        if (shotController.update(delta, ball, camera.direction, currentClub, hud, swingUI, terrain, inputProcessor)) {
             ball.snapshotShotStart(); // trailer mode: capture initial state for replay
-            captureLastShot();
-            if (GameState.PRACTICE_RANGE != gameplayState) hud.resetSpin();
+            levelLifecycle.captureLastShot(ball, currentLevelData);
+            if (GameState.PRACTICE_RANGE != levelLifecycle.getGameplayState()) hud.resetSpin();
             hazardManager.setBallHit(true);
-            if (gameplayState == GameState.COMPETITIVE) {
+            if (levelLifecycle.getGameplayState() == GameState.COMPETITIVE) {
                 GameSession active = sessionManager.getActive();
                 if (active != null) active.clearBallRestPosition();
             }
             sessionManager.saveActive();
-            if (isMultiplayer && currentMultiplayerRoom != null) {
-                broadcastMultiplayerShot();
-                pollRemoteShots();
-            }
+            mpCoordinator.onBallHit(ball);
             // Tutorial: shot has fired — advance to the next step
-            if (tutorialSession != null) {
-                TutorialController.Step ts = tutorialSession.controller.getCurrentStep();
-                if (ts == TutorialController.Step.STEP_6_HIT
-                        || ts == TutorialController.Step.STEP_10_AIM) {
-                    tutorialSession.controller.advance();
-                }
-            }
+            tutorialBridge.onShotFired();
         }
         PhysicsProfiler.endSection("ShotControllerCharge");
-    }
-
-    private void captureLastShot() {
-        if (ball == null || currentLevelData == null) return;
-        LevelData.Archetype archetype = currentLevelData.getArchetype();
-        GameSession active = sessionManager.getActive();
-        int holeIndex = (active != null) ? active.getCurrentHoleIndex() : 0;
-        lastShotExport = ShotExportPacket.encode(
-            TerrainGenVersion.CURRENT, archetype,
-            currentLevelData.getSeed(), holeIndex,
-            ball.getPosition().x, ball.getPosition().y, ball.getPosition().z,
-            ball.getVelocity().x, ball.getVelocity().y, ball.getVelocity().z,
-            ball.getSpin().x, ball.getSpin().y, ball.getSpin().z
-        );
-    }
-
-    private void importShotFromClipboard() {
-        String clip = Gdx.app.getClipboard().getContents();
-        ShotExportPacket.ShotReplayData data = ShotExportPacket.decode(clip != null ? clip.trim() : null);
-        if (data == null) {
-            hud.showGameNotification("INVALID SHOT STRING", Color.RED, 2.5f);
-            return;
-        }
-        pendingShotReplay = data;
-        shotReplayReady = true;
-        startLoadingLevel(GameState.SHOT_REPLAY, -1);
     }
 
     private void updateDetermTest(float effDelta, Terrain terrain) {
@@ -1733,540 +940,25 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         }
     }
 
-    private void renderScene() {
-        if (levelManager.getTerrain() == null) return;
-        modelBatch.begin(camera);
-        levelManager.render(modelBatch, environment);
-        ball.render(modelBatch, environment);
-        ball.renderTrail(modelBatch, environment);
-        ghostManager.render(modelBatch, environment);
-        if (cameraController != null && cameraController.isOverhead()) {
-            highlightInstance.transform.setToTranslation(ball.getPosition());
-            modelBatch.render(highlightInstance, environment);
-        }
-        shotController.render(modelBatch, environment, ball.getPosition(), camera.position);
-        for (java.util.Map.Entry<String, RemoteBall> entry : remoteBalls.entrySet()) {
-            RemoteBall rb = entry.getValue();
-            if (!rb.hasRestPosition() || rb.isHoledOut()) continue;
-            java.util.List<com.badlogic.gdx.graphics.g3d.ModelInstance> instances = remoteBallInstances.get(entry.getKey());
-            if (instances == null || instances.isEmpty()) continue;
-
-            // Ball body (index 0) — scale up and fade alpha with distance so it's
-            // visible from far away but looks normal size up close.
-            com.badlogic.gdx.graphics.g3d.ModelInstance ballInst = instances.get(0);
-            com.badlogic.gdx.math.Vector3 ballPos = rb.isInFlight() ? rb.getPosition() : rb.getLastRestPosition();
-            float rbDist  = camera.position.dst(ballPos);
-            float rbT     = Math.max(0f, Math.min(1f, (rbDist - 10f) / 140f)); // 0 at ≤10, 1 at ≥150
-            float rbScale = 1f + rbT * 4f;   // 1× up close, 5× at distance
-            float rbAlpha = 1f - rbT * 0.4f; // fully opaque up close, 0.6 at distance
-            ballInst.transform.setToTranslation(ballPos).scale(rbScale, rbScale, rbScale);
-            com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute rbColor =
-                    (com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute)
-                    ballInst.materials.get(0).get(com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute.Diffuse);
-            if (rbColor != null) rbColor.color.a = rbAlpha;
-            modelBatch.render(ballInst, environment);
-
-            // Trail (indices 1..trailSize) — only while in flight
-            if (rb.isInFlight()) {
-                int trailSize = rb.getTrailSize();
-                for (int i = 0; i < trailSize && (i + 1) < instances.size(); i++) {
-                    com.badlogic.gdx.graphics.g3d.ModelInstance trailInst = instances.get(i + 1);
-                    float frac = (float)(i + 1) / trailSize; // 0=oldest, 1=newest
-                    float scale = 0.2f + 0.6f * frac;
-                    com.badlogic.gdx.math.Vector3 tp = rb.getTrailPoint(i);
-                    trailInst.transform.setToTranslation(tp).scale(scale, scale, scale);
-                    modelBatch.render(trailInst, environment);
-                }
-            }
-        }
-        particleManager.render(modelBatch, environment);
-        modelBatch.end();
-        if (currentLevelData != null && !isVictory && gameplayState != GameState.PUTTING_GREEN) {
-            windManager.render(camera, currentLevelData.getWind());
-        }
-    }
-
-    private void renderUI() {
-        boolean isPractice = (gameplayState == GameState.PRACTICE_RANGE || gameplayState == GameState.PUTTING_GREEN);
-        GameSession active = sessionManager.getActive();
-
-        if (currentState == GameState.DETERM_TEST) {
-            hud.showDetermTestOverlay(determResultText, determPhase);
-        } else if (isVictory && !(isMultiplayer && mpScoreboardVisible)) {
-            hud.renderVictory(hud.getShotCount(), currentLevelData, active, standard18UploadDone || standard18UploadInProgress, tutorialSession != null);
-        } else if (currentState == GameState.PAUSED) {
-            hud.renderPauseMenu(currentLevelData, inputProcessor, active, submissionCoordinator.isSubmissionInProgress(), lastShotExport);
-        } else if (currentState == GameState.SHOT_REPLAY && shotReplayReady) {
-            hud.renderShotReplayReadyHUD(pendingShotReplay);
-        } else {
-            if (!config.difficulty.hasClubInfo()) showClubInfo = false;
-            Terrain terrain = levelManager.getTerrain();
-            boolean cinematicHide = config.cinematicMode && ball != null && ball.getState() != Ball.State.STATIONARY;
-            if (terrain != null && !cinematicHide) {
-                hud.renderPlayingHUD(currentClub, ball, isPractice, currentLevelData, camera, terrain, active, inputProcessor, showClubInfo, shotController);
-            }
-            hud.renderSwingOverlay(camera, ball.getPosition());
-            if (terrain != null) {
-                hud.renderNotifications();
-            }
-        }
-
-        com.badlogic.gdx.scenes.scene2d.Stage uiStage =
-                (currentState == GameState.START) ? hud.getStartMenuStage() : hud.getStage();
-
-        if (tutorialSession != null) {
-            hud.applyTutorialButtonBlock(tutorialSession.controller.isActive() ? tutorialSession.controller.getCurrentStep() : null);
-        }
-
-        boolean cinematicHide = config.cinematicMode && ball != null && ball.getState() != Ball.State.STATIONARY;
-        if (uiStage != null && currentState != GameState.PAUSED) {
-            uiStage.act(Gdx.graphics.getDeltaTime());
-            if (!cinematicHide) uiStage.draw();
-        }
-
-        if (mpScoreboardVisible && mpScoreboardOverlay != null) {
-            mpScoreboardOverlay.act(Gdx.graphics.getDeltaTime());
-            mpScoreboardOverlay.draw();
-        }
-
-        if (tutorialSession != null && tutorialSession.controller.getCurrentStep().isOverlayVisible()) {
-            TutorialController.Step tutStep = tutorialSession.controller.getCurrentStep();
-            com.badlogic.gdx.math.Vector3 wind = (currentLevelData != null) ? currentLevelData.getWind() : null;
-            float aimYawDelta = Float.NaN;
-            if (tutStep == TutorialController.Step.STEP_2_AIM
-                    && cameraController != null && !Float.isNaN(tutorialSession.aimStartYaw)) {
-                float delta = cameraController.getYaw() - tutorialSession.aimStartYaw;
-                // Normalise to ±180° to handle yaw wrap-around
-                while (delta >  180f) delta -= 360f;
-                while (delta < -180f) delta += 360f;
-                aimYawDelta = delta;
-            }
-            hud.renderTutorialOverlay(tutStep, wind, aimYawDelta);
-        }
-
-        if (isMultiplayer && !remoteBalls.isEmpty()) {
-            hud.drawRemoteNameTags(remoteBalls.values(), camera,
-                    cameraController != null && cameraController.isOverhead());
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Multiplayer shot broadcast + replay
-    // -------------------------------------------------------------------------
-
-    private void broadcastMultiplayerShot() {
-        localStrokeNum++;
-        ShotPacket packet = new ShotPacket();
-        Vector3 pos = ball.getPosition();
-        Vector3 vel = ball.getVelocity();
-        Vector3 sp  = ball.getSpin();
-        packet.sx = pos.x; packet.sy = pos.y; packet.sz = pos.z;
-        packet.vx = vel.x; packet.vy = vel.y; packet.vz = vel.z;
-        packet.wx = sp.x;  packet.wy = sp.y;  packet.wz = sp.z;
-        packet.strokeNum = localStrokeNum;
-
-        int holeIndex = sessionManager.getActive() != null
-                ? sessionManager.getActive().getCurrentHoleIndex() : 0;
-
-        roomService.broadcastShot(
-            userSession.getIdToken(),
-            currentMultiplayerRoom.roomCode,
-            holeIndex,
-            userSession.getUid(),
-            packet,
-            new RoomService.SimpleCallback() {
-                @Override public void onSuccess() {}
-                @Override public void onFailure(String msg) {
-                    Gdx.app.error("Multiplayer", "Shot broadcast failed — queuing for retry: " + msg);
-                    PendingShot ps = new PendingShot();
-                    ps.packet = packet;
-                    ps.holeIndex = holeIndex;
-                    pendingShotUploads.add(ps);
-                }
-            });
-    }
-
-    private void pollRemoteShots() {
-        if (currentMultiplayerRoom == null) return;
-        int holeIndex = sessionManager.getActive() != null
-                ? sessionManager.getActive().getCurrentHoleIndex() : 0;
-        String myUid = userSession.getUid();
-
-        // --- Retry any uploads that failed since the last poll tick ---
-
-        // Shots: idempotent PUT, safe to re-send. Discard if the hole has advanced.
-        if (!pendingShotUploads.isEmpty()) {
-            java.util.List<PendingShot> toRetry = new java.util.ArrayList<>(pendingShotUploads);
-            pendingShotUploads.clear();
-            for (PendingShot ps : toRetry) {
-                if (ps.holeIndex != holeIndex) continue; // stale — hole has advanced
-                final PendingShot fPs = ps;
-                roomService.broadcastShot(
-                    userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                    ps.holeIndex, myUid, ps.packet,
-                    new RoomService.SimpleCallback() {
-                        @Override public void onSuccess() {}
-                        @Override public void onFailure(String msg) {
-                            Gdx.app.error("Multiplayer", "Shot retry failed — re-queuing: " + msg);
-                            pendingShotUploads.add(fPs);
-                        }
-                    });
-            }
-        }
-
-        // Ball-at-rest position: only the latest matters; discard if hole has advanced.
-        if (pendingBallRest != null) {
-            if (pendingBallRestHole == holeIndex) {
-                final RoomService.RestPacket r = pendingBallRest;
-                final int rh = pendingBallRestHole;
-                pendingBallRest = null; pendingBallRestHole = -1;
-                roomService.broadcastRest(
-                    userSession.getIdToken(), currentMultiplayerRoom.roomCode, rh, myUid, r,
-                    new RoomService.SimpleCallback() {
-                        @Override public void onSuccess() {}
-                        @Override public void onFailure(String msg) {
-                            Gdx.app.error("Multiplayer", "Ball rest retry failed — re-queuing: " + msg);
-                            pendingBallRest = r; pendingBallRestHole = rh;
-                        }
-                    });
-            } else {
-                pendingBallRest = null; pendingBallRestHole = -1; // stale
-            }
-        }
-
-        roomService.fetchShotsForHole(
-            userSession.getIdToken(),
-            currentMultiplayerRoom.roomCode,
-            holeIndex,
-            new RoomService.ShotsCallback() {
-                @Override public void onSuccess(java.util.List<ShotPacket> packets) {
-                    // Discard if the hole advanced while this request was in-flight —
-                    // stale shots from hole N arriving after advance to hole N+1 would
-                    // pollute consumedStrokes with old strokeNums, blocking all new shots.
-                    GameSession g = sessionManager.getActive();
-                    if (g != null && g.getCurrentHoleIndex() != holeIndex) return;
-                    for (ShotPacket p : packets) {
-                        if (p.uid.equals(myUid)) continue;
-                        int consumed = consumedStrokes.getOrDefault(p.uid, 0);
-                        if (p.strokeNum > consumed) {
-                            consumedStrokes.put(p.uid, p.strokeNum);
-                            RemoteBall rb = remoteBalls.get(p.uid);
-                            if (rb != null) {
-                                boolean wasStationary = rb.getState() == Ball.State.STATIONARY;
-                                rb.offerPacket(p);
-                                if (wasStationary && soundManager != null) {
-                                    com.badlogic.gdx.math.Vector3 shotPos =
-                                            new com.badlogic.gdx.math.Vector3(p.sx, p.sy, p.sz);
-                                    float speed = new com.badlogic.gdx.math.Vector3(p.vx, p.vy, p.vz).len();
-                                    float power = com.badlogic.gdx.math.MathUtils.clamp(speed / 50f, 0f, 1f);
-                                    soundManager.playRemoteBallStrike("iron", power,
-                                            camera.position, shotPos, calcRemotePan(shotPos));
-                                }
-                            }
-                        }
-                    }
-                }
-                @Override public void onFailure(String msg) {
-                    Gdx.app.error("Multiplayer", "Shot poll failed: " + msg);
-                }
-            });
-
-        roomService.fetchRestsForHole(
-            userSession.getIdToken(),
-            currentMultiplayerRoom.roomCode,
-            holeIndex,
-            new RoomService.RestCallback() {
-                @Override public void onSuccess(java.util.List<RoomService.RestPacket> packets) {
-                    // Same staleness guard as shots callback.
-                    GameSession g = sessionManager.getActive();
-                    if (g != null && g.getCurrentHoleIndex() != holeIndex) return;
-                    for (RoomService.RestPacket p : packets) {
-                        if (p.uid.equals(myUid)) continue;
-                        RemoteBall rb = remoteBalls.get(p.uid);
-                        if (rb != null) rb.offerRestPacket(p);
-                    }
-                }
-                @Override public void onFailure(String msg) {
-                    Gdx.app.error("Multiplayer", "Rest poll failed: " + msg);
-                }
-            });
-    }
-
-    // -------------------------------------------------------------------------
-    // Multiplayer hole progression + scoreboard
-    // -------------------------------------------------------------------------
-
-    /** Rebuilds the scoreboard overlay with the latest local data. */
-    private void refreshMpScoreboard() {
-        if (mpScoreboardOverlay == null || currentMultiplayerRoom == null) return;
-        GameSession active = sessionManager.getActive();
-        int holeIdx = active != null ? active.getCurrentHoleIndex() : 0;
-        // advanceHole() pushes the index past the end when the session finishes;
-        // clamp so the overlay always receives a valid hole index.
-        if (active != null && !active.getCourseLayout().isEmpty()) {
-            holeIdx = Math.min(holeIdx, active.getCourseLayout().size() - 1);
-        }
-        boolean isHost = userSession.getUid().equals(currentMultiplayerRoom.hostUid);
-        mpScoreboardOverlay.update(
-            currentMultiplayerRoom.players,
-            mpPlayerDifficulties,
-            mpHoleScores,
-            holeIdx,
-            mpAllPlayersFinishedHole,
-            mpIsFinalScoreboard,
-            isHost);
-    }
-
-    /** Polls the room every 0.5s while the scoreboard is showing. */
-    private void pollMultiplayerScoreboard() {
-        if (currentMultiplayerRoom == null) return;
-        roomService.pollRoom(userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-            new RoomService.RoomCallback() {
-                @Override public void onSuccess(RoomService.RoomState room) {
-                    // Merge incoming scores into local cache
-                    for (java.util.Map.Entry<String, java.util.Map<Integer, Integer>> e : room.scores.entrySet()) {
-                        int[] arr = mpHoleScores.computeIfAbsent(e.getKey(), k -> new int[9]);
-                        for (java.util.Map.Entry<Integer, Integer> h : e.getValue().entrySet()) {
-                            arr[h.getKey()] = h.getValue();
-                        }
-                    }
-                    // Check if all players have submitted for the current hole
-                    GameSession active = sessionManager.getActive();
-                    int holeIdx = active != null ? active.getCurrentHoleIndex() : 0;
-                    boolean allDone = true;
-                    for (String uid : currentMultiplayerRoom.players.keySet()) {
-                        java.util.Map<Integer, Integer> s = room.scores.get(uid);
-                        if (s == null || !s.containsKey(holeIdx)) { allDone = false; break; }
-                    }
-                    mpAllPlayersFinishedHole = allDone;
-
-                    // Retry score submission if it failed at hole-out time.
-                    // This is what would keep the host's NEXT HOLE button disabled — retrying
-                    // here means a brief connection loss at hole-out auto-recovers silently.
-                    if (pendingScoreHoleIdx >= 0) {
-                        final int rh = pendingScoreHoleIdx;
-                        final int rs = pendingScoreStrokes;
-                        pendingScoreHoleIdx = -1; pendingScoreStrokes = -1;
-                        roomService.submitScore(
-                            userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                            userSession.getUid(), rh, rs,
-                            new RoomService.SimpleCallback() {
-                                @Override public void onSuccess() {}
-                                @Override public void onFailure(String msg) {
-                                    Gdx.app.error("Multiplayer", "Score retry failed — re-queuing: " + msg);
-                                    pendingScoreHoleIdx = rh; pendingScoreStrokes = rs;
-                                }
-                            });
-                    }
-
-                    // Retry hole-out rest broadcast (lets remotes lerp the ball into the hole).
-                    if (pendingHoleRest != null && pendingHoleRestHole == holeIdx) {
-                        final RoomService.RestPacket r = pendingHoleRest;
-                        final int rh = pendingHoleRestHole;
-                        pendingHoleRest = null; pendingHoleRestHole = -1;
-                        roomService.broadcastRest(
-                            userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                            rh, userSession.getUid(), r,
-                            new RoomService.SimpleCallback() {
-                                @Override public void onSuccess() {}
-                                @Override public void onFailure(String msg) {
-                                    Gdx.app.error("Multiplayer", "Hole rest retry failed — re-queuing: " + msg);
-                                    pendingHoleRest = r; pendingHoleRestHole = rh;
-                                }
-                            });
-                    }
-
-                    boolean isHost = userSession.getUid().equals(currentMultiplayerRoom.hostUid);
-                    if (!isHost) {
-                        // Detect host advancing to next hole
-                        if ("finished".equals(room.state)) {
-                            mpIsFinalScoreboard = true;
-                        } else if (room.currentHole > holeIdx) {
-                            advanceMultiplayerHole();
-                            return;
-                        }
-                    }
-                    refreshMpScoreboard();
-                }
-                @Override public void onFailure(String msg) {
-                    Gdx.app.error("Multiplayer", "Scoreboard poll failed: " + msg);
-                }
-            });
-    }
-
-    /**
-     * Builds the live scoreboard entry list for all players in the current multiplayer match.
-     * Local player is always first; remote players follow in insertion order.
-     */
-    private java.util.List<LiveScoreboardActor.ScoreEntry> buildLiveScoreEntries() {
-        java.util.List<LiveScoreboardActor.ScoreEntry> entries = new java.util.ArrayList<>();
-        GameSession active = sessionManager.getActive();
-        int holeIndex = active != null ? active.getCurrentHoleIndex() : 0;
-        String localUid = userSession.getUid();
-
-        // Local player
-        int localHoleStrokes = active != null ? active.getCurrentHoleStrokes() : 0;
-        int localTotal = active != null ? active.getTotalScore() : 0;
-        boolean localHoledOut = mpScoreboardVisible;
-        entries.add(new LiveScoreboardActor.ScoreEntry(
-                userSession.getDisplayName(), localHoleStrokes, localTotal, localHoledOut, true));
-
-        // Remote players
-        for (java.util.Map.Entry<String, String> e : currentMultiplayerRoom.players.entrySet()) {
-            String uid = e.getKey();
-            if (uid.equals(localUid)) continue;
-            String name = e.getValue();
-            int holeStrokes = consumedStrokes.getOrDefault(uid, 0);
-            int[] prevScores = mpHoleScores.get(uid);
-            int prevTotal = 0;
-            if (prevScores != null) {
-                for (int i = 0; i < holeIndex && i < prevScores.length; i++) prevTotal += prevScores[i];
-            }
-            int total = prevTotal + holeStrokes;
-            RemoteBall rb = remoteBalls.get(uid);
-            boolean holedOut = rb != null && rb.isHoledOut();
-            entries.add(new LiveScoreboardActor.ScoreEntry(name, holeStrokes, total, holedOut, false));
-        }
-        return entries;
-    }
-
-    /** Called by the host's "Next Hole" / "End Match" button. */
-    private void onMpNextHole() {
-        // No mpAllPlayersFinishedHole guard here — the button is only enabled when that
-        // condition was met, and a stale poll callback flipping the field between the
-        // button being built and the tap would cause silent no-ops. nextHoleInFlight
-        // prevents double-fire instead.
-        GameSession active = sessionManager.getActive();
-        int nextHole = (active != null ? active.getCurrentHoleIndex() : 0) + 1;
-        boolean isFinalHole = (active != null && active.getMode().holeCount() == nextHole);
-
-        // Grey out the button immediately so the host can't double-fire
-        if (mpScoreboardOverlay != null) mpScoreboardOverlay.setNextHoleInFlight(true);
-        refreshMpScoreboard();
-
-        if (isFinalHole) {
-            // Mark match finished in RTDB, then advance locally to final scoreboard
-            roomService.setFinished(userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                new RoomService.SimpleCallback() {
-                    @Override public void onSuccess() { advanceMultiplayerHole(); }
-                    @Override public void onFailure(String msg) {
-                        Gdx.app.error("Multiplayer", "setFinished failed: " + msg);
-                        if (mpScoreboardOverlay != null) mpScoreboardOverlay.setNextHoleInFlight(false);
-                        refreshMpScoreboard();
-                    }
-                });
-        } else {
-            roomService.advanceHole(userSession.getIdToken(), currentMultiplayerRoom.roomCode,
-                nextHole,
-                new RoomService.SimpleCallback() {
-                    @Override public void onSuccess() { advanceMultiplayerHole(); }
-                    @Override public void onFailure(String msg) {
-                        Gdx.app.error("Multiplayer", "advanceHole failed: " + msg);
-                        if (mpScoreboardOverlay != null) mpScoreboardOverlay.setNextHoleInFlight(false);
-                        refreshMpScoreboard();
-                    }
-                });
-        }
-    }
-
-    /** Advances local session to the next hole (or shows final scoreboard if all holes done). */
-    private void advanceMultiplayerHole() {
-        GameSession active = sessionManager.getActive();
-        if (active != null) active.advanceHole();
-        localStrokeNum = 0;
-        consumedStrokes.clear();
-        resetMultiplayerReplayState();
-
-        if (active != null && active.isFinished()) {
-            // All 9 holes done — show final scoreboard
-            mpScoreboardVisible = true;
-            mpIsFinalScoreboard = true;
-            mpAllPlayersFinishedHole = true;
-            refreshMpScoreboard();
-            setupInputProcessor();
-        } else {
-            mpScoreboardVisible = false;
-            mpAllPlayersFinishedHole = false;
-            mpIsFinalScoreboard = false;
-            setupInputProcessor();
-            startLoadingLevel(GameState.COMPETITIVE, -1);
-        }
-    }
-
     private void exitToMainMenu() {
-        shotController.reset();
-        hud.resetShots();
-        isVictory                   = false;
-        standard18UploadDone        = false;
-        standard18UploadInProgress  = false;
-        isMultiplayer               = false;
-        currentMultiplayerRoom      = null;
-        mpScoreboardVisible         = false;
-        mpAllPlayersFinishedHole    = false;
-        mpIsFinalScoreboard         = false;
-        mpHoleScores.clear();
-        mpPlayerDifficulties.clear();
-        pendingHoleRest = null; pendingHoleRestHole = -1;
-        pendingScoreHoleIdx = -1; pendingScoreStrokes = -1;
-        resetMultiplayerReplayState();
-        sessionManager.clearActive();
-        menuManager.setMenuState(MenuState.MAIN);
-        menuManager.setMenuSelection(0);
-        cameraController = null;
-        if (tutorialSession != null) {
-            config.setDifficulty(tutorialSession.preDifficulty);
-            tutorialSession = null;
-            selectedArchetype = null;
-            pendingTutorial  = false;
-            tutorialCompletionTapConsumed = false;
-            hud.clearTutorialBlock();
-            hud.invalidateMobileMenuState();
-        }
-        changeState(GameState.START);
+        gameFlow.exitToMainMenu();
     }
 
-    private void enterSoundSettings() {
-        changeState(GameState.SOUND_SETTINGS);
-    }
-
-    private void enterProfileScreen() {
-        hud.resetProfileScreen();
-        if (authService != null && userSession.isIdTokenExpired()) {
-            authService.refreshToken(userSession.getRefreshToken(), new AuthService.AuthCallback() {
-                @Override public void onSuccess(AuthService.AuthResult r) {
-                    userSession.updateIdToken(r.idToken, r.refreshToken);
-                    changeState(GameState.PROFILE_SCREEN);
-                }
-                @Override public void onFailure(String msg) {
-                    Gdx.app.log("GolfGame", "Token refresh failed before profile open: " + msg);
-                    changeState(GameState.PROFILE_SCREEN);
-                }
-            });
-        } else {
-            changeState(GameState.PROFILE_SCREEN);
-        }
-    }
-
-    private void enterInstructions() {
-        hud.resetInstructionScroll();
-        changeState(GameState.INSTRUCTIONS);
-    }
-
-    private void enterCameraConfig() {
-        hud.resetCameraConfigScroll();
-        changeState(GameState.CAMERA_CONFIG);
-    }
+    private void enterSoundSettings()  { gameFlow.enterSoundSettings(); }
+    private void enterProfileScreen()  { gameFlow.enterProfileScreen(); }
+    private void enterInstructions()   { gameFlow.enterInstructions(); }
+    private void enterCameraConfig()   { gameFlow.enterCameraConfig(); }
 
     @Override
     public void onOutOfBounds() {
         hud.showOutOfBounds();
-        resetBallToLastShot();
+        levelLifecycle.resetBallToLastShot(ball);
     }
 
     @Override
     public void onWaterHazard() {
         hud.showWaterHazard();
-        resetBallToLastShot();
+        levelLifecycle.resetBallToLastShot(ball);
     }
 
     @Override
@@ -2280,8 +972,8 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     @Override
     public void onStartQuickPlay() {
-        selectedArchetype = null;
-        startLoadingLevel(GameState.PLAYING, -1);
+        levelLifecycle.setSelectedArchetype(null);
+        levelLifecycle.startLoadingLevel(GameState.PLAYING, -1);
     }
 
     @Override
@@ -2301,20 +993,20 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
 
     @Override
     public void onStartWithClipboardSeed() {
-        selectedArchetype = null;
+        levelLifecycle.setSelectedArchetype(null);
         long seed = -1;
         String clip = Gdx.app.getClipboard().getContents();
         try {
             if (clip != null) seed = Long.parseLong(clip.trim());
         } catch (Exception ignored) {
         }
-        startLoadingLevel(GameState.PLAYING, seed);
+        levelLifecycle.startLoadingLevel(GameState.PLAYING, seed);
     }
 
     @Override
     public void onStartWithArchetype(LevelData.Archetype archetype) {
-        selectedArchetype = archetype;
-        startLoadingLevel(GameState.PLAYING, -1);
+        levelLifecycle.setSelectedArchetype(archetype);
+        levelLifecycle.startLoadingLevel(GameState.PLAYING, -1);
     }
 
     @Override
@@ -2323,7 +1015,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         if (standard != null && !standard.isFinished()) {
             sessionManager.setActive(standard);
             config.setDifficulty(standard.getDifficulty());
-            startLoadingLevel(GameState.COMPETITIVE, -1);
+            levelLifecycle.startLoadingLevel(GameState.COMPETITIVE, -1);
         } else {
             menuManager.setPendingMatchMode(0);
             menuManager.setMenuState(MenuState.DIFFICULTY_SELECT);
@@ -2361,7 +1053,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             // In-progress session — resume it
             sessionManager.setActive(daily);
             config.setDifficulty(daily.getDifficulty());
-            startLoadingLevel(GameState.COMPETITIVE, -1);
+            levelLifecycle.startLoadingLevel(GameState.COMPETITIVE, -1);
         } else if (daily == null) {
             // No session for today — let the player start one
             menuManager.setPendingMatchMode(pendingMatchMode);
@@ -2386,38 +1078,22 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             case 5 -> sessionManager.startDailyPar5();
         }
 
-        startLoadingLevel(GameState.COMPETITIVE, -1);
+        levelLifecycle.startLoadingLevel(GameState.COMPETITIVE, -1);
     }
 
     @Override
     public void onStartPracticeRange() {
-        startLoadingLevel(GameState.PRACTICE_RANGE, -1);
+        levelLifecycle.startLoadingLevel(GameState.PRACTICE_RANGE, -1);
     }
 
     @Override
     public void onImportShot() {
-        String clip = Gdx.app.getClipboard().getContents();
-        ShotExportPacket.ShotReplayData data =
-                ShotExportPacket.decode(clip != null ? clip.trim() : null);
-        if (data == null) {
-            showImportRetryPrompt = true;
-            hud.showImportRetryOverlay(this::onImportShot, this::dismissImportOverlay);
-            return;
-        }
-        dismissImportOverlay();
-        pendingShotReplay = data;
-        shotReplayReady = true;
-        startLoadingLevel(GameState.SHOT_REPLAY, -1);
-    }
-
-    private void dismissImportOverlay() {
-        showImportRetryPrompt = false;
-        hud.hideImportRetryOverlay();
+        levelLifecycle.handleImportShot(this::onImportShot, levelLifecycle::dismissImportOverlay);
     }
 
     @Override
     public void onStartPuttingGreen() {
-        startLoadingLevel(GameState.PUTTING_GREEN, -1);
+        levelLifecycle.startLoadingLevel(GameState.PUTTING_GREEN, -1);
     }
 
     @Override
@@ -2427,16 +1103,15 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         determResultText = "Firing shot 1...";
         determLLResult   = "";
         determRemoteBall = null;
-        startLoadingLevel(GameState.DETERM_TEST, -1);
+        levelLifecycle.startLoadingLevel(GameState.DETERM_TEST, -1);
     }
 
     @Override
     public void onStartTutorial() {
         config.setDifficulty(GameConfig.Difficulty.NOVICE);
-        tutorialSession = new TutorialSession(new TutorialController(), config.difficulty);
-        selectedArchetype = null;
-        pendingTutorial  = true;
-        startLoadingLevel(GameState.PLAYING, -1);
+        tutorialBridge.start(config.difficulty);
+        levelLifecycle.setSelectedArchetype(null);
+        levelLifecycle.startLoadingLevel(GameState.PLAYING, -1);
     }
 
     @Override
@@ -2460,30 +1135,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         submissionCoordinator.resubmitDaily(type);
     }
 
-    private void tryAutoRetryPending() {
-        submissionCoordinator.tryAutoRetryAll();
-    }
-
-    private boolean isVictoryCourseComplete() {
-        GameSession active = sessionManager.getActive();
-        return isVictory && gameplayState == GameState.COMPETITIVE && active != null && active.isFinished();
-    }
-
-    private boolean isGameplayState(GameState state) {
-        return state == GameState.PLAYING || state == GameState.COMPETITIVE ||
-                state == GameState.PRACTICE_RANGE || state == GameState.PUTTING_GREEN ||
-                state == GameState.DETERM_TEST || state == GameState.SHOT_REPLAY;
-    }
-
-    private boolean isGameplayState() {
-        return isGameplayState(this.currentState);
-    }
-
-    private boolean isOverlayState(GameState state) {
-        return state == GameState.INSTRUCTIONS || state == GameState.CAMERA_CONFIG
-                || state == GameState.SOUND_SETTINGS || state == GameState.PROFILE_SCREEN
-                || state == GameState.RANK_INFO;
-    }
+    private boolean isGameplayState(GameState state) { return GameFlowController.isGameplayState(state); }
+    private boolean isGameplayState()                 { return GameFlowController.isGameplayState(gameFlow.getCurrentState()); }
+    private boolean isOverlayState(GameState state)   { return GameFlowController.isOverlayState(state); }
 
     @Override
     public void resize(int width, int height) {
@@ -2491,7 +1145,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         hud.resize(width, height);
         if (loginScreen != null) loginScreen.resize(width, height);
         if (multiplayerLobbyScreen != null) multiplayerLobbyScreen.resize(width, height);
-        if (mpScoreboardOverlay != null) mpScoreboardOverlay.resize(width, height);
     }
 
     @Override
@@ -2503,216 +1156,6 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     @Override
     public void resume() {
         if (soundManager != null) soundManager.onAppResume();
-    }
-
-    /** Returns stereo pan (-1=left, 1=right) for a world position relative to the camera's facing. */
-    private float calcRemotePan(com.badlogic.gdx.math.Vector3 worldPos) {
-        com.badlogic.gdx.math.Vector3 toTarget = new com.badlogic.gdx.math.Vector3(worldPos).sub(camera.position);
-        if (toTarget.len2() < 0.001f) return 0f;
-        toTarget.nor();
-        com.badlogic.gdx.math.Vector3 right = new com.badlogic.gdx.math.Vector3(camera.direction).crs(camera.up).nor();
-        return com.badlogic.gdx.math.MathUtils.clamp(toTarget.dot(right), -1f, 1f);
-    }
-
-    private void updateAmbientPositions(float delta, com.gearygolf.golf.terrain.Terrain terrain) {
-        ambientPosTimer -= delta;
-        if (ambientPosTimer > 0f) return;
-        ambientPosTimer = AMBIENT_POS_INTERVAL;
-
-        float cx = camera.position.x;
-        float cz = camera.position.z;
-
-        // Water: find nearest terrain point (on an 8-unit grid) where height < waterLevel
-        float waterLevel = terrain.getWaterLevel();
-        // Search for nearest water tile regardless of water level sign — archetypes use negative levels.
-        // Skip only the Terrain sentinel (-1f from non-ClassicGenerator maps with no water system).
-        float bestDistSq = Float.MAX_VALUE;
-        waterPosValid = false;
-        float terrainHalfX = terrain.getMaxDistanceX();
-        float terrainHalfZ = terrain.getMaxDistanceZ();
-        int steps = (int)(AMBIENT_WATER_RADIUS / 8f);
-        for (int dx = -steps; dx <= steps; dx++) {
-            for (int dz = -steps; dz <= steps; dz++) {
-                float wx = cx + dx * 8f;
-                float wz = cz + dz * 8f;
-                // Skip out-of-bounds positions — getSurfaceHeightAt clamps to the edge,
-                // which can falsely match water if the terrain edge happens to be low.
-                if (Math.abs(wx) >= terrainHalfX || Math.abs(wz) >= terrainHalfZ) continue;
-                if (terrain.getHeightAt(wx, wz) < waterLevel) {
-                    float distSq = dx * dx * 64f + dz * dz * 64f;
-                    if (distSq < bestDistSq) {
-                        bestDistSq = distSq;
-                        cachedWaterPos.set(wx, waterLevel, wz);
-                        waterPosValid = true;
-                    }
-                }
-            }
-        }
-
-        // Trees: weighted centroid of nearby trees — weight = fR / (1 + dist)
-        java.util.List<com.gearygolf.golf.terrain.objects.Tree> allTrees = terrain.getTrees();
-        float totalWeight = 0f;
-        float sumX = 0f, sumY = 0f, sumZ = 0f;
-        for (com.gearygolf.golf.terrain.objects.Tree tree : allTrees) {
-            com.badlogic.gdx.math.Vector3 tp = tree.getPosition();
-            float dist = (float) Math.sqrt((tp.x - cx) * (tp.x - cx) + (tp.z - cz) * (tp.z - cz));
-            if (dist <= AMBIENT_TREE_RADIUS) {
-                float weight = tree.fR / (1f + dist);
-                totalWeight += weight;
-                sumX += tp.x * weight;
-                sumY += (tp.y + tree.getTrunkHeight() + tree.fR * 0.5f) * weight;
-                sumZ += tp.z * weight;
-            }
-        }
-        if (totalWeight > 0f) {
-            cachedFoliagePos.set(sumX / totalWeight, sumY / totalWeight, sumZ / totalWeight);
-            foliagePosValid = true;
-        } else {
-            foliagePosValid = false;
-        }
-    }
-
-    // ── Swing tempo tolerance helpers ────────────────────────────────────────
-
-    /**
-     * "Perfect" window as a fraction of the expected forward-swing duration,
-     * scaled by game difficulty and club type.
-     * NOVICE is 3× more forgiving than TOUR_PRO; driver/putter get an extra 40% grace.
-     */
-    private static float swingPerfectFraction(GameConfig.Difficulty diff, Club club) {
-        float base = switch (diff) {
-            case NOVICE       -> 0.30f;
-            case INTERMEDIATE -> 0.22f;
-            case ADVANCED     -> 0.16f;
-            case PRO          -> 0.12f;
-            case TOUR_PRO     -> 0.10f;
-        };
-        return base * clubTempoModifier(club);
-    }
-
-    /** Outer edge of the graded tempo window (beyond this → quality = 0). */
-    private static float swingMaxFraction(GameConfig.Difficulty diff, Club club) {
-        float base = switch (diff) {
-            case NOVICE       -> 1.20f;
-            case INTERMEDIATE -> 0.90f;
-            case ADVANCED     -> 0.70f;
-            case PRO          -> 0.55f;
-            case TOUR_PRO     -> 0.50f;
-        };
-        return base * clubTempoModifier(club);
-    }
-
-    /**
-     * Contact offset threshold beyond which putter heel/toe causes a penalty.
-     * Putters are wide — only extreme mis-hits lose distance. Scaled by difficulty.
-     * Value is the abs(contactOffset) fraction [0,1] where the penalty begins.
-     */
-    private static float putterContactThreshold(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> 0.80f;
-            case INTERMEDIATE -> 0.65f;
-            case ADVANCED     -> 0.55f;
-            case PRO          -> 0.45f;
-            case TOUR_PRO     -> 0.35f;
-        };
-    }
-
-    /**
-     * Non-putter contact sweet spot: abs(contactOffset) below this = zero quality penalty.
-     * Widens the central "clean contact" zone for easier difficulties.
-     */
-    private static float swingContactSweetSpot(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> 0.60f;
-            case INTERMEDIATE -> 0.35f;
-            case ADVANCED     -> 0.12f;
-            case PRO          -> 0.05f;
-            case TOUR_PRO     -> 0.00f;
-        };
-    }
-
-    /**
-     * Club head rect size [w, h] for the swing overlay.
-     * Larger = visually bigger face AND mechanically more forgiving (offset normalised by h).
-     * NOVICE rect is ~60% taller than Tour Pro; intermediate splits the difference.
-     */
-    private static float[] swingClubSize(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> new float[]{ 18f, 54f };
-            case INTERMEDIATE -> new float[]{ 15f, 44f };
-            case ADVANCED     -> new float[]{ 13f, 38f };
-            case PRO          -> new float[]{ 12f, 36f };
-            case TOUR_PRO     -> new float[]{ 11f, 34f };
-        };
-    }
-
-    /**
-     * Multiplier on path angle and gear-effect direction (1.0 = full, 0.35 = novice ≈ ÷3).
-     * Applies to both the swing-line path and the heel/toe gear-effect curve.
-     */
-    private static float swingPathScale(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> 0.35f;
-            case INTERMEDIATE -> 0.55f;
-            case ADVANCED     -> 0.72f;
-            case PRO          -> 0.87f;
-            case TOUR_PRO     -> 1.00f;
-        };
-    }
-
-    /**
-     * First bracket boundary for the non-linear path curve (raw path degrees).
-     * Path below this is 1× sensitivity; above it is 2× per extra degree.
-     * NOVICE=4° (needs big path errors to curve much), TOUR_PRO=2° (amplifies sooner).
-     * Evenly spaced: 0.5° per difficulty step.
-     */
-    private static float swingPathBreakpoint1(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> 4.0f;
-            case INTERMEDIATE -> 3.5f;
-            case ADVANCED     -> 3.0f;
-            case PRO          -> 2.5f;
-            case TOUR_PRO     -> 2.0f;
-        };
-    }
-
-    /**
-     * Quality factor at maximum follow-through height (height=1.0 = full flip/scoop).
-     * Lower = bigger penalty. At NOVICE, even a terrible follow-through barely hurts.
-     */
-    /**
-     * Angle threshold (degrees) beyond which a follow-through is classified HIGH or LOW.
-     * Easier difficulties forgive a wider deviation from the projected path line.
-     */
-    private static float swingFollowThroughAngleThreshold(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> 6.0f;
-            case INTERMEDIATE -> 5.5f;
-            case ADVANCED     -> 5.0f;
-            case PRO          -> 4.5f;
-            case TOUR_PRO     -> 4.0f;
-        };
-    }
-
-    /**
-     * abs(contactOffset) at which a shank triggers. Higher = harder to shank.
-     * NOVICE: 0.95 (nearly impossible); TOUR_PRO: 0.85 (current).
-     */
-    private static float swingShankThreshold(GameConfig.Difficulty diff) {
-        return switch (diff) {
-            case NOVICE       -> 0.95f;
-            case INTERMEDIATE -> 0.92f;
-            case ADVANCED     -> 0.89f;
-            case PRO          -> 0.87f;
-            case TOUR_PRO     -> 0.85f;
-        };
-    }
-
-    /** Extra tempo forgiveness per club category. */
-    private static float clubTempoModifier(Club club) {
-        if (club == Club.DRIVER || club == Club.PUTTER) return 1.40f;
-        if (club.name().contains("WEDGE"))              return 0.85f;
-        return 1.0f;  // irons / woods / hybrids
     }
 
     /**
@@ -2740,21 +1183,9 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         ghostManager.dispose();
         particleManager.dispose();
         if (ball != null) ball.dispose();
-        if (highlightModel != null) highlightModel.dispose();
-        if (remoteBallModel != null) remoteBallModel.dispose();
-        if (mpScoreboardOverlay != null) mpScoreboardOverlay.dispose();
+        renderOrchestrator.dispose();
+        mpCoordinator.dispose();
         if (soundManager != null) soundManager.dispose();
     }
 
-    /** Holds all per-tutorial-run state so the 4 individual fields can be replaced by a single nullable reference. */
-    private static final class TutorialSession {
-        final TutorialController controller;
-        final GameConfig.Difficulty preDifficulty;
-        float aimStartYaw = Float.NaN;
-
-        TutorialSession(TutorialController controller, GameConfig.Difficulty preDifficulty) {
-            this.controller = controller;
-            this.preDifficulty = preDifficulty;
-        }
-    }
 }

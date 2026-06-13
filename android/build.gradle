@@ -14,7 +14,7 @@ dependencies {
 
 android {
     namespace "com.gearygolf.golf"
-    compileSdk 35
+    compileSdk 36
     buildFeatures {
         buildConfig true
     }
@@ -44,7 +44,7 @@ android {
         applicationId "com.gearygolf.golf"
         minSdk 21
         targetSdk 35
-        versionCode 16
+        versionCode 19
         versionName "1.0"
 
         // Read secrets from android/key.properties (gitignored — never commit that file).
@@ -65,6 +65,12 @@ android {
             jniLibs.srcDirs = ['libs']
         }
     }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false  // store .so uncompressed so the OS can map them
+        }                               // directly from the APK — required for 16 KB page alignment
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -95,5 +101,36 @@ task copyNatives {
 project.afterEvaluate {
     tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") }.configureEach {
         dependsOn copyNatives
+    }
+
+    // Re-align the release APK to 16 KB page boundaries after AGP signs/packages it.
+    // AGP's experimental alignment flag is unreliable; running zipalign explicitly is the
+    // only way to guarantee compliance with the Play Store 16 KB page-size requirement.
+    def zipalignExe = android.sdkDirectory.absolutePath
+            .replace('\\', '/')
+            .with { sdk ->
+                def toolsDir = new File("${sdk}/build-tools")
+                def latest = toolsDir.listFiles()?.sort()?.last()?.name ?: "36.1.0"
+                "${sdk}/build-tools/${latest}/zipalign"
+            }
+    // On Windows the binary has a .exe extension
+    if (System.getProperty("os.name").toLowerCase().contains("win")) {
+        zipalignExe += ".exe"
+    }
+
+    tasks.matching { it.name == "assembleRelease" }.configureEach {
+        doLast {
+            def apkDir  = "${buildDir}/outputs/apk/release"
+            def srcApk  = "${apkDir}/android-release.apk"
+            def dstApk  = "${apkDir}/android-release-aligned.apk"
+            if (new File(srcApk).exists()) {
+                exec {
+                    commandLine zipalignExe, "-p", "-f", "16384", srcApk, dstApk
+                }
+                println "16 KB-aligned APK written to: ${dstApk}"
+            } else {
+                println "WARNING: ${srcApk} not found — skipping zipalign step."
+            }
+        }
     }
 }

@@ -24,7 +24,7 @@ public class MinigameUI {
         float swell = (barSwellTimer > 0) ? MathUtils.sin((1f - barSwellTimer / 0.3f) * MathUtils.PI) * 15f : 0;
         float height = baseH + swell;
         float x = (screenW - width) / 2f;
-        float y = (screenH - 150f) - (height - baseH) / 2f;
+        float y = (screenH - 120f) - (height - baseH) / 2f;
 
         com.badlogic.gdx.Gdx.gl.glEnable(GL20.GL_BLEND);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);

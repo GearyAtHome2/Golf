@@ -5,7 +5,8 @@
 
     <application
             android:icon="@mipmap/app_icon"
-            android:allowBackup="false"
+            android:extractNativeLibs="false"
+        android:allowBackup="false"
             android:label="Geary Golf"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 

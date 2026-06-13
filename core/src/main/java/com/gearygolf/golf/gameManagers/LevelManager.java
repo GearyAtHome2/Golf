@@ -21,14 +21,14 @@ public class LevelManager implements Disposable {
     private final List<ModelInstance> yardageMarkers = new ArrayList<>();
     private final List<DistanceSign> rangeSigns = new ArrayList<>();
 
-    public void buildLevel(ITerrainGenerator generator, float waterLevel, int distance) {
+    public void buildLevel(ITerrainGenerator generator, float waterLevel, int distance, int mapWidth) {
         disposeCurrentAssets();
         // Hint the GC to collect the old terrain's Java heap (height maps, terrain type arrays)
         // before generation starts. On Android, this helps avoid a GC compaction mid-generation
         // which on some devices causes a 10+ second stop-the-world pause (userfaultfd timeout).
         System.gc();
 
-        terrain = new Terrain(generator, waterLevel, distance);
+        terrain = new Terrain(generator, waterLevel, distance, mapWidth);
 
         if (generator instanceof PracticeRangeGenerator gen) {
             createPracticeAssets(gen);
