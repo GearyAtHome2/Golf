@@ -55,8 +55,6 @@ public class GoldsmithBowlGenerator {
 
     // ── Noise tuning ──────────────────────────────────────────────────────────
 
-    /** Noise is damped to this fraction of full amplitude on the green platform. */
-    private static final float NOISE_GREEN_DAMP  = 0.04f;
     /** Fine-octave frequency multiplier relative to data.getHillFrequency(). */
     private static final float NOISE_FINE_MULT   = 2.5f;
     /** Mix between coarse (0.65) and fine (0.35) octaves. */
@@ -115,6 +113,10 @@ public class GoldsmithBowlGenerator {
                 float d     = (float) Math.sqrt(dx * dx + dz * dz);
                 float zNorm = z / (float) (SIZE_Z - 1);
 
+                // Green platform interior: leave heights untouched so the undulation
+                // applied by ClassicGenerator.generateHeightMap() is preserved.
+                if (d <= innerR) continue;
+
                 float target = bowlProfile(d, gH, teeH, rimH, innerR, rimR, outerR);
 
                 // hillRamp matches ClassicGenerator.generateHeightMap() exactly:
@@ -125,15 +127,25 @@ public class GoldsmithBowlGenerator {
                 hillRamp = TerrainUtils.smoothstep(hillRamp);
 
                 float nf = MathUtils.clamp((d - innerR) / Math.max(outerR - innerR, 1f), 0f, 1f);
-                nf = nf * nf;  // quadratic fade — quietest on green, full on outer slopes
+                nf = nf * nf;  // quadratic fade — full on outer slopes
 
                 float coarse = noiseGen.noise(x * freq                   + nOff1x, z * freq                   + nOff1z);
                 float fine   = noiseGen.noise(x * freq * NOISE_FINE_MULT  + nOff2x, z * freq * NOISE_FINE_MULT  + nOff2z);
                 float noiseH = (coarse * NOISE_COARSE_MIX + fine * (1f - NOISE_COARSE_MIX))
-                             * noiseAmp * MathUtils.lerp(NOISE_GREEN_DAMP, 1f, nf)
+                             * noiseAmp * nf
                              * hillRamp;
 
-                heights[x][z] = target + noiseH;
+                float bowlH = target + noiseH;
+
+                // Blend from the undulated green height into the bowl profile over a
+                // short transition band, eliminating the discontinuity at innerR.
+                final float BLEND_WIDTH = 5f;
+                if (d < innerR + BLEND_WIDTH) {
+                    float t = smoothstep((d - innerR) / BLEND_WIDTH);
+                    heights[x][z] = MathUtils.lerp(heights[x][z], bowlH, t);
+                } else {
+                    heights[x][z] = bowlH;
+                }
             }
         }
 

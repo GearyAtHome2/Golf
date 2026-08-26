@@ -29,8 +29,8 @@ public class BallPhysics {
     private static final float VERTICAL_STOP_THRESHOLD = 0.20f;    // m/s — kill vertical bounce below this to prevent micro-bouncing
     private static final float SOFTNESS_ABSORPTION_FACTOR = 0.2f;  // fraction of restitution lost per unit terrain softness
     private static final float MIN_RESTITUTION = 0.15f;            // minimum bounce coefficient — ball always retains some vertical energy
-    private static final float SPIN_TRANSFER_RATIO = 0.35f;        // fraction of grip impulse applied to ball velocity (rest goes into spin)
-    private static final float FRICTION_SOFTNESS_BOOST = 0.5f;     // extra grip per unit softness — soft terrain bites more on landing
+    private static final float SPIN_TRANSFER_RATIO = 0.50f;        // fraction of grip impulse applied to ball velocity (rest goes into spin)
+    private static final float FRICTION_SOFTNESS_BOOST = 0.3f;     // extra grip per unit softness — soft terrain bites more on landing
     // Grip scaler: 10 m/s impact * 0.012 = 0.12 grip, then clamped to [MIN, MAX]
     private static final float NORMAL_GRIP_SCALER = 0.012f;
     private static final float NORMAL_GRIP_MIN = 0.5f;             // prevents near-zero grip on glancing hits

@@ -26,7 +26,7 @@ public class GameConfig {
     }
 
     public enum Difficulty {
-        NOVICE(0.14f), INTERMEDIATE(0.22f), ADVANCED(0.41f), PRO(0.6f), TOUR_PRO(0.75f);
+        NOVICE(0.14f), INTERMEDIATE(0.17f), ADVANCED(0.20f), SCRATCH(0.21f), PRO(0.22f), TOUR_PRO(0.24f);
         public final float needleSpeedMult;
 
         Difficulty(float s) {
@@ -36,8 +36,9 @@ public class GameConfig {
         // Utility availability: each level above NOVICE removes one aid (in order of utility index)
         public boolean hasClubInfo()       { return ordinal() < 1; } // NOVICE only
         public boolean hasShotProjection() { return ordinal() < 2; } // NOVICE, INTERMEDIATE
-        public boolean hasRangeFinder()    { return ordinal() < 3; } // NOVICE, INTERMEDIATE, ADVANCED
-        public boolean hasWindicator()     { return ordinal() < 4; } // all except TOUR_PRO
+        public boolean hasRangeFinder()    { return ordinal() < 4; } // NOVICE, INTERMEDIATE, ADVANCED, SCRATCH
+        public boolean hasWindicator()     { return ordinal() < 5; } // all except TOUR_PRO
+        public boolean requiresNewSwing()  { return ordinal() >= SCRATCH.ordinal(); }
 
         public static String[] getNames() {
             Difficulty[] values = Difficulty.values();
@@ -55,10 +56,12 @@ public class GameConfig {
 
     public void cycleDifficulty() {
         difficulty = Difficulty.values()[(difficulty.ordinal() + 1) % Difficulty.values().length];
+        if (difficulty.requiresNewSwing()) swingModeNew = true;
     }
 
     public void setDifficulty(Difficulty diff) {
         difficulty = diff;
+        if (difficulty.requiresNewSwing()) swingModeNew = true;
     }
 
     public void cycleCamera() {

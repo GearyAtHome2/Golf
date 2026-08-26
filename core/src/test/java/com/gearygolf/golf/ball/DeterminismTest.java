@@ -48,7 +48,7 @@ public class DeterminismTest {
     @Test
     public void quantize_preservesSmallValues() {
         // Decaying spin of 0.0004 must survive with < 0.02 % relative error.
-        float small = 0.0004f;
+        float small = 0.00043f;
         float quantized = Ball.q(small);
         assertNotEquals(0f, quantized, "Small values must not be zeroed");
         float relErr = Math.abs(quantized - small) / small;

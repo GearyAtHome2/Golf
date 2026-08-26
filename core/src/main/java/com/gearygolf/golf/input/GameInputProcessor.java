@@ -60,6 +60,7 @@ public interface GameInputProcessor {
         TRAILER_PAN_RIGHT,
         EXPORT_SHOT,
         IMPORT_SHOT,
-        TEST_SWING
+        TEST_SWING,
+        PINCH_ROTATE
     }
 }

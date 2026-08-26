@@ -25,7 +25,7 @@ public class Ball {
     public static final float BALL_RADIUS = 0.15f;
     private static final float GRAVITY = -9.81f;
     private static final float AIR_DRAG_COEFF = 0.0048f;
-    private static final float LIFT_COEFF = 5.0f;
+    private static final float LIFT_COEFF = 8.0f;
     private static final float SIDE_COEFF = 5.0f;
     private static final float STOP_SPEED = 0.15f;
     private static final float MIN_BOUNCE_VY = 0.5f;
@@ -38,8 +38,10 @@ public class Ball {
     /** Fixed physics step — identical to RemoteBall.FIXED_STEP for deterministic parity. */
     private static final float FIXED_STEP = 1f / 240f;
     /** F-032: Speed-dependent spin decay multiplier. Lower = spin survives longer into flight.
-     *  Revert to 0.0002f to restore original behaviour. */
-    private static final float SPIN_DECAY_SPEED_SENSITIVITY = 0.00008f;
+     *  Revert to 0.00008f to restore original behaviour. */
+    private static final float SPIN_DECAY_SPEED_SENSITIVITY = 0.00004f;
+    private static final float SPIN_BASE_DECAY = 0.03f;
+    private static final float SPIN_LOG_INTERVAL = 0.1f;
 
     private final Vector3 position = new Vector3();
     private final Vector3 velocity = new Vector3();
@@ -82,6 +84,13 @@ public class Ball {
     private float timeElapsed = 0;
     private boolean isInitialFlight = false;
     private MinigameResult.Rating shotRating = MinigameResult.Rating.POOR;
+
+    // Spin diagnostic logging — enabled when in PRACTICE_RANGE
+    private boolean spinLoggingEnabled = false;
+    private int spinLogShotId = 0;
+    private float spinLogElapsed = 0f;
+    private float spinLogTimer = 0f;
+    private final Vector3 spinLogLaunchPos = new Vector3();
 
     public Ball(Vector3 startPosition, ParticleManager particleManager, GameConfig config, long seed) {
         this.renderer = new BallRenderer(BALL_RADIUS);
@@ -262,7 +271,20 @@ public class Ball {
                     .scl(delta));
 
             if (!handleAirCollisions(terrain)) applyAirMovement(delta, terrain);
-            if (q(velocity.len()) > 0.1f) spin.scl(Math.max(0f, q(1.0f - ((0.05f + (velocity.len2() * SPIN_DECAY_SPEED_SENSITIVITY)) * delta))));
+            if (q(velocity.len()) > 0.1f) spin.scl(Math.max(0f, q(1.0f - ((SPIN_BASE_DECAY + (velocity.len2() * SPIN_DECAY_SPEED_SENSITIVITY)) * delta))));
+            if (spinLoggingEnabled) {
+                spinLogElapsed += delta;
+                spinLogTimer += delta;
+                if (spinLogTimer >= SPIN_LOG_INTERVAL) {
+                    spinLogTimer -= SPIN_LOG_INTERVAL;
+                    float hDist = Vector2.dst(position.x, position.z, spinLogLaunchPos.x, spinLogLaunchPos.z);
+                    Gdx.app.log("SPIN_LOG", String.format(
+                            "  #%d  t=%.2fs  |spin|=%.3f  spin=(%.3f,%.3f,%.3f)  vy=%+.2f  h=%+.2f  dist=%.1f",
+                            spinLogShotId, spinLogElapsed, spin.len(),
+                            spin.x, spin.y, spin.z, velocity.y,
+                            position.y - spinLogLaunchPos.y, hDist));
+                }
+            }
         }
     }
 
@@ -341,6 +363,14 @@ public class Ball {
 
         if (state == State.AIR && velocity.dot(normal) < -MIN_BOUNCE_VY) {
             pendingBounceImpact = -velocity.dot(normal); // capture before velocity is changed
+            if (spinLoggingEnabled) {
+                float hDist = Vector2.dst(position.x, position.z, spinLogLaunchPos.x, spinLogLaunchPos.z);
+                Gdx.app.log("SPIN_LOG", String.format(
+                        "  #%d  LAND  t=%.2fs  |spin|=%.3f  spin=(%.3f,%.3f,%.3f)  vy=%+.2f  h=%+.2f  dist=%.1f  terrain=%s",
+                        spinLogShotId, spinLogElapsed, spin.len(),
+                        spin.x, spin.y, spin.z, velocity.y,
+                        position.y - spinLogLaunchPos.y, hDist, type.name()));
+            }
             if (!detLandLogged) {
                 detLandLogged = true;
                 Gdx.app.log("DET", String.format("L LAND  s=%04d %-5s p=%08x,%08x,%08x v=%08x,%08x,%08x",
@@ -448,6 +478,16 @@ public class Ball {
         Gdx.app.log("DET", String.format("L SHOT_START p=%08x,%08x,%08x v=%08x,%08x,%08x",
                 Float.floatToRawIntBits(position.x), Float.floatToRawIntBits(position.y), Float.floatToRawIntBits(position.z),
                 Float.floatToRawIntBits(velocity.x), Float.floatToRawIntBits(velocity.y), Float.floatToRawIntBits(velocity.z)));
+        if (spinLoggingEnabled) {
+            spinLogShotId++;
+            spinLogElapsed = 0f;
+            spinLogTimer = 0f;
+            spinLogLaunchPos.set(position);
+            Gdx.app.log("SPIN_LOG", String.format(
+                    "=== SHOT #%d  vel=(%.1f,%.1f,%.1f) speed=%.1fm/s  spin=(%.3f,%.3f,%.3f) |spin|=%.3f",
+                    spinLogShotId, velocity.x, velocity.y, velocity.z, velocity.len(),
+                    spin.x, spin.y, spin.z, spin.len()));
+        }
     }
 
     public void capturePosition() {
@@ -539,6 +579,7 @@ public class Ball {
     public Vector3 getSpin() { return spin; }
     public State getState() { return state; }
     public void setState(State state) { this.state = state; }
+    public void setSpinLogging(boolean enabled) { this.spinLoggingEnabled = enabled; }
     public Interaction getLastInteraction() { return lastInteraction; }
     public void clearInteraction() { lastInteraction = Interaction.NONE; }
     public void render(ModelBatch batch, Environment env) { renderer.render(batch, env); }

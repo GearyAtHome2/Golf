@@ -215,8 +215,8 @@ public class SoundSettingsRenderer {
         float swingTextY = panelY + SWING_ROW_Y_OFF + font.getCapHeight() * 0.5f;
         font.setColor(Color.WHITE);
         font.draw(batch, "SWING MODE", labelX, swingTextY);
-        String swingLabel = config.swingModeNew ? "NEW" : "CLASSIC";
-        font.setColor(config.swingModeNew ? Color.YELLOW : Color.GRAY);
+        String swingLabel = config.difficulty.requiresNewSwing() ? "REQUIRED" : config.swingModeNew ? "NEW" : "CLASSIC";
+        font.setColor(config.difficulty.requiresNewSwing() ? Color.ORANGE : config.swingModeNew ? Color.YELLOW : Color.GRAY);
         layout.setText(font, swingLabel);
         font.draw(batch, swingLabel,
                   panelX + TOGGLE_X_OFF + (SWING_TOGGLE_W - layout.width) / 2f, swingTextY);
@@ -371,9 +371,10 @@ public class SoundSettingsRenderer {
                     config.cinematicMode = !config.cinematicMode;
                     savePrefs(sm, config);
                 }
-                // Swing mode toggle
+                // Swing mode toggle (locked at SCRATCH and above)
                 float swingY = panelY + SWING_ROW_Y_OFF - TOGGLE_H / 2f;
-                if (worldMX >= cbX && worldMX <= panelX + TOGGLE_X_OFF + SWING_TOGGLE_W + 10
+                if (!config.difficulty.requiresNewSwing()
+                 && worldMX >= cbX && worldMX <= panelX + TOGGLE_X_OFF + SWING_TOGGLE_W + 10
                  && worldMY >= swingY - 6 && worldMY <= swingY + TOGGLE_H + 6) {
                     config.swingModeNew = !config.swingModeNew;
                     savePrefs(sm, config);

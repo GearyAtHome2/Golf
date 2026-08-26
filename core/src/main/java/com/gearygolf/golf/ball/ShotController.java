@@ -72,6 +72,7 @@ public class ShotController {
     private float animationTimer = 0f;
     private ShotDifficulty currentDifficulty;
     private boolean swingModeNew = false;
+    private boolean perfectShotEnabled = false;
     private Terrain.TerrainType lastTerrainType = Terrain.TerrainType.FAIRWAY;
     private Club shotStartClub = Club.DRIVER;
     /** Difficulty and contact parameters — updated once per shot via setDifficultyParams(). */
@@ -83,6 +84,7 @@ public class ShotController {
 
     public void setSoundManager(com.gearygolf.golf.glamour.SoundManager sm) { this.soundManager = sm; }
     public void setSwingModeNew(boolean v) { this.swingModeNew = v; }
+    public void setPerfectShotEnabled(boolean v) { this.perfectShotEnabled = v; }
 
     private final Vector3 tempV1 = new Vector3();
     private final Vector3 tempV2 = new Vector3();
@@ -184,6 +186,26 @@ public class ShotController {
         if (phase == ShotPhase.WAITING) {
             if (hud.wasMinigameCanceled()) {
                 reset();
+                return false;
+            }
+
+            // MAX during the minigame: instant best-achievable shot — practice range only.
+            if (perfectShotEnabled && input.isActionJustPressed(GameInputProcessor.Action.MAX_POWER_SHOT)) {
+                MinigameResult best = new MinigameResult();
+                if      (club.baseDifficulty >= 1.6f) { best.rating = MinigameResult.Rating.PERFECTION; }
+                else if (club.baseDifficulty >= 1.3f) { best.rating = MinigameResult.Rating.SUPER;      }
+                else if (club.baseDifficulty >= 1.0f) { best.rating = MinigameResult.Rating.GREAT;      }
+                else                                  { best.rating = MinigameResult.Rating.GOOD;        }
+                best.powerMod = 1.0f; // pendingPower=MAX_POWER already at full charge; Club.powerMult has tier baked in
+                best.accuracy = 0f; best.loftMult = 1.0f; best.tempoSpinMult = 1.0f;
+                lockedSpin.set(swingModeNew ? 0f : hud.getSpinOffset().x,
+                               swingModeNew ? 0f : hud.getSpinOffset().y);
+                isSpinLocked = true;
+                pendingResult = best; pendingClub = club; pendingPower = MAX_POWER;
+                phase = ShotPhase.PENDING_SHOT;
+                hud.incrementShots();
+                if (soundManager != null) soundManager.playBallStrike(clubSoundCategory(club), 1.0f);
+                shotLeadTimer = SHOT_SOUND_LEAD;
                 return false;
             }
 
@@ -327,7 +349,7 @@ public class ShotController {
         return false;
     }
 
-    public void snapshotFinalSpin(Vector2 currentSpin) {
+public void snapshotFinalSpin(Vector2 currentSpin) {
         this.lockedSpin.set(currentSpin);
         this.isSpinLocked = true;
     }
@@ -414,6 +436,22 @@ public class ShotController {
         float spinCurve = (float) Math.pow(MathUtils.clamp(power / MAX_POWER, 0f, 1f), 1.5f);
         float quality = getQualityFactor(result.rating);
 
+        // Ball compression: at impact, groove-to-ball contact depth scales with impact energy.
+        // A wedge at 34 m/s barely deforms the ball cover; a 2-iron at 118 m/s compresses it fully.
+        // Without this, sin(loft) for a LW nearly cancels the lower powerMult, leaving wedges with
+        // unrealistically similar spin to irons. sqrt gives a physically motivated sub-linear scaling.
+        // Reference = driver at full power (MAX_POWER × 49.0 powerMult ≈ 147.0 m/s).
+        float speedCompression = (float) Math.pow(MathUtils.clamp((power * club.powerMult) / (MAX_POWER * 49.0f), 0f, 1f), 0.70f);
+        // Loft-based compression reduction: at equal swing power, a high-lofted club makes oblique
+        // contact with the ball, deforming it less than a low-lofted club hitting more head-on.
+        // A 2-iron (14.5°) approaches the ball nearly face-on; a LW (58°) is much more oblique.
+        // Factor lerps from 1.0 at 10° loft down to LOFT_COMP_MIN at 58° (wedge max loft).
+        // This means mid-irons get a moderate additional spin reduction relative to long irons.
+        final float LOFT_COMP_MIN = 0.85f;
+        float loftNorm = MathUtils.clamp((club.loft - 10f) / 48f, 0f, 1f); // 0 = 2i, 1 = LW
+        float loftCompressionFactor = MathUtils.lerp(1.0f, LOFT_COMP_MIN, loftNorm);
+        float compressionFactor = speedCompression * loftCompressionFactor;
+
         // As contact drifts off-centre, clean groove contact degrades and the attack-angle
         // backspin bonus diminishes — even a steep downward strike loses spin transfer.
         // rawR^4 * 0.70 means ~41% bonus reduction at rawR=0.8, ~82% at rawR=0.95.
@@ -425,8 +463,8 @@ public class ShotController {
         float loftFactor = MathUtils.clamp(1f - (club.loft - 10f) / 45f, 0f, 1f);
         // Long irons benefit strongly from attack angle (stinger effect, high loftFactor → high coeff).
         // Wedges also benefit — groove engagement on a downward strike — but this was near-zero before.
-        // lerp gives a floor of 0.4 for high-loft clubs so pressing forward is meaningfully rewarded.
-        float attackAngleCoeff = MathUtils.lerp(0.4f, 1.4f, loftFactor * loftFactor);
+        // Linear loftFactor (not squared) so short irons benefit meaningfully from attack angle too.
+        float attackAngleCoeff = MathUtils.lerp(0.4f, 1.8f, loftFactor);
 
         // Per-club optimal attack angle sweet spot. Rising to the peak gives maximum backspin
         // efficiency; pushing past it has diminishing returns (over-steep = loss of groove contact).
@@ -442,11 +480,11 @@ public class ShotController {
         }
         attackEfficiency = MathUtils.clamp(attackEfficiency, 0f, 1f);
 
-        float backspin = (power * finalPowerMult) * sForce * 9.0f * (1.0f + (attackQuadY * attackAngleCoeff * attackAngleDamping * attackEfficiency)) * quality * spinCurve * terrainSpinMult * club.spinMult;
+        float backspin = (power * finalPowerMult) * sForce * 9.4f *(1.0f + (attackQuadY * attackAngleCoeff * attackAngleDamping * attackEfficiency)) * quality * spinCurve * terrainSpinMult * club.spinMult * compressionFactor;
         float sidespin = ((tempSpin.x * (power * finalPowerMult) * -10.0f * quality * spinCurve)
                         + (result.accuracy     * (power * finalPowerMult) * 8.0f * spinCurve)
                         + (result.ftSpinContrib * (power * finalPowerMult) * 5.0f * spinCurve))
-                       * terrainSpinMult * club.spinMult;
+                       * terrainSpinMult * club.spinMult * compressionFactor;
 
         // Edge spin reversal: crosses zero at edgeFactor=0.5, fully reversed at edgeFactor=1.
         // At the rim, backspin becomes topspin (topping the ball).

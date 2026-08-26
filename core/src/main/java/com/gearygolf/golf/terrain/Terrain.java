@@ -28,6 +28,7 @@ public class Terrain {
     private final int SIZE_X;
     private final int SIZE_Z;
     private final int CHUNK_Z = 64;
+    private final int CHUNK_X = 64;
     private final float SCALE = 1f;
 
     private ModelInstance waterInstance;
@@ -118,10 +119,14 @@ public class Terrain {
         createWaterPlane();
         PerfLog.log("createWaterPlane()", tWater);
 
-        PerfLog.snapshot("before buildChunks  count=" + (int) Math.ceil((float) SIZE_Z / CHUNK_Z));
+        int chunkCountX = (int) Math.ceil((float) SIZE_X / CHUNK_X);
+        int chunkCountZ = (int) Math.ceil((float) SIZE_Z / CHUNK_Z);
+        PerfLog.snapshot("before buildChunks  count=" + chunkCountX * chunkCountZ);
         long tChunks = PerfLog.now();
-        for (int z = 0; z < SIZE_Z; z += CHUNK_Z) {
-            chunks.add(buildChunk(z, Math.min(z + CHUNK_Z, SIZE_Z)));
+        for (int x = 0; x < SIZE_X; x += CHUNK_X) {
+            for (int z = 0; z < SIZE_Z; z += CHUNK_Z) {
+                chunks.add(buildChunk(x, Math.min(x + CHUNK_X, SIZE_X), z, Math.min(z + CHUNK_Z, SIZE_Z)));
+            }
         }
         PerfLog.log("buildChunks (all)", tChunks);
 
@@ -360,13 +365,13 @@ public class Terrain {
         return normal;
     }
 
-    private ModelInstance buildChunk(int zStart, int zEnd) {
+    private ModelInstance buildChunk(int xStart, int xEnd, int zStart, int zEnd) {
         ModelBuilder builder = new ModelBuilder();
         builder.begin();
         MeshPartBuilder meshBuilder = builder.part("terrain_chunk", GL20.GL_TRIANGLES,
                 VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.ColorPacked,
                 new Material());
-        for (int x = 0; x < SIZE_X - 1; x++) {
+        for (int x = xStart; x < xEnd && x < SIZE_X - 1; x++) {
             for (int z = zStart; z < zEnd && z < SIZE_Z - 1; z++) {
                 Vector3 v00 = vertex(x, z), v10 = vertex(x + 1, z), v01 = vertex(x, z + 1), v11 = vertex(x + 1, z + 1);
                 TerrainType type = terrainMap[x][z];

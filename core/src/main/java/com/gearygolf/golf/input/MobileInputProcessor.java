@@ -18,9 +18,10 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     private float dragX = 0;
     private float dragY = 0;
     private float scrollY = 0;
+    private float rotateY = 0;
     private int lastPointerCount = 0;
-    private final Vector2 lastPinchMidpoint = new Vector2();
     private float lastPinchDistance = 0;
+    private float lastPinchAngle = Float.NaN; // NaN = not yet set this pinch session
     private boolean isConsumed = false;
 
     public MobileInputProcessor() {
@@ -71,6 +72,9 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
 
             boolean isMultiTouch = currentPointers >= 2;
             pressedMap.put(Action.SECONDARY_ACTION, isMultiTouch);
+
+            // Two-finger pan/zoom/rotate is handled entirely in pinch(); skip here.
+            if (isMultiTouch) return true;
         }
 
         this.dragX += deltaX;
@@ -87,10 +91,9 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
     public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) {
         if (isConsumed) return true;
 
-        // NEW: Force the secondary action flag to true so the camera knows we are in multi-touch mode
         pressedMap.put(Action.SECONDARY_ACTION, true);
 
-        // 1. Handle Zoom
+        // 1. Zoom from pinch distance delta
         float currentDistance = pointer1.dst(pointer2);
         if (lastPinchDistance > 0) {
             float deltaDistance = lastPinchDistance - currentDistance;
@@ -98,28 +101,25 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
         }
         lastPinchDistance = currentDistance;
 
-        // 2. Handle Pan (Midpoint Logic)
-        float currentMidX = (pointer1.x + pointer2.x) / 2f;
-        float currentMidY = (pointer1.y + pointer2.y) / 2f;
-
-        if (lastPinchMidpoint.x != 0 || lastPinchMidpoint.y != 0) {
-            float deltaMidX = currentMidX - lastPinchMidpoint.x;
-            float deltaMidY = currentMidY - lastPinchMidpoint.y;
-
-            this.dragX += deltaMidX;
-            this.dragY += deltaMidY;
+        // 2. Rotate from angle change between the two fingers
+        float currentAngle = (float) Math.toDegrees(Math.atan2(pointer2.y - pointer1.y, pointer2.x - pointer1.x));
+        if (!Float.isNaN(lastPinchAngle)) {
+            float delta = currentAngle - lastPinchAngle;
+            // Wrap to [-180, 180] to avoid discontinuity at ±180°
+            if (delta > 180f) delta -= 360f;
+            if (delta < -180f) delta += 360f;
+            this.rotateY += delta;
         }
+        lastPinchAngle = currentAngle;
 
-        lastPinchMidpoint.set(currentMidX, currentMidY);
         return true;
     }
 
     @Override
     public void pinchStop() {
         lastPinchDistance = 0;
-        lastPinchMidpoint.set(0, 0);
+        lastPinchAngle = Float.NaN;
 
-        // NEW: Reset the secondary action flag when fingers are lifted
         pressedMap.put(Action.SECONDARY_ACTION, false);
         lastPointerCount = 0;
     }
@@ -135,6 +135,7 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
         this.dragX = 0;
         this.dragY = 0;
         this.scrollY = 0;
+        this.rotateY = 0;
     }
 
     @Override
@@ -142,6 +143,7 @@ public class MobileInputProcessor extends com.badlogic.gdx.input.GestureDetector
         if (action == Action.DRAG_X) return dragX;
         if (action == Action.DRAG_Y) return dragY;
         if (action == Action.SCROLL_Y) return scrollY;
+        if (action == Action.PINCH_ROTATE) return rotateY;
         return 0f;
     }
 

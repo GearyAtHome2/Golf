@@ -21,10 +21,11 @@ import com.gearygolf.golf.GameConfig;
  */
 public class RankBadge {
 
-    // Colours match difficulty order: NOVICE, INTERMEDIATE, ADVANCED, PRO, TOUR_PRO
+    // Colours match difficulty order: NOVICE, INTERMEDIATE, ADVANCED, SCRATCH, PRO, TOUR_PRO
     private static final Color COLOR_NOVICE       = new Color(0.72f, 0.72f, 0.72f, 1f); // grey
     private static final Color COLOR_INTERMEDIATE = new Color(0.20f, 0.72f, 0.28f, 1f); // green
     private static final Color COLOR_ADVANCED     = new Color(0.90f, 0.82f, 0.10f, 1f); // yellow
+    private static final Color COLOR_SCRATCH      = new Color(0.95f, 0.50f, 0.15f, 1f); // orange
     private static final Color COLOR_PRO          = new Color(0.95f, 0.60f, 0.78f, 1f); // pink
     private static final Color COLOR_TOUR_PRO     = new Color(0.58f, 0.28f, 0.82f, 1f); // purple
 
@@ -71,6 +72,7 @@ public class RankBadge {
             case NOVICE       -> COLOR_NOVICE;
             case INTERMEDIATE -> COLOR_INTERMEDIATE;
             case ADVANCED     -> COLOR_ADVANCED;
+            case SCRATCH      -> COLOR_SCRATCH;
             case PRO          -> COLOR_PRO;
             case TOUR_PRO     -> COLOR_TOUR_PRO;
         };
@@ -108,7 +110,8 @@ public class RankBadge {
             return switch (difficulty) {
                 case NOVICE       -> "It's time to move on to INTERMEDIATE golf.";
                 case INTERMEDIATE -> "It's time to move on to ADVANCED golf.";
-                case ADVANCED     -> "It's time to move on to PRO golf.";
+                case ADVANCED     -> "It's time to move on to SCRATCH golf.";
+                case SCRATCH      -> "It's time to move on to PRO golf.";
                 case PRO          -> "It's time to move on to TOUR PRO golf.";
                 case TOUR_PRO     -> "There's nothing left for you to learn.\nYou Are Golf.";
             };

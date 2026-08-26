@@ -287,6 +287,7 @@ public class ClassicGenerator implements ITerrainGenerator {
                 break;
             case DOGLEG_RIVER:
                 doglegRiverGenerator.generate(map, h, gX, gZ);
+                doglegRiverGenerator.placeCornerTrees(map, h, t);
                 break;
             case NONE:
             default:

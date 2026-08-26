@@ -206,9 +206,10 @@ public class CameraController {
         boolean isAndroid = Platform.isAndroid();
         boolean isMultiTouch = input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION);
 
-        boolean shouldPan = isAndroid ? isMultiTouch : Gdx.input.isButtonPressed(Buttons.LEFT);
-        // Only rotate if we aren't panning and there's an active touch
-        boolean shouldRotate = isAndroid ? (!isMultiTouch && Gdx.input.isTouched()) : input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION);
+        // Android: single finger pans; desktop: left mouse pans
+        boolean shouldPan = isAndroid ? (!isMultiTouch && Gdx.input.isTouched()) : Gdx.input.isButtonPressed(Buttons.LEFT);
+        // Desktop only: right mouse / secondary rotates via drag
+        boolean shouldRotate = !isAndroid && input.isActionPressed(GameInputProcessor.Action.SECONDARY_ACTION);
 
         if (shouldPan) {
             float panScale = (overheadZoom / Gdx.graphics.getHeight()) * 1.5f;
@@ -222,6 +223,14 @@ public class CameraController {
             // Apply deadzone to prevent jittering during finger placement/lifting
             if (Math.abs(deltaX) > ROTATION_DEADZONE) {
                 yaw += deltaX * config.mouseSensitivity * config.getXMult();
+            }
+        }
+
+        // Android: two-finger rotation via pinch angle delta
+        if (isAndroid) {
+            float pinchRotate = input.getActionValue(GameInputProcessor.Action.PINCH_ROTATE);
+            if (Math.abs(pinchRotate) > 0.5f) {
+                yaw -= pinchRotate; // negate: clockwise finger rotation → clockwise camera yaw
             }
         }
 
@@ -311,10 +320,36 @@ public class CameraController {
 
     public void setOrientation(Vector3 target) {
         Vector3 dir = new Vector3(target).sub(currentLookAt).nor();
-        this.yaw = MathUtils.atan2(-dir.x, -dir.z) * MathUtils.radiansToDegrees;
+        // Camera sits BEHIND the ball (opposite hole direction).
+        // radYaw = -yaw*DEG2RAD, camera offset = (sin(radYaw), sinP, cos(radYaw)).
+        // For offset = (-dir.x, -, -dir.z): sin(radYaw)=-dir.x, cos(radYaw)=-dir.z
+        // → radYaw = atan2(-dir.x,-dir.z) → yaw = -atan2(-dir.x,-dir.z) * RAD2DEG
+        this.yaw = -MathUtils.atan2(-dir.x, -dir.z) * MathUtils.radiansToDegrees;
         this.pitch = 15f;
         this.targetPitch = 15f;
         this.introActive = false;
+    }
+
+    /**
+     * If the current yaw is more than {@code deadzoneDeg} away from the camera-behind-ball
+     * orientation facing the hole, smoothly rotate to that yaw.
+     * No-ops in overhead or swing view.
+     */
+    public void rotateTowardHoleIfNeeded(Vector3 ballPos, Vector3 holePos, float deadzoneDeg) {
+        if (isOverhead || swingViewActive) return;
+
+        float dx = holePos.x - ballPos.x;
+        float dz = holePos.z - ballPos.z;
+        if (dx * dx + dz * dz < 0.01f) return; // ball is in/at the hole
+
+        float targetYaw = -MathUtils.atan2(-dx, -dz) * MathUtils.radiansToDegrees;
+
+        // Shortest arc from current yaw to target, normalised to [-180, 180]
+        float diff = ((targetYaw - yaw) % 360f + 540f) % 360f - 180f;
+
+        if (Math.abs(diff) > deadzoneDeg) {
+            yaw += diff; // camera position will lerp smoothly to the new orbit angle
+        }
     }
 
     /** Returns zoom-relative sensitivity as an integer 10–100 for debug display. */

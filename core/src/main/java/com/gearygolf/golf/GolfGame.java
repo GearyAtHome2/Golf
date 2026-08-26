@@ -93,6 +93,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
     private ShotController shotController;
     private LevelData currentLevelData;
     private Club currentClub = Club.DRIVER;
+    private boolean autoSwitchedToPutterThisHole = false;
     private ParticleManager particleManager;
     private WindManager windManager;
     private com.gearygolf.golf.glamour.SoundManager soundManager;
@@ -163,6 +164,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         soundManager.setArcadeFlightSoundsEnabled(com.gearygolf.golf.glamour.SoundPrefs.loadArcadeFlight());
         config.cinematicMode  = com.gearygolf.golf.glamour.SoundPrefs.loadCinematicMode();
         config.swingModeNew   = com.gearygolf.golf.glamour.SoundPrefs.loadSwingModeNew();
+        if (config.difficulty.requiresNewSwing()) config.swingModeNew = true;
         soundManager.setBounceScale(com.gearygolf.golf.glamour.SoundPrefs.loadBounce());
         soundManager.setArcadeAirborneScale(com.gearygolf.golf.glamour.SoundPrefs.loadArcadeAirborne());
         soundManager.setAirWhooshScale(com.gearygolf.golf.glamour.SoundPrefs.loadAirWhoosh());
@@ -346,6 +348,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
                     @Override public void onLevelReady(GameState targetState, LevelData levelData, Club defaultClub) {
                         currentLevelData = levelData;
                         currentClub      = defaultClub;
+                        autoSwitchedToPutterThisHole = false;
                         if (gameFlow != null) gameFlow.resetForNewLevel();
                         setupInputProcessor();
                         changeState(targetState);
@@ -769,6 +772,13 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
             com.gearygolf.golf.terrain.Terrain.TerrainType restType =
                     terrain.getTerrainTypeAt(ball.getPosition().x, ball.getPosition().z);
             hud.triggerTerrainToast(restType, ball.getPosition(), camera);
+            if (restType == com.gearygolf.golf.terrain.Terrain.TerrainType.GREEN && !autoSwitchedToPutterThisHole) {
+                currentClub = Club.PUTTER;
+                autoSwitchedToPutterThisHole = true;
+            }
+            if (cameraController != null) {
+                cameraController.rotateTowardHoleIfNeeded(ball.getPosition(), terrain.getHolePosition(), 25f);
+            }
         } else if (toastState != Ball.State.STATIONARY && prevBallStateToast == Ball.State.STATIONARY) {
             hud.dismissTerrainToast();
         }
@@ -789,6 +799,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         PhysicsProfiler.startSection("ShotControllerCharge");
         shotController.setSwingModeNew(config.swingModeNew);
         shotController.setGuidelineAvailable(config.difficulty.hasShotProjection());
+        shotController.setPerfectShotEnabled(levelLifecycle.getGameplayState() == GameState.PRACTICE_RANGE);
         if (shotController.update(delta, ball, camera.direction, currentClub, hud, swingUI, terrain, inputProcessor)) {
             ball.snapshotShotStart(); // trailer mode: capture initial state for replay
             levelLifecycle.captureLastShot(ball, currentLevelData);
@@ -966,6 +977,7 @@ public class GolfGame extends ApplicationAdapter implements MenuManager.MenuHand
         ghostManager.archiveBall(ball);
         Vector3 tee = levelManager.getTerrain().getTeePosition();
         ball = new Ball(new Vector3(tee.x, tee.y + 0.17f, tee.z), particleManager, config, 200L);
+        ball.setSpinLogging(true);
         hazardManager.setBallHit(false);
         hud.dismissTerrainToast();
     }

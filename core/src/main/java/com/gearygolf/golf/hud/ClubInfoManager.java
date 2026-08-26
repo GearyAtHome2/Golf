@@ -36,11 +36,11 @@ public class ClubInfoManager {
         return switch (club) {
             case DRIVER -> "360 yds";
             case WOOD_3 -> "340 yds";
-            case WOOD_5 -> "305 yds";
-            case HYBRID_3 -> "275 yds";
+            case WOOD_5 -> "300 yds";
+            case HYBRID_3 -> "280 yds";
             case IRON_2 -> "300 yds";
-            case IRON_3 -> "285 yds";
-            case IRON_4 -> "268 yds";
+            case IRON_3 -> "283 yds";
+            case IRON_4 -> "267 yds";
             case IRON_5 -> "250 yds";
             case IRON_6 -> "236 yds";
             case IRON_7 -> "215 yds";
@@ -50,7 +50,7 @@ public class ClubInfoManager {
             case GWEDGE -> "115 yds";
             case SWEDGE -> "92 yds";
             case LWEDGE -> "72 yds";
-            case PUTTER -> "20 yds";
+            case PUTTER -> "40 yds";
             default -> "Typical Distance: --";
         };
     }
